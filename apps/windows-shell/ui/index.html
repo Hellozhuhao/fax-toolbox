@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
+  <title>Fax Toolbox</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand-mark">F</div>
+      <div><div class="eyebrow">FAX TOOLBOX</div><h1>工具箱</h1></div>
+    </header>
+    <nav aria-label="导航"><span class="active">工作台</span><span>模块</span><span>活动</span><span>设置</span></nav>
+    <section class="intro">
+      <div class="eyebrow">内置模块 · 0.1.0</div>
+      <h2>页面事件演示</h2>
+      <p>验证网页代理、C# 外壳和 Rust 任务核心的通信链路。</p>
+    </section>
+    <section class="status" aria-live="polite">
+      <div class="status-heading"><span>当前会话</span><strong id="state">连接中</strong></div>
+      <p id="detail">正在连接后端…</p>
+    </section>
+    <div class="actions">
+      <button id="start" type="button">开始演示</button>
+      <button id="cancel" class="secondary" type="button">停止会话</button>
+    </div>
+    <p class="hint">右侧是独立的模块 WebView。模块页面无法直接访问工具箱设置或本地文件。</p>
+    <footer>Windows 起步版本 · 协议 v1</footer>
+  </main>
+</body>
+</html>

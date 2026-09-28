@@ -17,7 +17,7 @@ foreach ($file in @((Join-Path $dotnetRoot 'dotnet.exe'),
 # Import the Visual Studio compiler, linker, and SDK environment into this shell.
 $vsLines = & cmd.exe /d /s /c "call `"$vsDevCmd`" -arch=x64 >nul && set"
 if ($LASTEXITCODE -ne 0) { throw 'Visual Studio developer environment failed' }
-$vsPathLine = $vsLines | Where-Object { $_.StartsWith('PATH=', [StringComparison]::Ordinal) } | Select-Object -First 1
+$vsPathLine = $vsLines | Where-Object { $_.StartsWith('PATH=', [StringComparison]::OrdinalIgnoreCase) } | Select-Object -First 1
 if (-not $vsPathLine) { throw 'Visual Studio PATH not found' }
 foreach ($line in $vsLines) {
   if ($line.StartsWith('=')) { continue }

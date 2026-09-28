@@ -1,22 +1,36 @@
 # Toolbox 起步工程
 
-这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前只实现一个本地演示模块，用来验证模块页面、共享页面代理、平台消息桥和 C++ 状态核心能连通。它不执行学习通自动化，也不包含现有脚本的迁移。
+这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。演示模块用于验证页面代理、消息桥和状态机，不执行学习通自动化，也不包含现有脚本的迁移。
 
 ## 目录
 
 | 路径 | 作用 |
 | --- | --- |
 | `apps/windows-host/` | Win32 + WebView2 桌面宿主，可运行 |
+| `apps/windows-shell/` | C# WPF + WebView2 桌面外壳 |
+| `apps/rust-backend/` | Rust 独立进程与会话状态机 |
 | `apps/android-host/` | Android WebView 宿主与 JNI 工程 |
+| `packages/protocol/` | Windows 前后端接口约定 |
 | `packages/page-agent/` | 两端共用的文档注入代理 |
 | `native/core/` | 两端共用的 C++ 状态核心 |
 | `modules/smoke/` | 第一个模块的清单和本地页面 |
 | `tests/` | 共享代理与模块清单检查 |
 | `poc/` | 上一阶段独立可行性验证 |
 
-模块页面含一个视频节点和“模拟视频结束”按钮。代理发出 `HELLO`、`VIDEO_FOUND`、`VIDEO_ENDED`，宿主把事件交给 C++ 核心，状态依次变为 `READY`、`OBSERVING`、`COMPLETE`。
+模块页面含一个视频节点和“模拟视频结束”按钮。代理发出 `HELLO`、`VIDEO_FOUND`、`VIDEO_ENDED`，Windows 新外壳把事件交给 Rust 状态机，状态依次变为 `READY`、`OBSERVING`、`COMPLETE`。
 
-## Windows 运行
+## Windows 主线：C# + Rust
+
+在 PowerShell 中进入项目根目录，运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test
+powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
+```
+
+`-Test` 同时运行 Rust 单元测试和隐藏窗口端到端冒烟测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)。当前只接入 `toolbox.smoke`，后续模块可沿此接口扩展。
+
+## 原有 C++ Windows PoC
 
 需要 Visual Studio Build Tools 的 C++ 桌面工具、Windows SDK 和 WebView2 Runtime。在 **x64 Native Tools Command Prompt** 中进入本目录：
 

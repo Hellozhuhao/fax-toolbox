@@ -1,5 +1,9 @@
 .cache/
 **/build/
+**/target/
+**/bin/
+**/obj/
+.vs/
 **/.gradle/
 **/local.properties
 *.iml
