@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>Toolbox browser agent smoke fixture</title>
+  <script src="../shared/page-agent.js"></script>
+  <script>
+    window.fixtureEvents = [];
+    const host = new URLSearchParams(location.search).get('host') || 'windows';
+    const receive = value => window.fixtureEvents.push(JSON.parse(value));
+    if (host === 'android') window.ToolboxAndroid = { postMessage: receive };
+    else {
+      window.chrome = window.chrome || {};
+      window.chrome.webview = { postMessage: receive };
+    }
+    const transport = ToolboxPageAgent.resolveHostTransport(window);
+    window.fixtureAgent = ToolboxPageAgent.createAgent({
+      document,
+      transport,
+      moduleId: 'toolbox.smoke',
+      sessionId: 'fixture',
+      frameId: 'main',
+      generation: 1
+    });
+    window.fixtureAgent.start();
+    window.addEventListener('load', () => {
+      const events = window.fixtureEvents;
+      const hello = events.find(e => e.type === 'HELLO');
+      const video = events.find(e => e.type === 'VIDEO_FOUND' && e.payload.id === 'sample-video');
+      const valid = hello && video && hello.protocol === 1 && video.seq > hello.seq;
+      document.getElementById('proof').textContent = valid ? 'PASS ' + host : 'FAIL ' + host;
+    });
+  </script>
+</head>
+<body>
+  <h1>Toolbox 页面代理真实浏览器验证</h1>
+  <video id="sample-video" muted></video>
+  <output id="proof">WAIT</output>
+</body>
+</html>

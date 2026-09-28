@@ -1,0 +1,6 @@
+.cache/
+**/build/
+**/.gradle/
+**/local.properties
+*.iml
+*.log
