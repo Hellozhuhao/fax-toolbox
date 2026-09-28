@@ -11,5 +11,6 @@
         </Grid.ColumnDefinitions>
         <wv2:WebView2 x:Name="ShellView" Grid.Column="0" />
         <wv2:WebView2 x:Name="ModuleView" Grid.Column="1" />
+        <wv2:WebView2 x:Name="CourseView" Grid.Column="1" Visibility="Collapsed" />
     </Grid>
 </Window>

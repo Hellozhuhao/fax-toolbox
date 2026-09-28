@@ -10,26 +10,47 @@
 </head>
 <body>
   <main>
-    <header>
-      <div class="brand-mark">F</div>
-      <div><div class="eyebrow">FAX TOOLBOX</div><h1>工具箱</h1></div>
-    </header>
-    <nav aria-label="导航"><span class="active">工作台</span><span>模块</span><span>活动</span><span>设置</span></nav>
-    <section class="intro">
-      <div class="eyebrow">内置模块 · 0.1.0</div>
-      <h2>页面事件演示</h2>
-      <p>验证网页代理、C# 外壳和 Rust 任务核心的通信链路。</p>
+    <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
+    <nav aria-label="工具箱导航">
+      <button class="nav-item active" type="button" data-view="home">工作台</button>
+      <button class="nav-item" type="button" data-view="course">学习通刷课</button>
+      <button class="nav-item" type="button" data-view="vault">系统选项 · 密码箱</button>
+    </nav>
+
+    <section id="view-home" class="view">
+      <div class="eyebrow">模块</div><h2>今天要做什么？</h2>
+      <p class="muted">各模块独立运行。你可以随时查看状态、暂停或停止。</p>
+      <button id="open-course-card" class="module-card" type="button"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>登录、选课、自动处理任务点</small></span><span class="arrow">→</span></button>
+      <div class="card demo-card"><div class="eyebrow">内置演示</div><h3>页面事件演示</h3><p class="muted">验证 WebView2 与 Rust 后端的通信。</p><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div>
     </section>
-    <section class="status" aria-live="polite">
-      <div class="status-heading"><span>当前会话</span><strong id="state">连接中</strong></div>
-      <p id="detail">正在连接后端…</p>
+
+    <section id="view-course" class="view" hidden>
+      <div class="eyebrow">学习模块</div><h2>学习通刷课</h2>
+      <p class="muted">先在右侧登录并打开要学习的课程。工具箱不会读取登录页中的密码。</p>
+      <div class="step"><span>1</span><div><strong>打开学习通</strong><small>首次使用请在右侧页面自行登录</small></div></div>
+      <button id="course-open" type="button">打开学习通</button>
+      <button id="course-save-vault" class="secondary" type="button">保存登录账号到密码箱</button>
+      <div class="step"><span>2</span><div><strong>选择课程</strong><small>进入课程学习页后再启动</small></div></div>
+      <div class="card"><span class="label">当前页面</span><p id="course-url" class="url">尚未打开</p><span class="label">章节标识</span><p id="course-chapter">—</p></div>
+      <div class="step"><span>3</span><div><strong>开始自动完成</strong><small>根据当前任务点执行视频、文档或答案库动作</small></div></div>
+      <button id="course-start" type="button" disabled>开始自动完成</button>
+      <div class="button-row"><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div>
+      <div class="card status" aria-live="polite"><span class="label">课程状态</span><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div>
+      <div class="card"><h3>章节答案库</h3><p class="muted">仅使用你录入的答案。每行“题号:答案”，如 1:A、2:对、3:文本。多空用 | 分隔。</p>
+        <label for="answers-chapter">章节标识</label><input id="answers-chapter" maxlength="128" placeholder="选择课程后自动填入">
+        <label for="answers-text">答案</label><textarea id="answers-text" rows="4" placeholder="1:A&#10;2:BC"></textarea>
+        <button id="answers-save" type="button">保存本章答案</button><p id="answers-result" class="muted"></p>
+      </div>
     </section>
-    <div class="actions">
-      <button id="start" type="button">开始演示</button>
-      <button id="cancel" class="secondary" type="button">停止会话</button>
-    </div>
-    <p class="hint">右侧是独立的模块 WebView。模块页面无法直接访问工具箱设置或本地文件。</p>
-    <footer>Windows 起步版本 · 协议 v1</footer>
+
+    <section id="view-vault" class="view" hidden>
+      <div class="eyebrow">系统选项</div><h2>密码箱</h2>
+      <p class="muted">账号密码由 Windows 当前用户加密保护。输入密码使用原生窗口，不经过网页消息桥。</p>
+      <button id="vault-add" type="button">保存学习通账号</button>
+      <div class="card"><h3>已保存账号</h3><div id="vault-list" class="vault-list">尚未加载</div></div>
+    </section>
+
+    <footer><span id="state">正在连接</span><span id="detail">正在连接后端…</span></footer>
   </main>
 </body>
 </html>

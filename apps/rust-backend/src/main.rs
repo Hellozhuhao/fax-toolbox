@@ -1,6 +1,10 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
+
+mod course;
+mod vault;
 
 const PROTOCOL_VERSION: u64 = 1;
 const MAX_LINE_BYTES: usize = 32 * 1024;
@@ -38,8 +42,11 @@ struct Session {
 #[derive(Default)]
 struct Backend {
     sessions: HashMap<String, Session>,
+    courses: course::CourseEngine,
+    vault: vault::VaultStore,
 }
 
+#[derive(Debug)]
 struct Fault(&'static str, &'static str);
 
 fn text<'a>(value: &'a Value, key: &str) -> Result<&'a str, Fault> {
@@ -62,6 +69,14 @@ fn snapshot(session: &Session) -> Value {
 }
 
 impl Backend {
+    fn with_data_dir(path: PathBuf) -> Self {
+        Self {
+            sessions: HashMap::new(),
+            courses: course::CourseEngine::with_path(path.join("answers.json")),
+            vault: vault::VaultStore::with_path(path.join("vault.json")),
+        }
+    }
+
     fn request(&mut self, request: &Value) -> Result<Value, Fault> {
         if request.get("v").and_then(Value::as_u64) != Some(PROTOCOL_VERSION) {
             return Err(Fault("BAD_VERSION", "unsupported protocol version"));
@@ -71,6 +86,12 @@ impl Backend {
             .ok_or(Fault("BAD_REQUEST", "params must be an object"))?;
         if method == "system.ping" {
             return Ok(json!({"name": "toolbox-backend", "protocol": PROTOCOL_VERSION}));
+        }
+        if method.starts_with("course.") || method.starts_with("answers.") {
+            return self.courses.request(method, params);
+        }
+        if method.starts_with("vault.") {
+            return self.vault.request(method, params);
         }
         let module_id = text(params, "moduleId")?;
         if module_id != MODULE_ID {
@@ -159,7 +180,10 @@ fn main() -> io::Result<()> {
     let stdout = io::stdout();
     let mut reader = stdin.lock();
     let mut writer = stdout.lock();
-    let mut backend = Backend::default();
+    let data_dir = std::env::var_os("FAX_TOOLBOX_DATA_DIR")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("LOCALAPPDATA").map(|base| PathBuf::from(base).join("FaxToolbox")));
+    let mut backend = data_dir.map(Backend::with_data_dir).unwrap_or_default();
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 { break; }

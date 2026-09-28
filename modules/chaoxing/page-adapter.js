@@ -1,0 +1,193 @@
+/* DOM adapter only. The Rust backend selects actions; no credentials or filesystem access. */
+(() => {
+  'use strict';
+  const host = location.hostname.toLowerCase();
+  if (!host.endsWith('.chaoxing.com') || !window.chrome?.webview) return;
+
+  window.FaxCourseAdapter = {
+    start(sessionId, generation) {
+      if (window.__faxCourseAgentStarted === sessionId) return;
+      window.__faxCourseAdapterStop?.();
+      window.__faxCourseAgentStarted = sessionId;
+      let active = true;
+      let seq = 0;
+      let lastObservation = '';
+      let lastAt = 0;
+      let video = null;
+      let quizSubmitted = false;
+      let pendingInspection = 0;
+
+      function chapter() {
+        const query = new URLSearchParams(location.search);
+        return query.get('chapterId') || query.get('knowledgeid') || query.get('chapterid') || '';
+      }
+      function report(kind, force = false) {
+        if (!active) return;
+        const key = kind + ':' + chapter();
+        const now = Date.now();
+        if (!force && key === lastObservation && now - lastAt < 3000) return;
+        lastObservation = key; lastAt = now;
+        window.chrome.webview.postMessage(JSON.stringify({v: 1, kind: 'course.observe', sessionId,
+          generation, seq: ++seq, observation: kind, chapter: chapter()}));
+      }
+      function visible(element) {
+        if (!element) return false;
+        const box = element.getBoundingClientRect();
+        return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
+      }
+      function byText(words, scope = document) {
+        for (const element of scope.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]')) {
+          if (!visible(element)) continue;
+          const label = (element.innerText || element.value || element.getAttribute('aria-label') || '').trim();
+          if (words.some(word => label === word || label.startsWith(word + ' '))) return element;
+        }
+        return null;
+      }
+      function nextUnit() {
+        if (window.top !== window) return;
+        const button = document.querySelector('#next, .nextBtn, .next_btn, [class*="next_btn"]') ||
+          byText(['下一节', '下一章', '下一个任务点']);
+        if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') { button.click(); return; }
+        const tree = document.querySelector('#coursetree, .coursetree, #catalog, .catalog, #chapterTree, .ztree');
+        if (!tree) return;
+        const nodes = Array.from(tree.querySelectorAll('a, .unit, .ncells')).filter(node =>
+          node.textContent.trim() && node.textContent.trim().length < 100);
+        const active = nodes.findIndex(node => /(^|\s)(on|active|current|doing)(\s|$)/i.test(
+          String(node.className) + ' ' + String(node.parentElement?.className || '')));
+        if (active >= 0) {
+          const next = nodes.slice(active + 1).find(node => /^\s*[\d.]+/.test(node.textContent));
+          next?.click();
+        }
+      }
+      const questionSelector = '.StudentTimu, .timu, .TiMu, [class*="Timu"], [class*="timu"], .questionLi, .questionWrap, .ans-question, .q_body, .question-item, .question, [data-question-id]';
+      function findQuiz() {
+        return Array.from(document.querySelectorAll(questionSelector)).filter(item =>
+          visible(item) && !item.parentElement?.closest(questionSelector) &&
+          item.querySelector('input[type="radio"],input[type="checkbox"],textarea,input[type="text"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
+      }
+      function fillQuiz(answers) {
+        if (quizSubmitted) return;
+        const questions = findQuiz();
+        if (!questions.length || !Array.isArray(answers) || answers.length !== questions.length) {
+          report('QUIZ_UNMATCHED', true); return;
+        }
+        for (const entry of answers) {
+          const question = questions[Number(entry.number) - 1];
+          const answer = String(entry.answer || '').trim();
+          if (!question || !answer) { report('QUIZ_UNMATCHED', true); return; }
+          const options = question?.querySelectorAll('li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]');
+          const inputs = options?.length ? options : question?.querySelectorAll('input[type="radio"],input[type="checkbox"]');
+          if (!inputs?.length) {
+            const blanks = question.querySelectorAll('input[type="text"],input[type="number"],textarea');
+            const values = answer.split('|').map(value => value.trim());
+            if (!blanks.length || values.length !== blanks.length || values.some(value => !value)) {
+              report('QUIZ_UNMATCHED', true); return;
+            }
+            for (let i = 0; i < blanks.length; i++) {
+              const control = blanks[i];
+              const prototype = control.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+              Object.getOwnPropertyDescriptor(prototype, 'value').set.call(control, values[i]);
+              control.dispatchEvent(new Event('input', {bubbles: true}));
+              control.dispatchEvent(new Event('change', {bubbles: true}));
+            }
+            continue;
+          }
+          let letters = [];
+          if (/^[A-Ha-h,，\s]+$/.test(answer)) letters = answer.toUpperCase().replace(/[^A-H]/g, '').split('');
+          else if (/^(对|错|正确|错误|true|false)$/i.test(answer)) {
+            const truth = /^(对|正确|true)$/i.test(answer);
+            const optionIndex = Array.from(inputs).findIndex(option =>
+              truth ? /^(对|正确|true)$/i.test(option.textContent.trim()) :
+                /^(错|错误|false)$/i.test(option.textContent.trim()));
+            if (optionIndex >= 0) letters = [String.fromCharCode(65 + optionIndex)];
+          }
+          if (!letters.length) { report('QUIZ_UNMATCHED', true); return; }
+          for (const letter of letters) {
+            const input = inputs[letter.charCodeAt(0) - 65];
+            if (!input || input.disabled) { report('QUIZ_UNMATCHED', true); return; }
+            if (!input.checked && input.getAttribute('aria-checked') !== 'true') input.click();
+          }
+        }
+        const submit = byText(['提交', '提交答案', '确认提交']);
+        if (!submit || submit.disabled) { report('QUIZ_UNMATCHED', true); return; }
+        quizSubmitted = true;
+        submit.click();
+        report('QUIZ_SUBMITTED', true);
+      }
+      function findDocumentNext() {
+        return document.querySelector('.nextPage, .next-page, [aria-label="下一页"]') ||
+          byText(['下一页']);
+      }
+      function benignPromptButton() {
+        const button = byText(['继续播放', '继续学习', '我知道了']);
+        if (!button) return null;
+        const dialog = button.closest('[role="dialog"], .layui-layer, .modal, .dialog, .popup');
+        if (!dialog || dialog.querySelector('input,textarea,select,[contenteditable="true"]')) return null;
+        return button;
+      }
+      function inspect() {
+        if (benignPromptButton()) { report('PROMPT_FOUND'); return; }
+        if (/\/knowledge\/cards/i.test(location.pathname)) {
+          const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>
+            visible(element) && element.textContent.trim() === '视频' &&
+            !/(^|\s)(on|active|current)(\s|$)/i.test(String(element.className)));
+          if (tab) { report('VIDEO_TAB_FOUND'); return; }
+        }
+        const foundVideo = document.querySelector('video');
+        if (foundVideo && visible(foundVideo)) {
+          if (video !== foundVideo) {
+            video = foundVideo;
+            video.addEventListener('ended', () => report('VIDEO_ENDED', true), {once: true});
+          }
+          if (foundVideo.ended) report('VIDEO_ENDED');
+          else if (foundVideo.paused) report('VIDEO_FOUND');
+          return;
+        }
+        if (findQuiz().length && !quizSubmitted) { report('QUIZ_FOUND'); return; }
+        if (/\/ppt\/|\/pdf\/|\/html\/|courseware/i.test(location.pathname)) {
+          const next = findDocumentNext();
+          if (next && !next.disabled && next.getAttribute('aria-disabled') !== 'true') report('DOCUMENT_FOUND');
+          else if (document.readyState === 'complete') report('DOCUMENT_DONE');
+        }
+      }
+      const onMessage = event => {
+        if (!active) return;
+        const action = event.data;
+        if (action?.v !== 1 || action?.kind !== 'course.action' ||
+            action.sessionId !== sessionId || action.generation !== generation) return;
+        switch (action.action) {
+          case 'PLAY_VIDEO': if (video && !video.ended) video.play().catch(() => {}); break;
+          case 'NEXT_UNIT': nextUnit(); break;
+          case 'DOCUMENT_NEXT': {
+            const next = findDocumentNext();
+            if (next && !next.disabled) setTimeout(() => { scrollTo(0, document.body.scrollHeight); next.click(); }, 1500);
+            break;
+          }
+          case 'FILL_QUIZ': fillQuiz(action.data); break;
+          case 'DISMISS_PROMPT': benignPromptButton()?.click(); break;
+          case 'SWITCH_VIDEO_TAB': {
+            const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>
+              visible(element) && element.textContent.trim() === '视频');
+            tab?.click(); break;
+          }
+        }
+      };
+      window.chrome.webview.addEventListener('message', onMessage);
+      const observer = new MutationObserver(() => {
+        if (!active || document.readyState === 'loading' || pendingInspection) return;
+        pendingInspection = setTimeout(() => { pendingInspection = 0; inspect(); }, 150);
+      });
+      const ready = () => { if (active) { observer.observe(document.documentElement, {childList: true, subtree: true}); inspect(); } };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once: true});
+      else ready();
+      const timer = setInterval(inspect, 2500);
+      window.__faxCourseAdapterStop = () => {
+        active = false; observer.disconnect(); clearInterval(timer);
+        if (pendingInspection) clearTimeout(pendingInspection);
+        window.chrome.webview.removeEventListener('message', onMessage);
+        window.__faxCourseAgentStarted = null;
+      };
+    },
+    stop() { window.__faxCourseAdapterStop?.(); }
+  };
+})();

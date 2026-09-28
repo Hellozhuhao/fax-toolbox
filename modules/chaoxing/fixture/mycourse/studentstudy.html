@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>本地学习通课程夹具</title></head>
+<body>
+  <h1>本地课程夹具 2.1</h1>
+  <div class="question"><p>1. 原生选项</p><label><input type="radio" name="q1" value="A" onclick="ready()">A</label><label><input type="radio" name="q1" value="B" onclick="ready()">B</label></div>
+  <div class="StudentTimu"><p>2. 学习通式自定义选项</p><ul><li role="radio" onclick="select(this)">A</li><li role="radio" onclick="select(this)">B</li></ul></div>
+  <div class="question"><p>3. 填空题</p><textarea id="q3" oninput="ready()"></textarea></div>
+  <div class="question"><p>4. 判断题</p><ul><li role="radio" onclick="judge(this)">对</li><li role="radio" onclick="judge(this)">错</li></ul></div>
+  <button id="submit" type="button" disabled onclick="this.textContent='已提交'">提交</button>
+  <script>
+    function ready() { document.getElementById('submit').disabled = !document.querySelector('input[value="A"]').checked || !document.querySelectorAll('.StudentTimu li')[1].classList.contains('selected') || document.getElementById('q3').value !== '测试答案' || document.querySelectorAll('.question li')[0].getAttribute('aria-checked') !== 'true'; }
+    function select(item) { for (const li of item.parentElement.children) li.classList.remove('selected'); item.classList.add('selected'); ready(); }
+    function judge(item) { for (const li of item.parentElement.children) li.setAttribute('aria-checked','false'); item.setAttribute('aria-checked','true'); ready(); }
+  </script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "id": "toolbox.chaoxing",
+  "version": "0.1.0",
+  "title": "学习通刷课",
+  "origin": "https://*.chaoxing.com",
+  "capabilities": ["page.observe", "page.action", "answer-bank"],
+  "entry": "page-adapter.js"
+}

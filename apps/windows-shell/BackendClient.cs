@@ -21,7 +21,7 @@ internal sealed class BackendClient : IDisposable
         process.BeginErrorReadLine();
     }
 
-    public static async Task<BackendClient> StartAsync(string executable)
+    public static async Task<BackendClient> StartAsync(string executable, string? dataDirectory = null)
     {
         if (!File.Exists(executable))
             throw new FileNotFoundException("Rust 后端尚未构建；先运行 scripts/build-windows.ps1", executable);
@@ -37,6 +37,7 @@ internal sealed class BackendClient : IDisposable
             StandardErrorEncoding = new UTF8Encoding(false),
             CreateNoWindow = true
         };
+        if (dataDirectory is not null) start.Environment["FAX_TOOLBOX_DATA_DIR"] = dataDirectory;
         var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 Rust 后端");
         var client = new BackendClient(process);
         try

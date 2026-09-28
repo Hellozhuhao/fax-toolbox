@@ -1,6 +1,6 @@
 # Toolbox 起步工程
 
-这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。演示模块用于验证页面代理、消息桥和状态机，不执行学习通自动化，也不包含现有脚本的迁移。
+这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。Windows 版已有学习通模块的独立页面、课程会话、视频与文档动作、章节答案库，以及密码箱。真实账号课程尚待人工登录验证。
 
 ## 目录
 
@@ -9,6 +9,7 @@
 | `apps/windows-host/` | Win32 + WebView2 桌面宿主，可运行 |
 | `apps/windows-shell/` | C# WPF + WebView2 桌面外壳 |
 | `apps/rust-backend/` | Rust 独立进程与会话状态机 |
+| `modules/chaoxing/` | 学习通页面适配器与本地测试夹具 |
 | `apps/android-host/` | Android WebView 宿主与 JNI 工程 |
 | `packages/protocol/` | Windows 前后端接口约定 |
 | `packages/page-agent/` | 两端共用的文档注入代理 |
@@ -28,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test
 powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 ```
 
-`-Test` 同时运行 Rust 单元测试和隐藏窗口端到端冒烟测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)。当前只接入 `toolbox.smoke`，后续模块可沿此接口扩展。
+`-Test` 同时运行 Rust 单元测试，以及原演示、测验、视频、嵌套文档四条隐藏窗口端到端冒烟测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
 
 ## 原有 C++ Windows PoC
 

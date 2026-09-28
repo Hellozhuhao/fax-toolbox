@@ -40,21 +40,23 @@ if ($LASTEXITCODE -ne 0) { throw '.NET restore failed' }
 if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
-    $output = Join-Path $root '.cache\windows-smoke.txt'
-    Remove-Item -LiteralPath $output, "$output.trace" -ErrorAction SilentlyContinue
     $executable = Join-Path $root 'apps\windows-shell\bin\Debug\net10.0-windows\FaxToolbox.Windows.exe'
-    $process = Start-Process -FilePath $executable -ArgumentList @('--smoke', $output) -WindowStyle Hidden -PassThru
-    if (-not $process.WaitForExit(30000)) {
-        Stop-Process -Id $process.Id -Force
-        throw 'Windows end-to-end smoke timed out'
+    foreach ($mode in @('--smoke', '--course-smoke', '--course-video-smoke', '--course-document-smoke')) {
+        $output = Join-Path $root ('.cache\windows-' + $mode.TrimStart('-') + '.txt')
+        Remove-Item -LiteralPath $output, "$output.trace" -ErrorAction SilentlyContinue
+        $process = Start-Process -FilePath $executable -ArgumentList @($mode, $output) -WindowStyle Hidden -PassThru
+        if (-not $process.WaitForExit(30000)) {
+            Stop-Process -Id $process.Id -Force
+            throw "$mode end-to-end smoke timed out"
+        }
+        if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $output) -or
+            -not ((Get-Content -LiteralPath $output -Raw).StartsWith('PASS'))) {
+            if (Test-Path -LiteralPath "$output.trace") { Get-Content -LiteralPath "$output.trace" }
+            if (Test-Path -LiteralPath $output) { Get-Content -LiteralPath $output }
+            throw "$mode end-to-end smoke failed"
+        }
+        Get-Content -LiteralPath $output
     }
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $output) -or
-        -not ((Get-Content -LiteralPath $output -Raw).StartsWith('PASS'))) {
-        if (Test-Path -LiteralPath "$output.trace") { Get-Content -LiteralPath "$output.trace" }
-        if (Test-Path -LiteralPath $output) { Get-Content -LiteralPath $output }
-        throw 'Windows end-to-end smoke failed'
-    }
-    Get-Content -LiteralPath $output
 }
 
 Write-Host 'Windows shell and Rust backend are ready.'
