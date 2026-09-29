@@ -65,7 +65,7 @@
       function findQuiz() {
         return Array.from(document.querySelectorAll(questionSelector)).filter(item =>
           visible(item) && !item.parentElement?.closest(questionSelector) &&
-          item.querySelector('input[type="radio"],input[type="checkbox"],textarea,input[type="text"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
+          item.querySelector('input[type="radio"],input[type="checkbox"],textarea,input[type="text"],input[type="number"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
       }
       function snapshotQuiz() {
         const questions = findQuiz();
@@ -74,7 +74,8 @@
           const inputs = custom.length ? custom : Array.from(question.querySelectorAll('input[type="radio"],input[type="checkbox"]'));
           const blanks = question.querySelectorAll('input[type="text"],input[type="number"],textarea');
           const options = inputs.slice(0, 8).map(option => {
-            const label = option.closest('label') || option.parentElement || option;
+            const label = option.tagName === 'LI' ? option :
+              option.closest('label') || option.parentElement || option;
             return (label.innerText || label.textContent || option.value || '').trim().slice(0, 300);
           });
           const multi = inputs.some(option => option.matches('input[type="checkbox"],li[role="checkbox"]'));
