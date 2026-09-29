@@ -31,6 +31,12 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 `-Test` 同时运行 Rust 单元测试，以及原演示、测验、视频、嵌套文档四条隐藏窗口端到端冒烟测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
 
+## Windows EXE 发布
+
+开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/publish-windows.ps1 -Test`。它生成 `dist/windows/FaxToolbox.Windows.exe` 和同目录下必需的 Rust 后端、WebView2 页面资源；直接双击 EXE 即可启动，不需要先运行 PowerShell 或安装 .NET 10 运行时。发布时保留整个 `dist/windows` 目录。Windows 仍需安装 WebView2 Runtime。
+
+当前 UI 包含全宽首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
+
 ## 原有 C++ Windows PoC
 
 需要 Visual Studio Build Tools 的 C++ 桌面工具、Windows SDK 和 WebView2 Runtime。在 **x64 Native Tools Command Prompt** 中进入本目录：

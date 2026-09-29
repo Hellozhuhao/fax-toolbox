@@ -109,6 +109,7 @@ public partial class MainWindow
 
     private async Task OpenCourseAsync()
     {
+        SetWorkspaceLayout(true);
         if (backend is null) return;
         if (sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
             await CancelSessionAsync();

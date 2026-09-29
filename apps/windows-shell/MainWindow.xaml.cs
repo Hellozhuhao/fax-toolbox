@@ -76,7 +76,9 @@ public partial class MainWindow : Window
             Trace("project root found");
             if (smokeMode && VaultCrypto.Unprotect(VaultCrypto.Protect("vault-round-trip")) != "vault-round-trip")
                 throw new InvalidDataException("Windows 密码箱加密往返验证失败");
-            var backendPath = Path.Combine(root, "apps", "rust-backend", "target", "debug", "toolbox-backend.exe");
+            var packagedBackend = Path.Combine(root, "backend", "toolbox-backend.exe");
+            var backendPath = File.Exists(packagedBackend) ? packagedBackend :
+                Path.Combine(root, "apps", "rust-backend", "target", "debug", "toolbox-backend.exe");
             backend = await BackendClient.StartAsync(backendPath, smokeDataDirectory);
             Trace("backend ping passed");
             if (smokeMode)
@@ -212,6 +214,9 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
             switch (message.GetProperty("command").GetString())
             {
+                case "ui.layout":
+                    SetWorkspaceLayout(message.GetProperty("mode").GetString() == "module");
+                    break;
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
                 case "course.open": await OpenCourseAsync(); break;
@@ -233,8 +238,15 @@ public partial class MainWindow : Window
         }
     }
 
+    private void SetWorkspaceLayout(bool showModule)
+    {
+        ShellColumn.Width = showModule ? new GridLength(360) : new GridLength(1, GridUnitType.Star);
+        WorkspaceColumn.Width = showModule ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+    }
+
     private async Task StartSessionAsync()
     {
+        SetWorkspaceLayout(true);
         if (activeModule == "chaoxing")
         {
             if (courseSessionId is not null && courseState is "RUNNING" or "PAUSED" or "NEEDS_INPUT")

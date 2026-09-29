@@ -2,12 +2,12 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="Fax Toolbox" Width="1180" Height="760" MinWidth="840" MinHeight="540"
+        Title="Fax Toolbox" Width="1280" Height="800" MinWidth="900" MinHeight="600"
         Background="#10151F" Loaded="Window_Loaded" Closed="Window_Closed">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="330" />
-            <ColumnDefinition Width="*" />
+            <ColumnDefinition x:Name="ShellColumn" Width="*" />
+            <ColumnDefinition x:Name="WorkspaceColumn" Width="0" />
         </Grid.ColumnDefinitions>
         <wv2:WebView2 x:Name="ShellView" Grid.Column="0" />
         <wv2:WebView2 x:Name="ModuleView" Grid.Column="1" />

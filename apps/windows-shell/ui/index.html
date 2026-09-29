@@ -9,20 +9,36 @@
   <script defer src="app.js"></script>
 </head>
 <body>
-  <main>
-    <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
-    <nav aria-label="工具箱导航">
-      <button class="nav-item active" type="button" data-view="home">工作台</button>
-      <button class="nav-item" type="button" data-view="course">学习通刷课</button>
-      <button class="nav-item" type="button" data-view="vault">系统选项 · 密码箱</button>
-    </nav>
+  <div class="app">
+    <aside class="sidebar">
+      <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
+      <span class="nav-label">工作空间</span>
+      <nav aria-label="工具箱导航">
+        <button class="nav-item active" type="button" data-view="home">⌂　首页</button>
+        <button class="nav-item" type="button" data-view="modules">▦　模块</button>
+        <button class="nav-item" type="button" data-view="activity">◷　活动</button>
+      </nav>
+      <span class="nav-label">快捷入口</span>
+      <nav aria-label="快捷入口">
+        <button class="nav-item" type="button" data-view="course">学　学习通刷课</button>
+        <button class="nav-item" type="button" data-view="vault">♙　密码箱</button>
+      </nav>
+      <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings">⚙　系统选项</button><div class="connection"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
+    </aside>
+    <main class="content">
 
     <section id="view-home" class="view">
-      <div class="eyebrow">模块</div><h2>今天要做什么？</h2>
-      <p class="muted">各模块独立运行。你可以随时查看状态、暂停或停止。</p>
-      <button id="open-course-card" class="module-card" type="button"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>登录、选课、自动处理任务点</small></span><span class="arrow">→</span></button>
-      <div class="card demo-card"><div class="eyebrow">内置演示</div><h3>页面事件演示</h3><p class="muted">验证 WebView2 与 Rust 后端的通信。</p><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div>
+      <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
+      <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，各司其职。</h2><p>从这里启动模块、查看状态，或管理本地数据。每个网页模块拥有独立的会话。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true">F</div></div>
+      <div class="section-head"><div><span class="eyebrow">QUICK ACCESS</span><h2>常用模块</h2></div><button class="text-button" type="button" data-view="modules">查看全部模块 →</button></div>
+      <div class="module-grid"><button class="module-card" type="button" data-open="course"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo"><span class="module-icon demo-icon">◇</span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
+      <div class="section-head"><div><span class="eyebrow">OVERVIEW</span><h2>运行概览</h2></div></div>
+      <div class="overview-grid"><div class="card"><span class="label">后端连接</span><strong id="home-backend">连接中</strong><p id="home-detail" class="muted">正在启动本地服务…</p></div><div class="card"><span class="label">学习模块</span><strong id="home-course">等待打开</strong><p class="muted">课程任务状态在工作台中显示。</p></div></div>
     </section>
+
+    <section id="view-modules" class="view" hidden><div class="eyebrow">LIBRARY</div><h2>模块</h2><p class="lead">选择模块，进入独立的网页会话与任务工作台。</p><div class="module-grid"><article class="card library-card"><span class="module-icon">学</span><span class="pill">内置</span><h3>学习通刷课</h3><p>打开学习通、选择课程，再由你启动任务。视频、文档与章节答案库处于早期验证阶段。</p><button id="module-course" type="button">进入工作台 →</button></article><article class="card library-card"><span class="module-icon demo-icon">◇</span><span class="pill">内置</span><h3>页面事件演示</h3><p>通过本地测试页面体验模块隔离、状态回传与停止流程。</p><button id="module-demo" class="secondary" type="button">运行演示 →</button></article></div></section>
+
+    <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。启动后，可在页面中触发“模拟视频结束”。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
 
     <section id="view-course" class="view" hidden>
       <div class="eyebrow">学习模块</div><h2>学习通刷课</h2>
@@ -50,7 +66,12 @@
       <div class="card"><h3>已保存账号</h3><div id="vault-list" class="vault-list">尚未加载</div></div>
     </section>
 
-    <footer><span id="state">正在连接</span><span id="detail">正在连接后端…</span></footer>
-  </main>
+    <section id="view-activity" class="view" hidden><div class="eyebrow">ACTIVITY</div><h2>活动</h2><p class="lead">本次运行的最近状态变化。关闭软件后记录会清空。</p><div id="activity-list" class="card activity-list" aria-live="polite"><p class="muted">等待事件…</p></div></section>
+
+    <section id="view-settings" class="view" hidden><div class="eyebrow">PREFERENCES</div><h2>系统选项</h2><p class="lead">管理外观与本地数据。</p><div class="card"><h3>外观</h3><p class="muted">主题仅影响工具箱界面，偏好保存在本机。</p><div class="theme-switch" role="group" aria-label="界面主题"><button type="button" data-theme="dark">深色</button><button type="button" data-theme="light">浅色</button></div></div><div class="card"><h3>密码箱</h3><p class="muted">使用 Windows 当前用户加密保护，密码仅在原生输入窗口中填写。</p><button id="settings-vault" type="button">打开密码箱 →</button></div></section>
+
+    <footer><span id="detail">正在连接后端…</span></footer>
+    </main>
+  </div>
 </body>
 </html>
