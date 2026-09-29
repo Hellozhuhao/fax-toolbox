@@ -35,7 +35,7 @@ internal sealed class AiSettingsDialog : Window
         panel.Children.Add(new TextBlock { Text = "模型名称", FontWeight = FontWeights.SemiBold });
         model.Text = previous?.Model ?? "";
         panel.Children.Add(model);
-        panel.Children.Add(new TextBlock { Text = "API Key", FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(new TextBlock { Text = "API Key（服务不需要时可留空）", FontWeight = FontWeights.SemiBold });
         panel.Children.Add(key);
         panel.Children.Add(new TextBlock
         {

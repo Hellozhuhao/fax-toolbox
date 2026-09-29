@@ -25,8 +25,6 @@ internal sealed record AiSettings(string Endpoint, string Model, string Encrypte
     public static void Save(AiSettings settings)
     {
         Validate(settings.Endpoint, settings.Model);
-        if (string.IsNullOrWhiteSpace(settings.EncryptedKey))
-            throw new InvalidDataException("请填写 API Key");
         Directory.CreateDirectory(Path.GetDirectoryName(PathOnDisk)!);
         var temporary = PathOnDisk + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(settings));
@@ -53,7 +51,11 @@ internal sealed record AiQuizAnswer(int Number, string Answer);
 
 internal static class AiAnswerService
 {
-    private static readonly HttpClient Client = new(new SocketsHttpHandler { UseProxy = false })
+    private static readonly HttpClient Client = new(new SocketsHttpHandler
+    {
+        UseProxy = false,
+        AllowAutoRedirect = false
+    })
     {
         Timeout = TimeSpan.FromSeconds(60)
     };
@@ -141,8 +143,9 @@ internal static class AiAnswerService
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
         };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
-            VaultCrypto.Unprotect(settings.EncryptedKey));
+        if (!string.IsNullOrEmpty(settings.EncryptedKey))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
+                VaultCrypto.Unprotect(settings.EncryptedKey));
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         if (!response.IsSuccessStatusCode)
