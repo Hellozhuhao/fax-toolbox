@@ -49,10 +49,13 @@
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>
         <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></div>
-      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
-      <div class="card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，读取当前可见题目，向你配置的模型服务请求答案。只接受题号和选项完整匹配的结果；答案可能有误，请留意提交结果。</p>
-        <button id="ai-configure" class="secondary" type="button">配置模型服务</button>
-        <p id="ai-result" class="muted" aria-live="polite">尚未配置模型服务。</p></div>
+      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">暂停会保留当前任务，稍后可继续；结束会退出本次任务，下次从当前网页重新开始。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
+      <div class="card ai-card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，向模型发送当前可见题目。答案可能有误，请留意提交结果。</p>
+        <p id="ai-config-summary" class="ai-config-summary">正在读取 AI 配置…</p>
+        <div class="ai-actions"><button id="ai-configure" class="secondary" type="button" title="查看或修改服务商、模型与 API Key">管理配置</button><button id="ai-test" class="secondary" type="button">测试连接</button></div>
+        <p class="muted">连接测试仅发送一道示例题，不读取课程内容；可能消耗少量服务额度。</p>
+        <p id="ai-test-result" class="muted" aria-live="polite"></p>
+        <p id="ai-result" class="muted" aria-live="polite">当前没有 AI 答题请求。</p></div>
       <details class="card advanced"><summary>章节答案库 · 高级设置</summary><p class="muted">仅使用你录入的答案。每行“题号:答案”，如 1:A、2:对、3:文本。多空用 | 分隔。</p>
         <label for="answers-chapter">章节 ID（用于匹配答案）</label><input id="answers-chapter" maxlength="128" placeholder="选择章节后自动填入">
         <label for="answers-text">答案</label><textarea id="answers-text" rows="4" placeholder="1:A&#10;2:BC"></textarea>
@@ -69,7 +72,7 @@
 
     <section id="view-activity" class="view" hidden><div class="eyebrow">ACTIVITY</div><h2>活动</h2><p class="lead">本次运行的最近状态变化。关闭软件后记录会清空。</p><div id="activity-list" class="card activity-list" aria-live="polite"><p class="muted">等待事件…</p></div></section>
 
-    <section id="view-settings" class="view" hidden><div class="eyebrow">PREFERENCES</div><h2>系统选项</h2><p class="lead">管理外观、模型服务与本地数据。</p><div class="card"><h3>外观</h3><p class="muted">主题仅影响工具箱界面，偏好保存在本机。</p><div class="theme-switch" role="group" aria-label="界面主题"><button type="button" data-theme="dark">深色</button><button type="button" data-theme="light">浅色</button></div></div><div class="card"><h3>AI 答题服务</h3><p class="muted">选择常见服务商并输入 API Key，也可使用自定义兼容接口。</p><button id="settings-ai" type="button">配置模型服务 →</button></div><div class="card"><h3>网络连接</h3><p class="muted">工具箱网页直接联网，不使用系统或环境变量代理。</p></div><div class="card"><h3>密码箱</h3><p class="muted">使用 Windows 当前用户加密保护，密码仅在原生输入窗口中填写。</p><button id="settings-vault" type="button">打开密码箱 →</button></div></section>
+    <section id="view-settings" class="view" hidden><div class="eyebrow">PREFERENCES</div><h2>系统选项</h2><p class="lead">管理外观、模型服务与本地数据。</p><div class="card"><h3>外观</h3><p class="muted">主题仅影响工具箱界面，偏好保存在本机。</p><div class="theme-switch" role="group" aria-label="界面主题"><button type="button" data-theme="dark">深色</button><button type="button" data-theme="light">浅色</button></div></div><div class="card ai-card"><h3>AI 答题服务</h3><p id="settings-ai-summary" class="ai-config-summary">正在读取 AI 配置…</p><div class="ai-actions"><button id="settings-ai" type="button" title="查看或修改服务商、模型与 API Key">管理配置</button><button id="settings-ai-test" class="secondary" type="button">测试连接</button></div><p id="settings-ai-test-result" class="muted" aria-live="polite"></p></div><div class="card"><h3>网络连接</h3><p class="muted">工具箱网页直接联网，不使用系统或环境变量代理。</p></div><div class="card"><h3>密码箱</h3><p class="muted">使用 Windows 当前用户加密保护，密码仅在原生输入窗口中填写。</p><button id="settings-vault" type="button">打开密码箱 →</button></div></section>
 
     <footer><span id="detail">正在连接后端…</span></footer>
     </main>

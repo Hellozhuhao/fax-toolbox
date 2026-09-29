@@ -42,3 +42,10 @@ foreach (var preset in AiProviderPresets.All.Where(item => item.Id != "custom"))
         throw new Exception("provider preset cannot be restored: " + preset.Id);
 }
 Console.WriteLine("PASS AI response validation");
+if (args.Contains("--live", StringComparer.Ordinal))
+{
+    var settings = AiSettings.Load() ?? throw new Exception("No saved AI provider configuration");
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+    await AiAnswerService.TestConnectionAsync(settings, timeout.Token);
+    Console.WriteLine("PASS saved AI provider connection and response format");
+}

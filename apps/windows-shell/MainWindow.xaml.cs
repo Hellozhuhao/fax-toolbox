@@ -32,13 +32,13 @@ public partial class MainWindow : Window
     private string detail = "正在启动…";
     private string root = "";
     private readonly string? smokeDataDirectory;
-    private bool actionInProgress;
+    private bool demoActionInProgress;
     private bool controlsCollapsed;
 
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
-        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke" or "--module-switch-smoke";
+        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke" or "--course-controls-smoke" or "--module-switch-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
@@ -190,6 +190,7 @@ public partial class MainWindow : Window
                 return;
             }
             Publish(state, detail);
+            PublishAiConfiguration();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
@@ -212,6 +213,16 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
                 await using (var output = File.Create(preview)) encoder.Save(output);
                 dialog.Close();
+                var summary = "正在读取 AI 配置…";
+                for (var attempt = 0; attempt < 30 && summary == "正在读取 AI 配置…"; attempt++)
+                {
+                    var raw = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('ai-config-summary').textContent");
+                    summary = JsonSerializer.Deserialize<string>(raw) ?? "";
+                    if (summary == "正在读取 AI 配置…") await Task.Delay(100);
+                }
+                if (summary == "正在读取 AI 配置…")
+                { FailSmoke("AI configuration summary was not rendered"); return; }
                 PassSmoke();
             }
             else if (courseSmokeMode || courseLiveSmokeMode)
@@ -270,6 +281,8 @@ public partial class MainWindow : Window
                 case "course.jump": await JumpToChapterAsync(message.GetProperty("chapterId").GetString() ?? ""); break;
                 case "answers.save": await SaveAnswersAsync(message); break;
                 case "ai.configure": ConfigureAi(); break;
+                case "ai.get-config": PublishAiConfiguration(); break;
+                case "ai.test": await TestAiConnectionAsync(); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;
@@ -319,8 +332,8 @@ public partial class MainWindow : Window
     {
         await ActivateDemoAsync();
         Trace("start requested");
-        if (backend is null || actionInProgress) return;
-        actionInProgress = true;
+        if (backend is null || demoActionInProgress) return;
+        demoActionInProgress = true;
         try
         {
             if (sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
@@ -345,7 +358,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            actionInProgress = false;
+            demoActionInProgress = false;
         }
     }
 
@@ -353,8 +366,8 @@ public partial class MainWindow : Window
 
     private async Task CancelSessionAsync()
     {
-        if (backend is null || sessionId is null || actionInProgress || state is "COMPLETE" or "CANCELLED") return;
-        actionInProgress = true;
+        if (backend is null || sessionId is null || demoActionInProgress || state is "COMPLETE" or "CANCELLED") return;
+        demoActionInProgress = true;
         try
         {
             var result = await backend.RequestAsync("session.cancel", SessionParams());
@@ -362,7 +375,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            actionInProgress = false;
+            demoActionInProgress = false;
         }
     }
 

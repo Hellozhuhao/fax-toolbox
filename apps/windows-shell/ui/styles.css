@@ -115,8 +115,12 @@ kbd{font:10px "Segoe UI",sans-serif;color:var(--subtle);margin-left:5px}
 .course-current,.course-catalog,.course-control{padding:14px;margin:0 0 10px}
 .course-current #course-chapter{font-size:18px;margin:8px 0 4px}.course-current #course-url{font-size:10px;line-height:1.35;margin:9px 0 0;overflow-wrap:anywhere}
 .course-catalog select{margin-top:10px}.course-catalog button{margin-top:8px}.course-catalog #course-catalog-note{line-height:1.35}
-.course-run{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;margin-top:10px}.course-run button{width:auto;min-width:54px;margin:0;padding:0 6px;font-size:11px;white-space:nowrap}
+.course-run{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}.course-run button{width:100%;margin:0;padding:0 8px;font-size:11px;white-space:nowrap}.course-run #course-start{grid-column:1/-1;min-height:42px;font-size:12px}.course-run #course-stop{color:#b24343;border-color:color-mix(in srgb,#b24343 30%,var(--border))}
+.control-explain{font-size:11px;line-height:1.5;color:var(--subtle);margin:10px 0 0}
 .course-control .status{border-top:1px solid var(--border);padding-top:10px;margin-top:12px}.course-control .status strong{margin:0;font-size:14px}.course-control .status p{margin:4px 0 0}
+.ai-config-summary{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:11px;line-height:1.55;color:var(--text);margin:10px 0}
+.ai-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ai-actions button,.ai-card .ai-actions button{width:100%;margin:0;padding:4px 8px;min-height:38px;font-size:11px}
+#ai-test-result,#settings-ai-test-result{min-height:1em;margin:9px 0 0}
 .palette-backdrop{position:fixed;inset:0;background:#0007;display:flex;justify-content:center;align-items:flex-start;padding:9vh 14px;z-index:20}.palette-backdrop[hidden]{display:none}
 .palette{width:min(480px,100%);background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:0 20px 70px #0005;padding:8px}
 .palette-heading{display:flex;justify-content:space-between;color:var(--subtle);font-size:11px;padding:12px 13px;border-bottom:1px solid var(--border);margin-bottom:5px}

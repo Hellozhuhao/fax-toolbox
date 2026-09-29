@@ -10,7 +10,7 @@
 {"v":1,"id":"ui-request-id","command":"session.start"}
 ```
 
-`command` 由 C# 明确列举；演示模块允许 `demo.activate`、`session.start/cancel`，学习模块允许 `course.activate/open/start/pause/stop/jump`、`answers.save`，密码箱允许 `vault.list/save/delete`。`ai.configure` 只打开原生设置窗口。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
+`command` 由 C# 明确列举；演示模块允许 `demo.activate`、`session.start/cancel`，学习模块允许 `course.activate/open/start/pause/stop/jump`、`answers.save`，密码箱允许 `vault.list/save/delete`。`ai.configure` 只打开原生设置窗口；`ai.get-config` 返回不含密钥的配置摘要，`ai.test` 发起用户点击触发的短连接测试。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
 
 ```json
 {"v":1,"kind":"status","state":"OBSERVING","detail":"已发现视频"}

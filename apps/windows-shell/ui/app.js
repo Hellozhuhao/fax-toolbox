@@ -70,8 +70,9 @@
       currentChapterId = message.chapter || ''; currentChapterName = '';
       updateChapter();
     }
-    $('course-start').disabled = !courseReady || !['READY', 'PAUSED', 'NEEDS_INPUT'].includes(courseState);
-    $('course-start').textContent = ['PAUSED', 'NEEDS_INPUT'].includes(courseState) ? '继续运行' : '开始自动完成';
+    $('course-start').disabled = !courseReady || !['READY', 'PAUSED', 'NEEDS_INPUT', 'STOPPED', 'ERROR'].includes(courseState);
+    $('course-start').textContent = courseState === 'STOPPED' || courseState === 'ERROR' ? '重新开始' :
+      ['PAUSED', 'NEEDS_INPUT'].includes(courseState) ? '继续任务' : '开始自动完成';
     $('course-pause').disabled = courseState !== 'RUNNING';
     $('course-stop').disabled = !['RUNNING', 'PAUSED', 'NEEDS_INPUT', 'ERROR'].includes(courseState);
   }
@@ -121,6 +122,18 @@
       row.append(label, remove); list.append(row);
     }
   }
+  function renderAiConfig(message) {
+    const detail = message.error || (!message.configured ? '尚未配置 AI 服务。请选择服务商并保存 API Key。' :
+      `服务商：${message.provider}  ·  模型：${message.model}\n接口：${message.endpoint}\nAPI Key：${message.hasKey ? '已加密保存' : '未填写'}`);
+    $('ai-config-summary').textContent = detail;
+    $('settings-ai-summary').textContent = detail;
+  }
+  function renderAiTest(message) {
+    const detail = message.detail || '';
+    $('ai-test-result').textContent = detail;
+    $('settings-ai-test-result').textContent = detail;
+    for (const id of ['ai-test', 'settings-ai-test']) $(id).disabled = message.state === 'testing';
+  }
   window.chrome?.webview?.addEventListener('message', event => {
     const message = event.data; if (!message || message.v !== 1) return;
     if (message.kind === 'status') {
@@ -136,6 +149,8 @@
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
     if (message.kind === 'ai.status') $('ai-result').textContent = message.detail || '';
+    if (message.kind === 'ai.config') renderAiConfig(message);
+    if (message.kind === 'ai.test.status') renderAiTest(message);
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
   $('open-course-card').addEventListener('click', openCourse);
@@ -171,11 +186,14 @@
   $('course-stop').addEventListener('click', () => send('course.stop'));
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));
   $('ai-configure').addEventListener('click', () => send('ai.configure'));
+  $('ai-test').addEventListener('click', () => send('ai.test'));
   $('vault-add').addEventListener('click', () => send('vault.save'));
   $('settings-vault').addEventListener('click', () => show('vault'));
   $('settings-ai').addEventListener('click', () => send('ai.configure'));
+  $('settings-ai-test').addEventListener('click', () => send('ai.test'));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);
   show('home');
+  send('ai.get-config');
 })();

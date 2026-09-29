@@ -25,10 +25,12 @@ public partial class MainWindow
         "--course-login-smoke" => LoginFixture,
         "--course-catalog-smoke" => CourseFixture,
         "--course-ai-smoke" => CourseFixture,
+        "--course-controls-smoke" => CourseFixture,
         "--module-switch-smoke" => CourseFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
+    private readonly SemaphoreSlim courseCommandGate = new(1, 1);
     private bool courseHasOpened;
     private string courseState = "WAITING_LOGIN";
     private string courseDetail = "请在右侧登录并选择课程。";
@@ -103,7 +105,7 @@ public partial class MainWindow
     {
         if (activeModule != "chaoxing") return;
         Trace("course navigation completed: " + args.IsSuccess + " " + DisplayUrl(CourseView.CoreWebView2.Source));
-        aiAnswerCancellation?.Cancel();
+        CancelAiRequest("页面已切换，本次 AI 答题请求已取消。");
         if (!args.IsSuccess)
         {
             var reason = $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。";
@@ -152,6 +154,65 @@ public partial class MainWindow
         }
         else PublishCourse(courseState, courseDetail, IsCoursePage(url));
         await RefreshCatalogAsync();
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-controls-smoke" && backend is not null)
+        {
+            courseSessionId = Guid.NewGuid().ToString("N");
+            courseGeneration++;
+            await backend.RequestAsync("course.open", new
+            {
+                sessionId = courseSessionId, generation = courseGeneration,
+                courseUrl = CourseView.CoreWebView2.Source
+            });
+            await backend.RequestAsync("course.command", CourseParams("start"));
+            PublishCourse("RUNNING", "正在处理当前章节。", true);
+            if (!await WaitForCourseButtonsAsync("开始自动完成", true, false, false))
+            { FailSmoke("running controls are wrong"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('course-pause').click()");
+            if (!await WaitForCourseButtonsAsync("继续任务", false, true, false))
+            { FailSmoke("pause did not leave resume and end available"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('course-stop').click()");
+            if (!await WaitForCourseButtonsAsync("重新开始", false, true, true))
+            { FailSmoke("stop did not leave restart available"); return; }
+            var previousGeneration = courseGeneration;
+            await backend.RequestAsync("answers.put", new
+            {
+                chapter = "2.1", answers = new[] { new { number = 1, answer = "A" },
+                    new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
+                    new { number = 4, answer = "对" } }
+            });
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('course-start').click()");
+            for (var attempt = 0; attempt < 30 && courseGeneration == previousGeneration; attempt++)
+                await Task.Delay(100);
+            if (courseGeneration == previousGeneration)
+            { FailSmoke("restart did not create a new session"); return; }
+            await CourseCommandAsync("stop");
+            PublishCourse("ERROR", "模拟错误：用户仍应能够重新开始。", true);
+            if (!await WaitForCourseButtonsAsync("重新开始", false, true, false))
+            { FailSmoke("error did not leave restart available"); return; }
+            previousGeneration = courseGeneration;
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('course-start').click()");
+            for (var attempt = 0; attempt < 30 && courseGeneration == previousGeneration; attempt++)
+                await Task.Delay(100);
+            if (courseGeneration == previousGeneration)
+            { FailSmoke("error recovery did not create a new session"); return; }
+            if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+            {
+                await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('course-start').scrollIntoView({block:'center'})");
+                var preview = Path.Combine(root, ".cache", "ui-course-controls-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
+                await using var output = File.Create(preview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('ai-config-summary').scrollIntoView({block:'center'})");
+                await Task.Delay(100);
+                var aiPreview = Path.Combine(root, ".cache", "ui-ai-config-preview.png");
+                await using var aiOutput = File.Create(aiPreview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, aiOutput);
+            }
+            PassSmoke();
+            return;
+        }
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--module-switch-smoke")
         {
             var before = CourseView.CoreWebView2.Source;
@@ -272,6 +333,7 @@ public partial class MainWindow
 
     private async Task OpenCourseAsync()
     {
+        CancelAiRequest("已重新打开学习通，之前的 AI 请求已取消。");
         SetWorkspaceLayout(true);
         if (backend is null) return;
         if (sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
@@ -295,6 +357,28 @@ public partial class MainWindow
         var target = CourseTarget(mode);
         Trace("course navigation started: " + DisplayUrl(target));
         CourseView.CoreWebView2.Navigate(target);
+    }
+
+    private async Task<bool> WaitForCourseButtonsAsync(string label, bool startDisabled,
+        bool pauseDisabled, bool stopDisabled)
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            var raw = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "JSON.stringify({label:document.getElementById('course-start').textContent," +
+                "start:document.getElementById('course-start').disabled," +
+                "pause:document.getElementById('course-pause').disabled," +
+                "stop:document.getElementById('course-stop').disabled})");
+            using var document = JsonDocument.Parse(JsonSerializer.Deserialize<string>(raw)!);
+            var controls = document.RootElement;
+            if (controls.GetProperty("label").GetString() == label &&
+                controls.GetProperty("start").GetBoolean() == startDisabled &&
+                controls.GetProperty("pause").GetBoolean() == pauseDisabled &&
+                controls.GetProperty("stop").GetBoolean() == stopDisabled)
+                return true;
+            await Task.Delay(100);
+        }
+        return false;
     }
 
     private async Task ActivateCourseAsync()
@@ -332,11 +416,24 @@ public partial class MainWindow
 
     private async Task StartCourseAsync()
     {
-        if (backend is null || actionInProgress || !IsCoursePage(CourseView.CoreWebView2?.Source)) return;
-        actionInProgress = true;
+        if (backend is null || !IsCoursePage(CourseView.CoreWebView2?.Source)) return;
+        CancelAiRequest("你已手动继续任务，之前的 AI 请求已取消。");
+        await courseCommandGate.WaitAsync();
         try
         {
-            if (courseSessionId is null || courseState == "STOPPED")
+            if (courseState is not ("READY" or "PAUSED" or "NEEDS_INPUT" or "STOPPED" or "ERROR")) return;
+            if (courseState == "ERROR" && courseSessionId is not null)
+            {
+                try { await backend.RequestAsync("course.command", CourseParams("stop")); }
+                catch (Exception error) { Trace("failed to stop errored course session: " + error.GetType().Name); }
+                if (courseScriptId is not null)
+                {
+                    CourseView.CoreWebView2!.RemoveScriptToExecuteOnDocumentCreated(courseScriptId);
+                    courseScriptId = null;
+                }
+                await StopCourseAdapterAsync();
+            }
+            if (courseSessionId is null || courseState is "STOPPED" or "ERROR")
             {
                 courseSessionId = Guid.NewGuid().ToString("N");
                 courseGeneration++;
@@ -348,7 +445,7 @@ public partial class MainWindow
                 });
             }
             var result = await backend.RequestAsync("course.command", CourseParams("start"));
-            PublishCourse(result.GetProperty("state").GetString() ?? "RUNNING", "正在观察当前任务点。", true);
+            PublishCourse(result.GetProperty("state").GetString() ?? "RUNNING", "正在处理当前章节，随时可暂停。", true);
             if (courseScriptId is null)
             {
                 var agent = await File.ReadAllTextAsync(Path.Combine(root, "modules", "chaoxing", "page-adapter.js"));
@@ -365,20 +462,27 @@ public partial class MainWindow
             }
             else await ExecuteCourseAdapterAsync("resume");
         }
-        finally { actionInProgress = false; }
+        finally { courseCommandGate.Release(); }
     }
 
     private async Task CourseCommandAsync(string command, string? reason = null)
     {
-        if (backend is null || courseSessionId is null || actionInProgress) return;
-        if (command is "pause" or "stop") aiAnswerCancellation?.Cancel();
-        actionInProgress = true;
+        if (backend is null) return;
+        if (command is "pause" or "stop")
+            CancelAiRequest(command == "pause" ? "任务已暂停，AI 请求已取消。" : "任务已结束，AI 请求已取消。");
+        await courseCommandGate.WaitAsync();
         try
         {
+            if (courseSessionId is null ||
+                (command == "pause" && courseState != "RUNNING") ||
+                (command == "stop" && courseState == "STOPPED")) return;
             var result = await backend.RequestAsync("course.command", CourseParams(command));
             var next = result.GetProperty("state").GetString() ?? "ERROR";
             if (command == "pause") await ExecuteCourseAdapterAsync("pause");
-            PublishCourse(next, reason ?? (command == "pause" ? "已暂停；可继续运行。" : "已停止本次任务。"), IsCoursePage(CourseView.CoreWebView2?.Source));
+            PublishCourse(next, reason ?? (command == "pause" ?
+                "已暂停，当前页面和任务进度保留。点击“继续任务”即可恢复。" :
+                "已结束本次任务。网页和章节保留，点击“重新开始”可创建新任务。"),
+                IsCoursePage(CourseView.CoreWebView2?.Source));
             if (command == "stop" && courseScriptId is not null)
             {
                 CourseView.CoreWebView2!.RemoveScriptToExecuteOnDocumentCreated(courseScriptId);
@@ -386,7 +490,7 @@ public partial class MainWindow
                 await StopCourseAdapterAsync();
             }
         }
-        finally { actionInProgress = false; }
+        finally { courseCommandGate.Release(); }
     }
 
     private Task StopCourseAdapterAsync() => ExecuteCourseAdapterAsync("stop");

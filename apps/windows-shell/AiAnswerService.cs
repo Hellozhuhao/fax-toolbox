@@ -133,12 +133,19 @@ internal static class AiAnswerService
             "单选返回一个选项字母；多选返回多个字母（如 AC）；填空按页面空格顺序用 | 分隔。" +
             "题号必须从 1 连续排列，不能省略。若无法确定答案，返回空字符串，程序将停止。\n" +
             JsonSerializer.Serialize(snapshot);
-        var payload = JsonSerializer.Serialize(new
+        var body = new Dictionary<string, object>
         {
-            model = settings.Model,
-            messages = new[] { new { role = "user", content = prompt } },
-            stream = false
-        });
+            ["model"] = settings.Model,
+            ["messages"] = new[] { new { role = "user", content = prompt } },
+            ["stream"] = false
+        };
+        if (new Uri(settings.Endpoint).Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
+        {
+            // Quiz answers need short JSON, not the provider's default thinking mode.
+            body["thinking"] = new { type = "disabled" };
+            body["response_format"] = new { type = "json_object" };
+        }
+        var payload = JsonSerializer.Serialize(body);
         using var request = new HttpRequestMessage(HttpMethod.Post, settings.Endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -149,7 +156,7 @@ internal static class AiAnswerService
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             cancellationToken);
         if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"AI 接口返回 HTTP {(int)response.StatusCode}，请检查地址、模型和密钥");
+            throw new HttpRequestException(DescribeHttpError((int)response.StatusCode));
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var buffer = new MemoryStream();
         var block = new byte[8192];
@@ -161,10 +168,36 @@ internal static class AiAnswerService
             buffer.Write(block, 0, read);
         }
         using var result = JsonDocument.Parse(buffer.ToArray());
-        var content = result.RootElement.GetProperty("choices")[0]
-            .GetProperty("message").GetProperty("content").GetString();
+        if (!result.RootElement.TryGetProperty("choices", out var choices) ||
+            choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0 ||
+            choices[0].ValueKind != JsonValueKind.Object ||
+            !choices[0].TryGetProperty("message", out var message) ||
+            message.ValueKind != JsonValueKind.Object ||
+            !message.TryGetProperty("content", out var answerContent) ||
+            answerContent.ValueKind is not JsonValueKind.String)
+            throw new InvalidDataException("AI 响应格式不兼容：缺少 choices[0].message.content");
+        var content = answerContent.GetString();
         if (string.IsNullOrWhiteSpace(content))
             throw new InvalidDataException("AI 未返回答案，请人工检查");
         return ParseAnswers(content, snapshot);
     }
+
+    public static async Task TestConnectionAsync(AiSettings settings, CancellationToken cancellationToken)
+    {
+        var question = new AiQuizQuestion(1, "single", "1 + 1 等于多少？",
+            ["A. 1", "B. 2"], 0);
+        await AnswerAsync(settings, new AiQuizSnapshot([question]), cancellationToken);
+    }
+
+    private static string DescribeHttpError(int status) => status switch
+    {
+        400 => "AI 服务拒绝了请求（HTTP 400）：请检查模型是否支持此接口。",
+        401 => "API Key 未通过验证（HTTP 401）：请更新密钥。",
+        402 => "AI 服务额度不足（HTTP 402）：请检查服务商账户余额。",
+        403 => "当前账户无权调用该模型（HTTP 403）。",
+        404 => "模型或接口不存在（HTTP 404）：请检查配置。",
+        429 => "AI 服务请求过于频繁（HTTP 429）：请稍后再试。",
+        >= 500 => $"AI 服务暂时不可用（HTTP {status}）：请稍后重试。",
+        _ => $"AI 服务返回 HTTP {status}：请检查服务商账户与配置。"
+    };
 }
