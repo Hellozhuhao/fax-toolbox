@@ -156,13 +156,20 @@ public partial class MainWindow
         {
             var before = CourseView.CoreWebView2.Source;
             await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=demo]').click()");
-            await Task.Delay(400);
+            for (var attempt = 0; attempt < 30 &&
+                (activeModule != "smoke" || CourseView.Visibility != Visibility.Collapsed ||
+                 ModuleView.Visibility != Visibility.Visible ||
+                 !string.Equals(ModuleView.CoreWebView2.Source, ModuleUrl, StringComparison.OrdinalIgnoreCase)); attempt++)
+                await Task.Delay(100);
             if (activeModule != "smoke" || CourseView.Visibility != Visibility.Collapsed ||
                 ModuleView.Visibility != Visibility.Visible ||
                 !string.Equals(ModuleView.CoreWebView2.Source, ModuleUrl, StringComparison.OrdinalIgnoreCase))
             { FailSmoke("demo module did not activate"); return; }
             await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=course]').click()");
-            await Task.Delay(400);
+            for (var attempt = 0; attempt < 30 &&
+                (activeModule != "chaoxing" || CourseView.Visibility != Visibility.Visible ||
+                 ModuleView.Visibility != Visibility.Collapsed); attempt++)
+                await Task.Delay(100);
             if (activeModule != "chaoxing" || CourseView.Visibility != Visibility.Visible ||
                 ModuleView.Visibility != Visibility.Collapsed || CourseView.CoreWebView2.Source != before ||
                 courseState != "READY")
