@@ -31,11 +31,12 @@ public partial class MainWindow : Window
     private string root = "";
     private readonly string? smokeDataDirectory;
     private bool actionInProgress;
+    private bool controlsCollapsed;
 
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
-        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke";
+        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] == "--smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
@@ -48,6 +49,7 @@ public partial class MainWindow : Window
             throw;
         }
         Trace("constructor");
+        InitializeCatalog();
         if (smokeMode)
         {
             Left = -3000;
@@ -76,6 +78,7 @@ public partial class MainWindow : Window
         try
         {
             root = FindProjectRoot();
+            catalogReaderScript = await File.ReadAllTextAsync(Path.Combine(root, "modules", "chaoxing", "catalog-reader.js"));
             Trace("project root found");
             if (smokeMode && VaultCrypto.Unprotect(VaultCrypto.Protect("vault-round-trip")) != "vault-round-trip")
                 throw new InvalidDataException("Windows 密码箱加密往返验证失败");
@@ -234,6 +237,7 @@ public partial class MainWindow : Window
                 case "course.start": await StartCourseAsync(); break;
                 case "course.pause": await CourseCommandAsync("pause"); break;
                 case "course.stop": await CourseCommandAsync("stop"); break;
+                case "course.jump": await JumpToChapterAsync(message.GetProperty("chapterId").GetString() ?? ""); break;
                 case "answers.save": await SaveAnswersAsync(message); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
@@ -251,8 +255,23 @@ public partial class MainWindow : Window
 
     private void SetWorkspaceLayout(bool showModule)
     {
-        ShellColumn.Width = showModule ? new GridLength(360) : new GridLength(1, GridUnitType.Star);
-        WorkspaceColumn.Width = showModule ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        BrowserToolbar.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
+        ToolbarRow.Height = showModule ? GridLength.Auto : new GridLength(0);
+        var split = showModule && !controlsCollapsed;
+        ShellColumn.MinWidth = split ? 260 : 0;
+        WorkspaceColumn.MinWidth = showModule ? 400 : 0;
+        ShellColumn.Width = !showModule ? new GridLength(1, GridUnitType.Star) :
+            split ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        SplitterColumn.Width = split ? new GridLength(6) : new GridLength(0);
+        WorkspaceSplitter.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+        WorkspaceColumn.Width = showModule ? new GridLength(split ? 2.8 : 1, GridUnitType.Star) : new GridLength(0);
+        ToggleControlsButton.Content = controlsCollapsed ? "显示控制面板" : "展开学习页面";
+    }
+
+    private void ToggleControls_Click(object sender, RoutedEventArgs e)
+    {
+        controlsCollapsed = !controlsCollapsed;
+        SetWorkspaceLayout(true);
     }
 
     private async Task StartSessionAsync()
@@ -379,6 +398,7 @@ public partial class MainWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         smokeTimer.Stop();
+        catalogTimer.Stop();
         ShellView.Dispose();
         ModuleView.Dispose();
         CourseView.Dispose();

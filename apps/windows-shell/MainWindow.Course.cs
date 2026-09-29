@@ -23,6 +23,7 @@ public partial class MainWindow
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
         "--course-login-smoke" => LoginFixture,
+        "--course-catalog-smoke" => CourseFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
@@ -64,7 +65,8 @@ public partial class MainWindow
         foreach (var segment in uri.Query.TrimStart('?').Split('&'))
         {
             var parts = segment.Split('=', 2);
-            if (parts.Length == 2 && parts[0].Equals("chapterId", StringComparison.OrdinalIgnoreCase))
+            if (parts.Length == 2 && (parts[0].Equals("chapterId", StringComparison.OrdinalIgnoreCase) ||
+                parts[0].Equals("knowledgeId", StringComparison.OrdinalIgnoreCase)))
                 return Uri.UnescapeDataString(parts[1]);
         }
         return "";
@@ -94,6 +96,12 @@ public partial class MainWindow
             return;
         }
         var url = CourseView.CoreWebView2.Source;
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-smoke" &&
+            url.Contains("studentstudy-video.html", StringComparison.Ordinal))
+        {
+            PassSmoke();
+            return;
+        }
         if (courseLiveSmokeMode && Uri.TryCreate(url, UriKind.Absolute, out var liveUri) &&
             liveUri.Host.Equals("passport2.chaoxing.com", StringComparison.OrdinalIgnoreCase))
         {
@@ -127,6 +135,33 @@ public partial class MainWindow
                 PublishCourse("CHOOSING_COURSE", "已进入学习通，请在右侧选择课程并打开学习页。", false);
         }
         else PublishCourse(courseState, courseDetail, IsCoursePage(url));
+        await RefreshCatalogAsync();
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-smoke")
+        {
+            if (catalogEntries.Count != 2 || catalogEntries[0].Name != "2.1 课程介绍" ||
+                catalogKey is null || backend is null)
+            { FailSmoke("course catalog was not extracted"); return; }
+            var saved = await backend.RequestAsync("catalog.get", new { courseKey = catalogKey });
+            if (saved.GetProperty("entries").GetArrayLength() != 2 ||
+                saved.GetProperty("entries")[1].GetProperty("name").GetString() != "2.2 视频任务")
+            { FailSmoke("course catalog was not persisted"); return; }
+            if (ShellColumn.Width.GridUnitType != GridUnitType.Star ||
+                WorkspaceColumn.Width.GridUnitType != GridUnitType.Star)
+            { FailSmoke("workspace columns are not adaptive"); return; }
+            ToggleControls_Click(this, new RoutedEventArgs());
+            if (ShellColumn.Width.Value != 0 || WorkspaceColumn.Width.GridUnitType != GridUnitType.Star)
+            { FailSmoke("browser focus layout failed"); return; }
+            ToggleControls_Click(this, new RoutedEventArgs());
+            var menu = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.getElementById('course-chapters').options[2].textContent");
+            if (JsonSerializer.Deserialize<string>(menu) != "2.2 视频任务")
+            { FailSmoke("course selector does not show chapter name"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.getElementById('course-chapters').value='2.2';" +
+                "document.getElementById('course-chapters').dispatchEvent(new Event('change'));" +
+                "document.getElementById('course-jump').click()");
+            return;
+        }
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-login-smoke")
         {
             var expected = IsLoginPage(url) ? "WAITING_LOGIN" :
@@ -184,6 +219,7 @@ public partial class MainWindow
         activeModule = "chaoxing";
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = Visibility.Visible;
+        catalogTimer.Start();
         if (courseScriptId is not null)
         {
             CourseView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(courseScriptId);
@@ -302,7 +338,9 @@ public partial class MainWindow
             var observation = message.GetProperty("observation").GetString();
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
                 "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_SUBMITTED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
-            var chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
+            var chapter = ChapterFromUrl(args.Source);
+            if (string.IsNullOrEmpty(chapter)) chapter = catalogCurrentId;
+            if (string.IsNullOrEmpty(chapter)) chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = message.GetProperty("chapter").GetString() ?? "";
             var activeSession = courseSessionId;
             var activeGeneration = courseGeneration;

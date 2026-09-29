@@ -4,6 +4,7 @@ use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 
 mod course;
+mod catalog;
 mod vault;
 
 const PROTOCOL_VERSION: u64 = 1;
@@ -43,6 +44,7 @@ struct Session {
 struct Backend {
     sessions: HashMap<String, Session>,
     courses: course::CourseEngine,
+    catalog: catalog::CatalogStore,
     vault: vault::VaultStore,
 }
 
@@ -73,6 +75,7 @@ impl Backend {
         Self {
             sessions: HashMap::new(),
             courses: course::CourseEngine::with_path(path.join("answers.json")),
+            catalog: catalog::CatalogStore::with_path(path.join("catalog.json")),
             vault: vault::VaultStore::with_path(path.join("vault.json")),
         }
     }
@@ -89,6 +92,9 @@ impl Backend {
         }
         if method.starts_with("course.") || method.starts_with("answers.") {
             return self.courses.request(method, params);
+        }
+        if method.starts_with("catalog.") {
+            return self.catalog.request(method, params);
         }
         if method.starts_with("vault.") {
             return self.vault.request(method, params);

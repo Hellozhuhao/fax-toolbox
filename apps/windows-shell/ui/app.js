@@ -4,6 +4,11 @@
   let courseState = 'WAITING_LOGIN';
   let courseReady = false;
   let courseOpened = false;
+  let catalogEntries = [];
+  let catalogLive = false;
+  let currentChapterId = '';
+  let currentChapterName = '';
+  let suggestedChapterId = '';
   let activeModule = null;
   const activity = [];
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
@@ -54,11 +59,49 @@
     $('home-course').textContent = stateName(courseState);
     logActivity('学习通刷课', stateName(courseState), message.detail || '状态已更新');
     if (message.url) $('course-url').textContent = message.url;
-    if (message.chapter) { $('course-chapter').textContent = message.chapter; if (!$('answers-chapter').value) $('answers-chapter').value = message.chapter; }
+    if (message.chapter !== undefined && message.chapter !== currentChapterId) {
+      currentChapterId = message.chapter || ''; currentChapterName = '';
+      updateChapter();
+    }
     $('course-start').disabled = !courseReady || !['READY', 'PAUSED', 'NEEDS_INPUT'].includes(courseState);
     $('course-start').textContent = ['PAUSED', 'NEEDS_INPUT'].includes(courseState) ? '继续运行' : '开始自动完成';
     $('course-pause').disabled = courseState !== 'RUNNING';
     $('course-stop').disabled = !['RUNNING', 'PAUSED', 'NEEDS_INPUT', 'ERROR'].includes(courseState);
+  }
+  function updateChapter() {
+    const match = catalogEntries.find(entry => entry.id === currentChapterId);
+    $('course-chapter').textContent = currentChapterName || match?.name || '章节名称待识别';
+    $('course-chapter-id').textContent = currentChapterId ? '章节 ID：' + currentChapterId : '';
+    const field = $('answers-chapter');
+    if (!field.value.trim() || field.value === suggestedChapterId) field.value = currentChapterId;
+    suggestedChapterId = currentChapterId;
+    if (currentChapterId && catalogEntries.some(entry => entry.id === currentChapterId))
+      $('course-chapters').value = currentChapterId;
+  }
+  function renderCatalog(message) {
+    catalogEntries = Array.isArray(message.entries) ? message.entries : [];
+    catalogLive = !!message.live;
+    const previousChapterId = currentChapterId;
+    currentChapterId = message.currentId || '';
+    currentChapterName = message.currentName || '';
+    const selected = $('course-chapters').value;
+    const menu = $('course-chapters'); menu.replaceChildren();
+    const prompt = document.createElement('option'); prompt.value = '';
+    prompt.textContent = catalogEntries.length ? '选择一个章节' : '当前页面没有可读取的章节目录';
+    menu.append(prompt);
+    for (const entry of catalogEntries) {
+      const option = document.createElement('option'); option.value = entry.id; option.textContent = entry.name;
+      menu.append(option);
+    }
+    const currentEntry = catalogEntries.find(entry => entry.id === currentChapterId || entry.name === currentChapterName);
+    menu.value = currentChapterId !== previousChapterId && catalogEntries.some(entry => entry.id === currentChapterId) ? currentChapterId :
+      catalogEntries.some(entry => entry.id === selected) ? selected :
+      currentEntry?.id || '';
+    $('course-jump').disabled = !catalogLive || !menu.value;
+    $('course-catalog-note').textContent = message.note || (catalogLive ?
+      `已读取 ${catalogEntries.length} 个章节并保存到本机。` :
+      catalogEntries.length ? '已载入本机目录；等待网页目录出现后可跳转。' : '尚未识别到章节目录。');
+    updateChapter();
   }
   function renderVault(entries) {
     const list = $('vault-list'); list.replaceChildren();
@@ -82,6 +125,7 @@
       logActivity('工具箱', stateName(message.state), message.detail || '');
     }
     if (message.kind === 'course.status') renderCourse(message);
+    if (message.kind === 'course.catalog') renderCatalog(message);
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
   });
@@ -96,6 +140,8 @@
   $('course-open').addEventListener('click', () => { courseOpened = true; send('course.open'); });
   $('course-save-vault').addEventListener('click', () => send('vault.save'));
   $('course-start').addEventListener('click', () => send('course.start'));
+  $('course-chapters').addEventListener('change', () => { $('course-jump').disabled = !catalogLive || !$('course-chapters').value; });
+  $('course-jump').addEventListener('click', () => send('course.jump', {chapterId: $('course-chapters').value}));
   $('course-pause').addEventListener('click', () => send('course.pause'));
   $('course-stop').addEventListener('click', () => send('course.stop'));
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));

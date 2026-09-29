@@ -41,7 +41,7 @@ if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
     $executable = Join-Path $root 'apps\windows-shell\bin\Debug\net10.0-windows\FaxToolbox.Windows.exe'
-    foreach ($mode in @('--smoke', '--course-smoke', '--course-video-smoke', '--course-document-smoke', '--course-challenge-smoke', '--course-pause-smoke', '--course-login-smoke')) {
+    foreach ($mode in @('--smoke', '--course-smoke', '--course-video-smoke', '--course-document-smoke', '--course-challenge-smoke', '--course-pause-smoke', '--course-login-smoke', '--course-catalog-smoke')) {
         $output = Join-Path $root ('.cache\windows-' + $mode.TrimStart('-') + '.txt')
         Remove-Item -LiteralPath $output, "$output.trace" -ErrorAction SilentlyContinue
         $process = Start-Process -FilePath $executable -ArgumentList @($mode, $output) -WindowStyle Hidden -PassThru

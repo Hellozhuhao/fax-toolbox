@@ -2,15 +2,30 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
-        Title="Fax Toolbox" Width="1280" Height="800" MinWidth="900" MinHeight="600"
+        Title="Fax Toolbox" Width="1280" Height="800" MinWidth="780" MinHeight="560"
         Background="#10151F" Loaded="Window_Loaded" Closed="Window_Closed">
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition x:Name="ToolbarRow" Height="0" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition x:Name="ShellColumn" Width="*" />
+            <ColumnDefinition x:Name="SplitterColumn" Width="0" />
             <ColumnDefinition x:Name="WorkspaceColumn" Width="0" />
         </Grid.ColumnDefinitions>
-        <wv2:WebView2 x:Name="ShellView" Grid.Column="0" />
-        <wv2:WebView2 x:Name="ModuleView" Grid.Column="1" />
-        <wv2:WebView2 x:Name="CourseView" Grid.Column="1" Visibility="Collapsed" />
+        <DockPanel x:Name="BrowserToolbar" Grid.Row="0" Grid.ColumnSpan="3" Visibility="Collapsed"
+                   Background="#182235" LastChildFill="True">
+            <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="130" Margin="4"
+                    Click="ToggleControls_Click" Content="展开学习页面" />
+            <TextBlock Margin="14,0" VerticalAlignment="Center" Foreground="#DDE7F5"
+                       Text="工作台 · 拖动分隔线可调整网页宽度" />
+        </DockPanel>
+        <wv2:WebView2 x:Name="ShellView" Grid.Row="1" Grid.Column="0" />
+        <GridSplitter x:Name="WorkspaceSplitter" Grid.Row="1" Grid.Column="1" Width="6"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#3D4F69"
+                      ResizeBehavior="PreviousAndNext" Visibility="Collapsed" />
+        <wv2:WebView2 x:Name="ModuleView" Grid.Row="1" Grid.Column="2" />
+        <wv2:WebView2 x:Name="CourseView" Grid.Row="1" Grid.Column="2" Visibility="Collapsed" />
     </Grid>
 </Window>

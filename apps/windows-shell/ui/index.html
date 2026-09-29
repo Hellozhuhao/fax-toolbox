@@ -45,13 +45,19 @@
       <button id="course-open" type="button">打开学习通</button>
       <button id="course-save-vault" class="secondary" type="button">手动保存账号到密码箱</button>
       <div class="step"><span>2</span><div><strong>选择课程</strong><small>进入课程学习页后再启动</small></div></div>
-      <div class="card"><span class="label">当前页面</span><p id="course-url" class="url">尚未打开</p><span class="label">章节标识</span><p id="course-chapter">—</p></div>
+      <div class="card"><span class="label">当前页面</span><p id="course-url" class="url">尚未打开</p>
+        <span class="label">当前章节</span><p id="course-chapter">等待识别章节名称</p>
+        <p id="course-chapter-id" class="muted"></p></div>
+      <div class="card"><span class="label">章节目录</span>
+        <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
+        <button id="course-jump" type="button" disabled>跳转到所选章节</button>
+        <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></div>
       <div class="step"><span>3</span><div><strong>开始自动完成</strong><small>根据当前任务点执行视频、文档或答案库动作</small></div></div>
       <button id="course-start" type="button" disabled>开始自动完成</button>
       <div class="button-row"><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div>
       <div class="card status" aria-live="polite"><span class="label">课程状态</span><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div>
       <details class="card advanced"><summary>章节答案库 · 高级设置</summary><p class="muted">仅使用你录入的答案。每行“题号:答案”，如 1:A、2:对、3:文本。多空用 | 分隔。</p>
-        <label for="answers-chapter">章节标识</label><input id="answers-chapter" maxlength="128" placeholder="选择课程后自动填入">
+        <label for="answers-chapter">章节 ID（用于匹配答案）</label><input id="answers-chapter" maxlength="128" placeholder="选择章节后自动填入">
         <label for="answers-text">答案</label><textarea id="answers-text" rows="4" placeholder="1:A&#10;2:BC"></textarea>
         <button id="answers-save" type="button">保存本章答案</button><p id="answers-result" class="muted"></p>
       </details>
