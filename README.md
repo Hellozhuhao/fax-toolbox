@@ -37,6 +37,10 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 当前 UI 包含全宽首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
 
+导航按“首页 → 模块 → 工作台 → 活动 → 系统选项”组织；密码箱位于系统选项内。首次进入学习通工作台时打开登录页，之后返回工作台会保留当前网页；“打开学习通”按钮用于重新打开首页。
+
+若 Windows 系统代理不可用，工具箱会优先使用有效的本机 `HTTPS_PROXY` 环境代理。也可在“系统选项 → 学习通网页连接”填写本机 HTTP 代理地址，或选择使用 Windows 系统代理；更改后重启生效。当前预览版通过 WebView2 浏览器参数为学习通会话设置代理，后续发布前应重新评估这一兼容层。
+
 ## 原有 C++ Windows PoC
 
 需要 Visual Studio Build Tools 的 C++ 桌面工具、Windows SDK 和 WebView2 Runtime。在 **x64 Native Tools Command Prompt** 中进入本目录：

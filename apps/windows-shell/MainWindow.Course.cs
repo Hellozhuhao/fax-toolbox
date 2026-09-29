@@ -13,6 +13,13 @@ public partial class MainWindow
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
+    private static string CourseTarget(string? smokeMode) => smokeMode switch
+    {
+        "--course-smoke" => CourseFixture,
+        "--course-video-smoke" => VideoFixture,
+        "--course-document-smoke" => DocumentFixture,
+        _ => CourseHome
+    };
     private string activeModule = "smoke";
     private string courseState = "WAITING_LOGIN";
     private string courseDetail = "请在右侧登录并选择课程。";
@@ -66,10 +73,17 @@ public partial class MainWindow
         if (activeModule != "chaoxing") return;
         if (!args.IsSuccess)
         {
-            PublishCourse("ERROR", "学习通页面加载失败。请检查网络或重新打开。", false);
+            PublishCourse("ERROR", $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。", false);
             return;
         }
         var url = CourseView.CoreWebView2.Source;
+        if (courseLiveSmokeMode && Uri.TryCreate(url, UriKind.Absolute, out var liveUri) &&
+            liveUri.Host.Equals("passport2.chaoxing.com", StringComparison.OrdinalIgnoreCase))
+        {
+            Trace("live login page loaded: " + DisplayUrl(url));
+            PassSmoke();
+            return;
+        }
         if (courseSmokeMode && url.Contains("-done.html", StringComparison.Ordinal))
         {
             Trace("course fixture reached next unit");
@@ -126,13 +140,10 @@ public partial class MainWindow
         await StopCourseAdapterAsync();
         courseSessionId = null;
         PublishCourse("WAITING_LOGIN", "请在右侧登录并选择课程。", false);
-        var smokeTarget = Environment.GetCommandLineArgs()[1] switch
-        {
-            "--course-video-smoke" => VideoFixture,
-            "--course-document-smoke" => DocumentFixture,
-            _ => CourseFixture
-        };
-        CourseView.CoreWebView2.Navigate(courseSmokeMode ? smokeTarget : CourseHome);
+        var mode = courseSmokeMode ? Environment.GetCommandLineArgs()[1] : null;
+        var target = CourseTarget(mode);
+        Trace("course navigation started: " + DisplayUrl(target));
+        CourseView.CoreWebView2.Navigate(target);
     }
 
     private object CourseParams(string command) => new { sessionId = courseSessionId, generation = courseGeneration, command };

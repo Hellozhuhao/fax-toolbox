@@ -19,6 +19,7 @@ public partial class MainWindow : Window
 
     private readonly bool smokeMode;
     private readonly bool courseSmokeMode;
+    private readonly bool courseLiveSmokeMode;
     private readonly string? smokeOutput;
     private readonly DispatcherTimer smokeTimer = new() { Interval = TimeSpan.FromSeconds(20) };
     private BackendClient? backend;
@@ -30,12 +31,14 @@ public partial class MainWindow : Window
     private string root = "";
     private readonly string? smokeDataDirectory;
     private bool actionInProgress;
+    private WebViewProxy courseProxy = new("Windows 系统代理", null);
 
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke";
-        smokeMode = args.Length == 3 && (args[1] == "--smoke" || courseSmokeMode);
+        courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
+        smokeMode = args.Length == 3 && (args[1] == "--smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
         smokeDataDirectory = smokeMode ? Path.Combine(Path.GetTempPath(), "FaxToolbox-smoke-" + Guid.NewGuid().ToString("N")) : null;
         Trace("before XAML initialization; args=" + args.Length);
@@ -51,6 +54,7 @@ public partial class MainWindow : Window
             Left = -3000;
             Top = -3000;
             ShowInTaskbar = false;
+            if (courseLiveSmokeMode) smokeTimer.Interval = TimeSpan.FromSeconds(35);
             smokeTimer.Tick += (_, _) => FailSmoke("WebView2/Rust 端到端验证超时");
             smokeTimer.Start();
         }
@@ -102,9 +106,16 @@ public partial class MainWindow : Window
 
             var profileRoot = smokeMode ? Path.Combine(smokeDataDirectory!, "WebView2") :
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox", "WebView2");
+            courseProxy = WebViewProxy.Resolve();
+            var courseOptions = courseProxy.Url is null ? null : new CoreWebView2EnvironmentOptions
+            {
+                AdditionalBrowserArguments = "--proxy-server=" + courseProxy.Url
+            };
+            Trace("course network: " + courseProxy.Source);
             var uiEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(profileRoot, "ui"));
             var moduleEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(profileRoot, "modules", "smoke"));
-            var courseEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(profileRoot, "modules", "chaoxing"));
+            var courseEnvironment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(profileRoot, "modules", "chaoxing"), options: courseOptions);
             await ShellView.EnsureCoreWebView2Async(uiEnvironment);
             Trace("UI WebView ready");
             await ModuleView.EnsureCoreWebView2Async(moduleEnvironment);
@@ -173,9 +184,10 @@ public partial class MainWindow : Window
                 return;
             }
             Publish(state, detail);
+            PublishNetwork(null);
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
-            if (courseSmokeMode)
+            if (courseSmokeMode || courseLiveSmokeMode)
             {
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
             }
@@ -227,6 +239,18 @@ public partial class MainWindow : Window
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;
+                case "network.proxy.save":
+                    try
+                    {
+                        WebViewProxy.SaveLocal(message.GetProperty("proxy").GetString());
+                        PublishNetwork("本地代理已保存。重启工具箱后生效。");
+                    }
+                    catch (ArgumentException error) { PublishNetwork(error.Message); }
+                    break;
+                case "network.proxy.system":
+                    WebViewProxy.SaveSystem();
+                    PublishNetwork("已选择 Windows 系统代理。重启工具箱后生效。");
+                    break;
             }
         }
         catch (Exception error)
@@ -236,6 +260,16 @@ public partial class MainWindow : Window
                 PublishCourse("ERROR", error.Message, IsCoursePage(CourseView.CoreWebView2?.Source));
             if (smokeMode) FailSmoke(error.ToString());
         }
+    }
+
+    private void PublishNetwork(string? message)
+    {
+        if (ShellView.CoreWebView2 is null) return;
+        ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        {
+            v = 1, kind = "network.status", source = courseProxy.Source,
+            proxy = courseProxy.Url, detail = message ?? "学习通网页使用此连接方式。"
+        }));
     }
 
     private void SetWorkspaceLayout(bool showModule)
@@ -352,6 +386,7 @@ public partial class MainWindow : Window
     {
         smokeTimer.Stop();
         if (smokeOutput is not null) File.WriteAllText(smokeOutput,
+            courseLiveSmokeMode ? "PASS learning login page opened" :
             courseSmokeMode ? "PASS C# WebView2 -> Rust " + Environment.GetCommandLineArgs()[1] :
                 "PASS C# WebView2 -> Rust COMPLETE");
         Application.Current.Shutdown(0);
