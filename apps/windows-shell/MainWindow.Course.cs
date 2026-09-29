@@ -164,7 +164,7 @@ public partial class MainWindow
                 await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
             }
             await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "document.getElementById('course-chapters').value='2.2';" +
+                "document.getElementById('course-chapters').selectedIndex=2;" +
                 "document.getElementById('course-chapters').dispatchEvent(new Event('change'));" +
                 "document.getElementById('course-jump').click()");
             return;

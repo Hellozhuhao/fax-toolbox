@@ -52,9 +52,13 @@
         const previous = byNumber.get(number);
         if (!previous || name.length < previous.name.length ||
             (name.length === previous.name.length && active && !previous.active))
-          byNumber.set(number, {id, name, element, active, order: previous?.order ?? order++});
+          byNumber.set(number, {id, number, name, element, active, order: previous?.order ?? order++});
       }
-      return Array.from(byNumber.values()).sort((a, b) => a.order - b.order).slice(0, 120);
+      const rows = Array.from(byNumber.values()).sort((a, b) => a.order - b.order).slice(0, 120);
+      const counts = new Map();
+      for (const row of rows) counts.set(row.id, (counts.get(row.id) || 0) + 1);
+      for (const row of rows) if (counts.get(row.id) > 1) row.id = 'chapter:' + row.number;
+      return rows;
     };
     window.FaxCatalogReader = {
       read() {
