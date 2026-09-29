@@ -14,6 +14,7 @@ public partial class MainWindow
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
+    private const string LoginFixture = "https://mooc1.chaoxing.com/login.html";
     private static string CourseTarget(string? smokeMode) => smokeMode switch
     {
         "--course-smoke" => CourseFixture,
@@ -21,6 +22,7 @@ public partial class MainWindow
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
+        "--course-login-smoke" => LoginFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
@@ -45,6 +47,15 @@ public partial class MainWindow
         if (!IsChaoxingUrl(value)) return false;
         var uri = new Uri(value!);
         return uri.AbsolutePath.Contains("/mycourse/studentstudy", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsLoginPage(string? value)
+    {
+        if (!IsChaoxingUrl(value)) return false;
+        var uri = new Uri(value!);
+        return uri.Host.StartsWith("passport", StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath.Equals("/login", StringComparison.OrdinalIgnoreCase) ||
+            uri.AbsolutePath.Equals("/login.html", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string ChapterFromUrl(string? value)
@@ -106,10 +117,37 @@ public partial class MainWindow
             await CourseCommandAsync("pause", "已离开课程学习页。请完成登录或验证，返回课程后再继续。");
             return;
         }
-        if (IsCoursePage(url) && courseState is "WAITING_LOGIN" or "READY" or "STOPPED")
-            PublishCourse("READY", "已进入课程学习页，可以开始自动完成。", true);
-        else
-            PublishCourse(courseState, IsCoursePage(url) ? courseDetail : "请登录并打开课程学习页。", IsCoursePage(url));
+        if (courseState is not ("RUNNING" or "PAUSED" or "NEEDS_INPUT"))
+        {
+            if (IsCoursePage(url))
+                PublishCourse("READY", "已进入课程学习页，可以开始自动完成。", true);
+            else if (IsLoginPage(url))
+                PublishCourse("WAITING_LOGIN", "请在右侧完成学习通登录。", false);
+            else if (IsChaoxingUrl(url))
+                PublishCourse("CHOOSING_COURSE", "已进入学习通，请在右侧选择课程并打开学习页。", false);
+        }
+        else PublishCourse(courseState, courseDetail, IsCoursePage(url));
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-login-smoke")
+        {
+            var expected = IsLoginPage(url) ? "WAITING_LOGIN" :
+                IsCoursePage(url) ? "READY" : "CHOOSING_COURSE";
+            var actual = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "JSON.stringify({state:document.getElementById('course-state').textContent," +
+                "disabled:document.getElementById('course-start').disabled})");
+            using var check = JsonDocument.Parse(JsonSerializer.Deserialize<string>(actual)!);
+            var label = check.RootElement.GetProperty("state").GetString();
+            var disabled = check.RootElement.GetProperty("disabled").GetBoolean();
+            var correct = expected switch
+            {
+                "WAITING_LOGIN" => label == "等待登录" && disabled,
+                "CHOOSING_COURSE" => label == "选择课程" && disabled,
+                _ => label == "就绪" && !disabled
+            };
+            if (!correct) { FailSmoke("course login transition: " + actual); return; }
+            if (expected == "READY") { PassSmoke(); return; }
+            await CourseView.CoreWebView2.ExecuteScriptAsync("document.getElementById('next').click()");
+            return;
+        }
         if (courseSmokeMode && IsCoursePage(url) && backend is not null)
         {
             if (Environment.GetCommandLineArgs()[1] == "--course-smoke")
