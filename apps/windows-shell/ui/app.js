@@ -129,6 +129,7 @@
     if (message.kind === 'course.catalog') renderCatalog(message);
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
+    if (message.kind === 'ai.status') $('ai-result').textContent = message.detail || '';
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
   $('open-course-card').addEventListener('click', openCourse);
@@ -146,6 +147,7 @@
   $('course-pause').addEventListener('click', () => send('course.pause'));
   $('course-stop').addEventListener('click', () => send('course.stop'));
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));
+  $('ai-configure').addEventListener('click', () => send('ai.configure'));
   $('vault-add').addEventListener('click', () => send('vault.save'));
   $('settings-vault').addEventListener('click', () => show('vault'));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));

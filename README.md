@@ -1,6 +1,6 @@
 # Toolbox 起步工程
 
-这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。Windows 版已有学习通模块的独立页面、课程会话、视频与文档动作、章节答案库，以及密码箱。真实账号课程尚待人工登录验证。
+这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。Windows 版已有学习通模块的独立页面、课程会话、视频与文档动作、章节答案库、可配置 AI 答题，以及密码箱。
 
 ## 目录
 
@@ -36,6 +36,8 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/publish-windows.ps1 -Test`。它生成 `dist/windows/FaxToolbox.Windows.exe` 和同目录下必需的 Rust 后端、WebView2 页面资源；直接双击 EXE 即可启动，不需要先运行 PowerShell 或安装 .NET 10 运行时。发布时保留整个 `dist/windows` 目录。Windows 仍需安装 WebView2 Runtime。
 
 当前 UI 包含全宽首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
+
+AI 答题入口位于学习通工作台。点击“配置模型服务”，填写兼容 Chat Completions 的 HTTPS 完整地址、模型名及 API Key。服务可以使用免费额度；是否免费、额度和可用模型由服务商决定。没有本章答案或已有答案与页面不匹配时，工具箱会尝试读取当前可见题目并请求模型；模型返回不完整答案或页面发生变化时暂停。密钥由 Windows 当前用户加密保存；当前题目文本和选项会发送给配置的服务。验证答案格式可运行 `dotnet run --project tests/ai-answers/AiAnswers.csproj`。
 
 导航按“首页 → 模块 → 工作台 → 活动 → 系统选项”组织；密码箱位于系统选项内。首次进入学习通工作台时打开登录页，之后返回工作台会保留当前网页；“打开学习通”按钮用于重新打开首页。
 

@@ -67,6 +67,22 @@
           visible(item) && !item.parentElement?.closest(questionSelector) &&
           item.querySelector('input[type="radio"],input[type="checkbox"],textarea,input[type="text"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
       }
+      function snapshotQuiz() {
+        const questions = findQuiz();
+        return {questions: (questions.length > 50 ? [] : questions).map((question, index) => {
+          const custom = Array.from(question.querySelectorAll('li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
+          const inputs = custom.length ? custom : Array.from(question.querySelectorAll('input[type="radio"],input[type="checkbox"]'));
+          const blanks = question.querySelectorAll('input[type="text"],input[type="number"],textarea');
+          const options = inputs.slice(0, 8).map(option => {
+            const label = option.closest('label') || option.parentElement || option;
+            return (label.innerText || label.textContent || option.value || '').trim().slice(0, 300);
+          });
+          const multi = inputs.some(option => option.matches('input[type="checkbox"],li[role="checkbox"]'));
+          return {number: index + 1, type: inputs.length ? (multi ? 'multi' : 'single') : 'blank',
+            text: (question.innerText || question.textContent || '').trim().slice(0, 1200),
+            options, blankCount: blanks.length};
+        })};
+      }
       function fillQuiz(answers) {
         if (quizSubmitted) return;
         const questions = findQuiz();
@@ -104,10 +120,20 @@
             if (optionIndex >= 0) letters = [String.fromCharCode(65 + optionIndex)];
           }
           if (!letters.length) { report('QUIZ_UNMATCHED', true); return; }
+          const selected = input => input.checked || input.getAttribute('aria-checked') === 'true' ||
+            /(^|\s)(selected|checked)(\s|$)/i.test(String(input.className));
+          if (Array.from(inputs).some(input => input.matches('input[type="checkbox"],li[role="checkbox"]'))) {
+            for (let i = 0; i < inputs.length; i++) {
+              const input = inputs[i];
+              if (input.disabled) { report('QUIZ_UNMATCHED', true); return; }
+              if (selected(input) !== letters.includes(String.fromCharCode(65 + i))) input.click();
+            }
+            continue;
+          }
           for (const letter of letters) {
             const input = inputs[letter.charCodeAt(0) - 65];
             if (!input || input.disabled) { report('QUIZ_UNMATCHED', true); return; }
-            if (!input.checked && input.getAttribute('aria-checked') !== 'true') input.click();
+            if (!selected(input)) input.click();
           }
         }
         const submit = byText(['提交', '提交答案', '确认提交']);
@@ -188,6 +214,7 @@
         }
       };
       window.chrome.webview.addEventListener('message', onMessage);
+      window.__faxCourseAdapterSnapshotQuiz = snapshotQuiz;
       const observer = new MutationObserver(() => {
         if (!active || !running || document.readyState === 'loading' || pendingInspection) return;
         pendingInspection = setTimeout(() => { pendingInspection = 0; inspect(); }, 150);
@@ -202,10 +229,10 @@
         if (pendingInspection) { clearTimeout(pendingInspection); pendingInspection = 0; }
         if (video && !video.paused) video.pause();
       };
-      window.__faxCourseAdapterResume = () => {
+      window.__faxCourseAdapterResume = (inspectNow = true) => {
         if (!active) return;
         running = true;
-        inspect();
+        if (inspectNow) inspect();
       };
       window.__faxCourseAdapterStop = () => {
         active = false; observer.disconnect(); clearInterval(timer);
@@ -215,10 +242,12 @@
         window.__faxCourseAgentStarted = null;
         window.__faxCourseAdapterPause = null;
         window.__faxCourseAdapterResume = null;
+        window.__faxCourseAdapterSnapshotQuiz = null;
       };
     },
+    snapshotQuiz() { return window.__faxCourseAdapterSnapshotQuiz?.() ?? null; },
     pause() { window.__faxCourseAdapterPause?.(); },
-    resume() { window.__faxCourseAdapterResume?.(); },
+    resume(inspectNow = true) { window.__faxCourseAdapterResume?.(inspectNow); },
     stop() { window.__faxCourseAdapterStop?.(); }
   };
 })();

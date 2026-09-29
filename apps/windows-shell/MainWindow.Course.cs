@@ -24,6 +24,7 @@ public partial class MainWindow
         "--course-challenge-smoke" => ChallengeFixture,
         "--course-login-smoke" => LoginFixture,
         "--course-catalog-smoke" => CourseFixture,
+        "--course-ai-smoke" => CourseFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
@@ -88,6 +89,7 @@ public partial class MainWindow
     private async void ModuleNavigationCompleted(CoreWebView2NavigationCompletedEventArgs args)
     {
         if (activeModule != "chaoxing") return;
+        aiAnswerCancellation?.Cancel();
         if (!args.IsSuccess)
         {
             var reason = $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。";
@@ -286,6 +288,7 @@ public partial class MainWindow
     private async Task CourseCommandAsync(string command, string? reason = null)
     {
         if (backend is null || courseSessionId is null || actionInProgress) return;
+        if (command is "pause" or "stop") aiAnswerCancellation?.Cancel();
         actionInProgress = true;
         try
         {
@@ -305,11 +308,12 @@ public partial class MainWindow
 
     private Task StopCourseAdapterAsync() => ExecuteCourseAdapterAsync("stop");
 
-    private async Task ExecuteCourseAdapterAsync(string command)
+    private async Task ExecuteCourseAdapterAsync(string command, bool inspectNow = true)
     {
         if (CourseView.CoreWebView2 is null) return;
         if (command is not ("pause" or "resume" or "stop")) return;
-        var script = "window.FaxCourseAdapter?." + command + "()";
+        var script = "window.FaxCourseAdapter?." + command +
+            (command == "resume" && !inspectNow ? "(false)" : "()");
         try { await CourseView.CoreWebView2.ExecuteScriptAsync(script); }
         catch (Exception) { }
         foreach (var frame in courseFrames.ToArray())
@@ -359,7 +363,7 @@ public partial class MainWindow
             if (activeSession != courseSessionId || activeGeneration != courseGeneration || courseState != "RUNNING") return;
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
-            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-smoke" &&
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] is "--course-smoke" or "--course-ai-smoke" &&
                 observation == "QUIZ_SUBMITTED")
             {
                 Trace("course quiz submitted through Rust");
@@ -386,6 +390,8 @@ public partial class MainWindow
                 await ExecuteCourseAdapterAsync("pause");
                 if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-challenge-smoke" &&
                     observation == "CHALLENGE_FOUND" && nextState == "NEEDS_INPUT") PassSmoke();
+                if (action is "NEEDS_ANSWERS" or "REVIEW_QUIZ")
+                    await TryAiAnswerAsync(frame, activeSession, activeGeneration);
                 return;
             }
             if (action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;

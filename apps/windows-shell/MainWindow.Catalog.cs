@@ -179,6 +179,7 @@ public partial class MainWindow
     {
         if (!catalogLive || !catalogEntries.Any(item => item.Id == id) ||
             activeModule != "chaoxing") return;
+        aiAnswerCancellation?.Cancel();
         if (courseState == "RUNNING") await CourseCommandAsync("pause", "正在切换章节，任务已暂停。");
         var script = "window.FaxCatalogReader?.jump(" + JsonSerializer.Serialize(id) + ") === true";
         var result = catalogFrame is { } frame && frame.IsDestroyed() == 0 ?

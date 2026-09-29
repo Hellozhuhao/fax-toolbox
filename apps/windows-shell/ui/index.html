@@ -56,6 +56,9 @@
       <button id="course-start" type="button" disabled>开始自动完成</button>
       <div class="button-row"><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div>
       <div class="card status" aria-live="polite"><span class="label">课程状态</span><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div>
+      <div class="card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，读取当前可见题目，向你配置的模型服务请求答案。只接受题号和选项完整匹配的结果；答案可能有误，请留意提交结果。</p>
+        <button id="ai-configure" class="secondary" type="button">配置模型服务</button>
+        <p id="ai-result" class="muted" aria-live="polite">尚未配置模型服务。</p></div>
       <details class="card advanced"><summary>章节答案库 · 高级设置</summary><p class="muted">仅使用你录入的答案。每行“题号:答案”，如 1:A、2:对、3:文本。多空用 | 分隔。</p>
         <label for="answers-chapter">章节 ID（用于匹配答案）</label><input id="answers-chapter" maxlength="128" placeholder="选择章节后自动填入">
         <label for="answers-text">答案</label><textarea id="answers-text" rows="4" placeholder="1:A&#10;2:BC"></textarea>

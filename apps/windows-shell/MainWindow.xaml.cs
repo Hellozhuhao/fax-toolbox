@@ -37,7 +37,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
-        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke";
+        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] == "--smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
@@ -81,14 +81,15 @@ public partial class MainWindow : Window
             root = FindProjectRoot();
             catalogReaderScript = await File.ReadAllTextAsync(Path.Combine(root, "modules", "chaoxing", "catalog-reader.js"));
             Trace("project root found");
-            if (smokeMode && VaultCrypto.Unprotect(VaultCrypto.Protect("vault-round-trip")) != "vault-round-trip")
+            if (smokeMode && Environment.GetCommandLineArgs()[1] != "--course-ai-smoke" &&
+                VaultCrypto.Unprotect(VaultCrypto.Protect("vault-round-trip")) != "vault-round-trip")
                 throw new InvalidDataException("Windows 密码箱加密往返验证失败");
             var packagedBackend = Path.Combine(root, "backend", "toolbox-backend.exe");
             var backendPath = File.Exists(packagedBackend) ? packagedBackend :
                 Path.Combine(root, "apps", "rust-backend", "target", "debug", "toolbox-backend.exe");
             backend = await BackendClient.StartAsync(backendPath, smokeDataDirectory);
             Trace("backend ping passed");
-            if (smokeMode)
+            if (smokeMode && Environment.GetCommandLineArgs()[1] != "--course-ai-smoke")
             {
                 const string testId = "smoke-credential";
                 await backend.RequestAsync("vault.put", new
@@ -250,6 +251,7 @@ public partial class MainWindow : Window
                 case "course.stop": await CourseCommandAsync("stop"); break;
                 case "course.jump": await JumpToChapterAsync(message.GetProperty("chapterId").GetString() ?? ""); break;
                 case "answers.save": await SaveAnswersAsync(message); break;
+                case "ai.configure": ConfigureAi(); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;

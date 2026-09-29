@@ -1,0 +1,34 @@
+using System.IO;
+using System.Text.Json;
+using FaxToolbox.Windows;
+
+var snapshot = AiAnswerService.ParseSnapshot(JsonSerializer.Serialize(new
+{
+    questions = new object[]
+    {
+        new { number = 1, type = "single", text = "1. 单选题", options = new[] { "A. 甲", "B. 乙" }, blankCount = 0 },
+        new { number = 2, type = "multi", text = "2. 多选题", options = new[] { "A. 甲", "B. 乙", "C. 丙" }, blankCount = 0 },
+        new { number = 3, type = "blank", text = "3. 两处填空", options = Array.Empty<string>(), blankCount = 2 }
+    }
+}));
+var answers = AiAnswerService.ParseAnswers(
+    "```json\n{\"answers\":[{\"number\":1,\"answer\":\"B\"},{\"number\":2,\"answer\":\"AC\"},{\"number\":3,\"answer\":\"甲|乙\"}]}\n```",
+    snapshot);
+if (answers.Length != 3 || answers[1].Answer != "AC" || answers[2].Answer != "甲|乙")
+    throw new Exception("valid AI answers were not parsed");
+
+void MustReject(string response)
+{
+    try { AiAnswerService.ParseAnswers(response, snapshot); }
+    catch (InvalidDataException) { return; }
+    throw new Exception("invalid AI answers were accepted: " + response);
+}
+MustReject("{\"answers\":[{\"number\":1,\"answer\":\"A\"}]}" );
+MustReject("{\"answers\":[{\"number\":1,\"answer\":\"C\"},{\"number\":2,\"answer\":\"A\"},{\"number\":3,\"answer\":\"甲|乙\"}]}" );
+MustReject("{\"answers\":[{\"number\":1,\"answer\":\"A\"},{\"number\":2,\"answer\":\"AC\"},{\"number\":3,\"answer\":\"甲\"}]}" );
+
+try { AiSettings.Validate("http://example.com/v1/chat/completions", "model");
+    throw new Exception("insecure endpoint was accepted"); }
+catch (InvalidDataException) { }
+AiSettings.Validate("https://example.com/v1/chat/completions", "model");
+Console.WriteLine("PASS AI response validation");
