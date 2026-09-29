@@ -89,6 +89,7 @@ public partial class MainWindow
     private async void ModuleNavigationCompleted(CoreWebView2NavigationCompletedEventArgs args)
     {
         if (activeModule != "chaoxing") return;
+        Trace("course navigation completed: " + args.IsSuccess + " " + DisplayUrl(CourseView.CoreWebView2.Source));
         aiAnswerCancellation?.Cancel();
         if (!args.IsSuccess)
         {
@@ -363,6 +364,7 @@ public partial class MainWindow
             if (activeSession != courseSessionId || activeGeneration != courseGeneration || courseState != "RUNNING") return;
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
+            Trace("course observation: " + observation + " action=" + action + " state=" + nextState);
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] is "--course-smoke" or "--course-ai-smoke" &&
                 observation == "QUIZ_SUBMITTED")
             {

@@ -42,6 +42,7 @@ public partial class MainWindow
         aiAnswerCancellation = cancellation;
         try
         {
+            Trace("AI answer attempt started");
             var settings = smokeAi ? null : AiSettings.Load();
             if (!smokeAi && settings is null)
             {
@@ -54,13 +55,15 @@ public partial class MainWindow
             var raw = frame is null ? await CourseView.CoreWebView2.ExecuteScriptAsync(script) :
                 frame.IsDestroyed() == 0 ? await frame.ExecuteScriptAsync(script) : "null";
             var snapshot = AiAnswerService.ParseSnapshot(raw);
+            Trace("AI quiz snapshot: " + snapshot.Questions.Length + " questions");
             PublishCourse("NEEDS_INPUT", $"AI 正在分析 {snapshot.Questions.Length} 道题…", true);
             PublishAiStatus(smokeAi ? "正在验证本地 AI 答题流程。" :
                 $"正在向 {settings!.Model} 发送当前可见题目。请勿切换章节。");
             var answers = smokeAi ? AiAnswerService.ParseAnswers(
                 "{\"answers\":[{\"number\":1,\"answer\":\"A\"},{\"number\":2,\"answer\":\"B\"}," +
-                "{\"number\":3,\"answer\":\"测试答案\"},{\"number\":4,\"answer\":\"A\"}]", snapshot) :
+                "{\"number\":3,\"answer\":\"测试答案\"},{\"number\":4,\"answer\":\"A\"}]}", snapshot) :
                 await AiAnswerService.AnswerAsync(settings!, snapshot, cancellation.Token);
+            Trace("AI answer response validated: " + answers.Length + " answers");
             if (cancellation.IsCancellationRequested || sessionId != courseSessionId ||
                 generation != courseGeneration || courseState != "NEEDS_INPUT" ||
                 source != CourseView.CoreWebView2.Source || catalogId != catalogCurrentId ||
@@ -86,12 +89,14 @@ public partial class MainWindow
             });
             if (frame is null) CourseView.CoreWebView2.PostWebMessageAsJson(payload);
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
+            Trace("AI fill action dispatched");
             PublishAiStatus($"已生成 {answers.Length} 道答案，正在页面填写并提交。");
         }
         catch (OperationCanceledException) { }
         catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
             TimeoutException or System.Security.Cryptography.CryptographicException or InvalidOperationException)
         {
+            Trace("AI answer attempt failed: " + error.GetType().Name + " " + error.Message);
             PublishCourse("NEEDS_INPUT", "AI 答题未完成，请人工检查或调整设置。", true);
             PublishAiStatus(error is HttpRequestException ? error.Message : "AI 答题未完成：" + error.Message);
         }
