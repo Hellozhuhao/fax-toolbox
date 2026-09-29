@@ -140,7 +140,7 @@ public partial class MainWindow
         {
             if (catalogEntries.Count != 2 || catalogEntries[0].Name != "2.1 课程介绍" ||
                 catalogKey is null || backend is null)
-            { FailSmoke("course catalog was not extracted"); return; }
+            { FailSmoke("course catalog was not extracted: " + string.Join(" | ", catalogEntries.Select(item => item.Name))); return; }
             var saved = await backend.RequestAsync("catalog.get", new { courseKey = catalogKey });
             if (saved.GetProperty("entries").GetArrayLength() != 2 ||
                 saved.GetProperty("entries")[1].GetProperty("name").GetString() != "2.2 视频任务")
@@ -156,6 +156,13 @@ public partial class MainWindow
                 "document.getElementById('course-chapters').options[2].textContent");
             if (JsonSerializer.Deserialize<string>(menu) != "2.2 视频任务")
             { FailSmoke("course selector does not show chapter name"); return; }
+            if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+            {
+                var preview = Path.Combine(root, ".cache", "ui-course-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
+                await using var output = File.Create(preview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+            }
             await ShellView.CoreWebView2.ExecuteScriptAsync(
                 "document.getElementById('course-chapters').value='2.2';" +
                 "document.getElementById('course-chapters').dispatchEvent(new Event('change'));" +

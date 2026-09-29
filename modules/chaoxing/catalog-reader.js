@@ -21,15 +21,23 @@
       return box.width > 0 && box.height > 0 && getComputedStyle(element).visibility !== 'hidden';
     };
     const collect = () => {
-      const seen = new Set();
-      const rows = [];
-      const nodes = document.querySelectorAll('a,li,[role="treeitem"],[onclick],div[class*="chapter"],div[class*="Chapter"],div[class*="catalog"],div[class*="Catalog"],div[class*="node"],span[class*="chapter"],span[class*="catalog"]');
+      const byNumber = new Map();
+      const roots = document.querySelectorAll('#coursetree,.coursetree,#catalog,.catalog,#chapterTree,.ztree,[class*="catalog"],[class*="Catalog"],[id*="catalog"]');
+      const root = Array.from(roots).find(item =>
+        item.querySelectorAll('a,li,div,span').length >= 3 &&
+        (item.textContent.match(/\d+(?:\.\d+)+\s*\p{L}/gu) || []).length >= 2) || document;
+      const nodes = root.querySelectorAll('a,li,div,span,[role="treeitem"]');
+      let order = 0;
       for (const element of nodes) {
-        if (rows.length >= 120 || !visible(element)) continue;
-        const name = clean(element.innerText || element.textContent);
-        if (name.length < 4 || name.length > 80 || !/^\d+(?:\.\d+)*\s+\S/.test(name)) continue;
-        if (Array.from(element.children).some(child => clean(child.innerText) === name)) continue;
-        const link = element.closest('a') || element.querySelector('a');
+        if (element.closest('.question,.StudentTimu,.timu,.TiMu,[class*="question"],[class*="Question"]')) continue;
+        const name = clean(element.textContent);
+        if (name.length < 4 || name.length > 80) continue;
+        const label = name.match(/^(\d+(?:\.\d+)*)(?:\s*)(.+)$/);
+        if (!label || /^\./.test(label[2]) || !/[\p{L}]/u.test(label[2]) ||
+            /\s\d+(?:\.\d+)+\s*[\p{L}]/u.test(label[2]) || !visible(element)) continue;
+        const number = label[1];
+        const linkCandidate = element.closest('a') || element.querySelector('a');
+        const link = linkCandidate && clean(linkCandidate.textContent) === name ? linkCandidate : null;
         const href = link?.getAttribute('href') || '';
         const data = element.dataset;
         const click = element.getAttribute('onclick') || link?.getAttribute('onclick') || '';
@@ -37,14 +45,16 @@
           link?.dataset.chapterId || link?.dataset.knowledgeId || link?.dataset.id || '';
         const match = click.match(/(?:chapterid|knowledgeid)[^\d]{0,16}(\d{3,})/i);
         const id = String(idFromUrl(href) || explicit || match?.[1] || hash(name));
-        if (id.length > 128 || seen.has(id)) continue;
-        seen.add(id);
+        if (id.length > 128) continue;
         const classes = String(element.className) + ' ' + String(element.parentElement?.className || '');
         const active = /(^|[-_\s])(active|current|selected|on|doing)($|[-_\s])/i.test(classes) ||
           element.getAttribute('aria-current') === 'page';
-        rows.push({id, name, element, active});
+        const previous = byNumber.get(number);
+        if (!previous || name.length < previous.name.length ||
+            (name.length === previous.name.length && active && !previous.active))
+          byNumber.set(number, {id, name, element, active, order: previous?.order ?? order++});
       }
-      return rows;
+      return Array.from(byNumber.values()).sort((a, b) => a.order - b.order).slice(0, 120);
     };
     window.FaxCatalogReader = {
       read() {

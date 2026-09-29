@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
+using System.Windows.Media;
 using Microsoft.Web.WebView2.Core;
 
 namespace FaxToolbox.Windows;
@@ -189,6 +190,13 @@ public partial class MainWindow : Window
             Publish(state, detail);
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
+            if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+            {
+                var preview = Path.Combine(root, ".cache", "ui-home-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
+                await using var output = File.Create(preview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+            }
             if (courseSmokeMode || courseLiveSmokeMode)
             {
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
@@ -231,6 +239,9 @@ public partial class MainWindow : Window
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() == "module");
                     break;
+                case "ui.theme":
+                    ApplyHostTheme(message.GetProperty("theme").GetString() == "dark");
+                    break;
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
                 case "course.open": await OpenCourseAsync(); break;
@@ -272,6 +283,16 @@ public partial class MainWindow : Window
     {
         controlsCollapsed = !controlsCollapsed;
         SetWorkspaceLayout(true);
+    }
+
+    private void ApplyHostTheme(bool dark)
+    {
+        static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+        Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
+        BrowserToolbar.Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
+        ToolbarTitle.Foreground = Brush(dark ? "#98989F" : "#6E6E73");
+        WorkspaceSplitter.Background = Brush(dark ? "#38383A" : "#D2D2D7");
+        ToggleControlsButton.Background = Brush(dark ? "#0A84FF" : "#007AFF");
     }
 
     private async Task StartSessionAsync()

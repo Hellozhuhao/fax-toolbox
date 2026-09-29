@@ -51,6 +51,7 @@
     document.documentElement.dataset.theme = value;
     for (const item of document.querySelectorAll('[data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
     try { localStorage.setItem('fax-toolbox-theme', value); } catch (_) { /* UI remains usable without storage. */ }
+    send('ui.theme', {theme: value});
   }
   function renderCourse(message) {
     courseState = message.state || courseState; courseReady = !!message.ready;
@@ -148,7 +149,7 @@
   $('vault-add').addEventListener('click', () => send('vault.save'));
   $('settings-vault').addEventListener('click', () => show('vault'));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
-  let savedTheme = 'dark'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'dark'; } catch (_) { /* Use dark default. */ }
+  let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);
   show('home');
 })();
