@@ -38,6 +38,8 @@ internal sealed class BackendClient : IDisposable
             CreateNoWindow = true
         };
         if (dataDirectory is not null) start.Environment["FAX_TOOLBOX_DATA_DIR"] = dataDirectory;
+        foreach (var name in new[] { "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy" })
+            start.Environment.Remove(name);
         var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 Rust 后端");
         var client = new BackendClient(process);
         try

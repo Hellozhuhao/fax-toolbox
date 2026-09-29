@@ -31,7 +31,6 @@ public partial class MainWindow : Window
     private string root = "";
     private readonly string? smokeDataDirectory;
     private bool actionInProgress;
-    private WebViewProxy courseProxy = new("Windows 系统代理", null);
 
     public MainWindow()
     {
@@ -106,16 +105,17 @@ public partial class MainWindow : Window
 
             var profileRoot = smokeMode ? Path.Combine(smokeDataDirectory!, "WebView2") :
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox", "WebView2");
-            courseProxy = WebViewProxy.Resolve();
-            var courseOptions = courseProxy.Url is null ? null : new CoreWebView2EnvironmentOptions
+            var directOptions = new CoreWebView2EnvironmentOptions
             {
-                AdditionalBrowserArguments = "--proxy-server=" + courseProxy.Url
+                AdditionalBrowserArguments = "--no-proxy-server"
             };
-            Trace("course network: " + courseProxy.Source);
-            var uiEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(profileRoot, "ui"));
-            var moduleEnvironment = await CoreWebView2Environment.CreateAsync(userDataFolder: Path.Combine(profileRoot, "modules", "smoke"));
+            Trace("WebView2 network: direct");
+            var uiEnvironment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(profileRoot, "ui"), options: directOptions);
+            var moduleEnvironment = await CoreWebView2Environment.CreateAsync(
+                userDataFolder: Path.Combine(profileRoot, "modules", "smoke"), options: directOptions);
             var courseEnvironment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(profileRoot, "modules", "chaoxing"), options: courseOptions);
+                userDataFolder: Path.Combine(profileRoot, "modules", "chaoxing"), options: directOptions);
             await ShellView.EnsureCoreWebView2Async(uiEnvironment);
             Trace("UI WebView ready");
             await ModuleView.EnsureCoreWebView2Async(moduleEnvironment);
@@ -184,7 +184,6 @@ public partial class MainWindow : Window
                 return;
             }
             Publish(state, detail);
-            PublishNetwork(null);
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
             if (courseSmokeMode || courseLiveSmokeMode)
@@ -239,18 +238,6 @@ public partial class MainWindow : Window
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;
-                case "network.proxy.save":
-                    try
-                    {
-                        WebViewProxy.SaveLocal(message.GetProperty("proxy").GetString());
-                        PublishNetwork("本地代理已保存。重启工具箱后生效。");
-                    }
-                    catch (ArgumentException error) { PublishNetwork(error.Message); }
-                    break;
-                case "network.proxy.system":
-                    WebViewProxy.SaveSystem();
-                    PublishNetwork("已选择 Windows 系统代理。重启工具箱后生效。");
-                    break;
             }
         }
         catch (Exception error)
@@ -260,16 +247,6 @@ public partial class MainWindow : Window
                 PublishCourse("ERROR", error.Message, IsCoursePage(CourseView.CoreWebView2?.Source));
             if (smokeMode) FailSmoke(error.ToString());
         }
-    }
-
-    private void PublishNetwork(string? message)
-    {
-        if (ShellView.CoreWebView2 is null) return;
-        ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
-        {
-            v = 1, kind = "network.status", source = courseProxy.Source,
-            proxy = courseProxy.Url, detail = message ?? "学习通网页使用此连接方式。"
-        }));
     }
 
     private void SetWorkspaceLayout(bool showModule)

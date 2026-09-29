@@ -84,11 +84,6 @@
     if (message.kind === 'course.status') renderCourse(message);
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
-    if (message.kind === 'network.status') {
-      $('network-current').textContent = message.source + (message.proxy ? ' · ' + message.proxy : '');
-      $('network-detail').textContent = message.detail || '';
-      if (message.proxy && !$('proxy-input').value) $('proxy-input').value = message.proxy;
-    }
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
   $('open-course-card').addEventListener('click', openCourse);
@@ -106,8 +101,6 @@
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));
   $('vault-add').addEventListener('click', () => send('vault.save'));
   $('settings-vault').addEventListener('click', () => show('vault'));
-  $('proxy-save').addEventListener('click', () => send('network.proxy.save', {proxy: $('proxy-input').value.trim()}));
-  $('proxy-system').addEventListener('click', () => send('network.proxy.system'));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'dark'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'dark'; } catch (_) { /* Use dark default. */ }
   setTheme(savedTheme);
