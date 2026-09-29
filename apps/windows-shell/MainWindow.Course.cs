@@ -13,11 +13,14 @@ public partial class MainWindow
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
+    private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
     private static string CourseTarget(string? smokeMode) => smokeMode switch
     {
         "--course-smoke" => CourseFixture,
         "--course-video-smoke" => VideoFixture,
         "--course-document-smoke" => DocumentFixture,
+        "--course-pause-smoke" => DocumentFixture,
+        "--course-challenge-smoke" => ChallengeFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
@@ -27,6 +30,7 @@ public partial class MainWindow
     private string? courseScriptId;
     private long courseGeneration;
     private long courseSequence;
+    private bool pauseSmokeStarted;
     private readonly List<CoreWebView2Frame> courseFrames = [];
 
     private static bool IsChaoxingUrl(string? value)
@@ -73,7 +77,9 @@ public partial class MainWindow
         if (activeModule != "chaoxing") return;
         if (!args.IsSuccess)
         {
-            PublishCourse("ERROR", $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。", false);
+            var reason = $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。";
+            if (courseState == "RUNNING") await CourseCommandAsync("pause", reason);
+            else PublishCourse("ERROR", reason, false);
             return;
         }
         var url = CourseView.CoreWebView2.Source;
@@ -86,8 +92,18 @@ public partial class MainWindow
         }
         if (courseSmokeMode && url.Contains("-done.html", StringComparison.Ordinal))
         {
+            if (Environment.GetCommandLineArgs()[1] == "--course-pause-smoke")
+            {
+                FailSmoke("document advanced after pause");
+                return;
+            }
             Trace("course fixture reached next unit");
             PassSmoke();
+            return;
+        }
+        if (courseState == "RUNNING" && !IsCoursePage(url))
+        {
+            await CourseCommandAsync("pause", "已离开课程学习页。请完成登录或验证，返回课程后再继续。");
             return;
         }
         if (IsCoursePage(url) && courseState is "WAITING_LOGIN" or "READY" or "STOPPED")
@@ -181,11 +197,12 @@ public partial class MainWindow
                     catch (Exception) { /* A frame can navigate or disappear while starting. */ }
                 }
             }
+            else await ExecuteCourseAdapterAsync("resume");
         }
         finally { actionInProgress = false; }
     }
 
-    private async Task CourseCommandAsync(string command)
+    private async Task CourseCommandAsync(string command, string? reason = null)
     {
         if (backend is null || courseSessionId is null || actionInProgress) return;
         actionInProgress = true;
@@ -193,7 +210,8 @@ public partial class MainWindow
         {
             var result = await backend.RequestAsync("course.command", CourseParams(command));
             var next = result.GetProperty("state").GetString() ?? "ERROR";
-            PublishCourse(next, command == "pause" ? "已暂停；可继续运行。" : "已停止本次任务。", IsCoursePage(CourseView.CoreWebView2?.Source));
+            if (command == "pause") await ExecuteCourseAdapterAsync("pause");
+            PublishCourse(next, reason ?? (command == "pause" ? "已暂停；可继续运行。" : "已停止本次任务。"), IsCoursePage(CourseView.CoreWebView2?.Source));
             if (command == "stop" && courseScriptId is not null)
             {
                 CourseView.CoreWebView2!.RemoveScriptToExecuteOnDocumentCreated(courseScriptId);
@@ -204,14 +222,18 @@ public partial class MainWindow
         finally { actionInProgress = false; }
     }
 
-    private async Task StopCourseAdapterAsync()
+    private Task StopCourseAdapterAsync() => ExecuteCourseAdapterAsync("stop");
+
+    private async Task ExecuteCourseAdapterAsync(string command)
     {
         if (CourseView.CoreWebView2 is null) return;
-        try { await CourseView.CoreWebView2.ExecuteScriptAsync("window.FaxCourseAdapter?.stop()"); }
+        if (command is not ("pause" or "resume" or "stop")) return;
+        var script = "window.FaxCourseAdapter?." + command + "()";
+        try { await CourseView.CoreWebView2.ExecuteScriptAsync(script); }
         catch (Exception) { }
         foreach (var frame in courseFrames.ToArray())
         {
-            try { if (frame.IsDestroyed() == 0) await frame.ExecuteScriptAsync("window.FaxCourseAdapter?.stop()"); }
+            try { if (frame.IsDestroyed() == 0) await frame.ExecuteScriptAsync(script); }
             catch (Exception) { }
         }
     }
@@ -241,7 +263,7 @@ public partial class MainWindow
                 message.GetProperty("generation").GetInt64() != courseGeneration) return;
             var observation = message.GetProperty("observation").GetString();
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
-                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_SUBMITTED" or "UNIT_EMPTY")) return;
+                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_SUBMITTED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
             var chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = message.GetProperty("chapter").GetString() ?? "";
             var activeSession = courseSessionId;
@@ -271,9 +293,19 @@ public partial class MainWindow
                 "FILL_QUIZ" => "已匹配本章答案，正在填写。",
                 "NEEDS_ANSWERS" => "本章没有答案，请先在左侧录入。",
                 "REVIEW_QUIZ" => "题目结构与答案不匹配，请人工检查。",
+                "WAIT_FOR_HUMAN" => "页面需要人工验证。请在右侧完成验证后点击继续。",
+                "MANUAL_PLAY" => "视频需要手动播放。请在右侧点击播放后继续。",
+                "CHECK_VIDEO" => "视频播放失败。请检查页面或网络，处理后再继续。",
                 _ => observation == "QUIZ_SUBMITTED" ? "已点击提交，请检查页面结果。" : courseDetail
             }, true);
-            if (nextState != "RUNNING" || action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;
+            if (nextState != "RUNNING")
+            {
+                await ExecuteCourseAdapterAsync("pause");
+                if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-challenge-smoke" &&
+                    observation == "CHALLENGE_FOUND" && nextState == "NEEDS_INPUT") PassSmoke();
+                return;
+            }
+            if (action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;
             var payload = JsonSerializer.Serialize(new
             {
                 v = 1, kind = "course.action", sessionId = activeSession, generation = activeGeneration,
@@ -281,6 +313,18 @@ public partial class MainWindow
             });
             if (action == "NEXT_UNIT" || frame is null) CourseView.CoreWebView2.PostWebMessageAsJson(payload);
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-pause-smoke" &&
+                action == "DOCUMENT_NEXT" && frame is not null && !pauseSmokeStarted)
+            {
+                pauseSmokeStarted = true;
+                await Task.Delay(250);
+                await CourseCommandAsync("pause");
+                await Task.Delay(1800);
+                var page = frame.IsDestroyed() == 0 ?
+                    await frame.ExecuteScriptAsync("document.getElementById('page')?.textContent") : "";
+                if (JsonSerializer.Deserialize<string>(page) == "第 1 页") PassSmoke();
+                else FailSmoke("document action still ran after pause: " + page);
+            }
         }
         catch (Exception error)
         {

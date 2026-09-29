@@ -56,8 +56,9 @@
     if (message.url) $('course-url').textContent = message.url;
     if (message.chapter) { $('course-chapter').textContent = message.chapter; if (!$('answers-chapter').value) $('answers-chapter').value = message.chapter; }
     $('course-start').disabled = !courseReady || !['READY', 'PAUSED', 'NEEDS_INPUT'].includes(courseState);
+    $('course-start').textContent = ['PAUSED', 'NEEDS_INPUT'].includes(courseState) ? '继续运行' : '开始自动完成';
     $('course-pause').disabled = courseState !== 'RUNNING';
-    $('course-stop').disabled = !['RUNNING', 'PAUSED', 'NEEDS_INPUT'].includes(courseState);
+    $('course-stop').disabled = !['RUNNING', 'PAUSED', 'NEEDS_INPUT', 'ERROR'].includes(courseState);
   }
   function renderVault(entries) {
     const list = $('vault-list'); list.replaceChildren();

@@ -10,19 +10,21 @@
       window.__faxCourseAdapterStop?.();
       window.__faxCourseAgentStarted = sessionId;
       let active = true;
+      let running = true;
       let seq = 0;
       let lastObservation = '';
       let lastAt = 0;
       let video = null;
       let quizSubmitted = false;
       let pendingInspection = 0;
+      let pendingAction = 0;
 
       function chapter() {
         const query = new URLSearchParams(location.search);
         return query.get('chapterId') || query.get('knowledgeid') || query.get('chapterid') || '';
       }
       function report(kind, force = false) {
-        if (!active) return;
+        if (!active || !running) return;
         const key = kind + ':' + chapter();
         const now = Date.now();
         if (!force && key === lastObservation && now - lastAt < 3000) return;
@@ -125,7 +127,15 @@
         if (!dialog || dialog.querySelector('input,textarea,select,[contenteditable="true"]')) return null;
         return button;
       }
+      function challengeVisible() {
+        const selectors = 'input[placeholder*="验证码"],input[name*="captcha"],iframe[src*="captcha"],iframe[src*="verify"],.geetest_panel,[id*="captcha"],[class*="captcha"]';
+        if (Array.from(document.querySelectorAll(selectors)).some(visible)) return true;
+        return Array.from(document.querySelectorAll('[role="dialog"],.layui-layer,.modal,.dialog,.popup')).some(dialog =>
+          visible(dialog) && /验证码|人机验证|行为验证|账号异常|访问异常|安全验证|风险提示/.test((dialog.textContent || '').slice(0, 240)));
+      }
       function inspect() {
+        if (!active || !running) return;
+        if (challengeVisible()) { report('CHALLENGE_FOUND'); return; }
         if (benignPromptButton()) { report('PROMPT_FOUND'); return; }
         if (/\/knowledge\/cards/i.test(location.pathname)) {
           const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>
@@ -151,16 +161,21 @@
         }
       }
       const onMessage = event => {
-        if (!active) return;
+        if (!active || !running) return;
         const action = event.data;
         if (action?.v !== 1 || action?.kind !== 'course.action' ||
             action.sessionId !== sessionId || action.generation !== generation) return;
         switch (action.action) {
-          case 'PLAY_VIDEO': if (video && !video.ended) video.play().catch(() => {}); break;
+          case 'PLAY_VIDEO': if (video && !video.ended) video.play().catch(error =>
+            report(error?.name === 'NotAllowedError' ? 'PLAYBACK_BLOCKED' : 'PLAYBACK_FAILED', true)); break;
           case 'NEXT_UNIT': nextUnit(); break;
           case 'DOCUMENT_NEXT': {
             const next = findDocumentNext();
-            if (next && !next.disabled) setTimeout(() => { scrollTo(0, document.body.scrollHeight); next.click(); }, 1500);
+            if (next && !next.disabled && !pendingAction) pendingAction = setTimeout(() => {
+              pendingAction = 0;
+              if (!active || !running || next.disabled) return;
+              scrollTo(0, document.body.scrollHeight); next.click();
+            }, 1500);
             break;
           }
           case 'FILL_QUIZ': fillQuiz(action.data); break;
@@ -174,20 +189,36 @@
       };
       window.chrome.webview.addEventListener('message', onMessage);
       const observer = new MutationObserver(() => {
-        if (!active || document.readyState === 'loading' || pendingInspection) return;
+        if (!active || !running || document.readyState === 'loading' || pendingInspection) return;
         pendingInspection = setTimeout(() => { pendingInspection = 0; inspect(); }, 150);
       });
       const ready = () => { if (active) { observer.observe(document.documentElement, {childList: true, subtree: true}); inspect(); } };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once: true});
       else ready();
       const timer = setInterval(inspect, 2500);
+      window.__faxCourseAdapterPause = () => {
+        running = false;
+        if (pendingAction) { clearTimeout(pendingAction); pendingAction = 0; }
+        if (pendingInspection) { clearTimeout(pendingInspection); pendingInspection = 0; }
+        if (video && !video.paused) video.pause();
+      };
+      window.__faxCourseAdapterResume = () => {
+        if (!active) return;
+        running = true;
+        inspect();
+      };
       window.__faxCourseAdapterStop = () => {
         active = false; observer.disconnect(); clearInterval(timer);
         if (pendingInspection) clearTimeout(pendingInspection);
+        if (pendingAction) clearTimeout(pendingAction);
         window.chrome.webview.removeEventListener('message', onMessage);
         window.__faxCourseAgentStarted = null;
+        window.__faxCourseAdapterPause = null;
+        window.__faxCourseAdapterResume = null;
       };
     },
+    pause() { window.__faxCourseAdapterPause?.(); },
+    resume() { window.__faxCourseAdapterResume?.(); },
     stop() { window.__faxCourseAdapterStop?.(); }
   };
 })();

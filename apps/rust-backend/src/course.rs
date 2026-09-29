@@ -183,6 +183,18 @@ impl CourseEngine {
                 session.state = CourseState::NeedsInput;
                 ("REVIEW_QUIZ", Value::Null)
             }
+            "CHALLENGE_FOUND" => {
+                session.state = CourseState::NeedsInput;
+                ("WAIT_FOR_HUMAN", Value::Null)
+            }
+            "PLAYBACK_BLOCKED" => {
+                session.state = CourseState::NeedsInput;
+                ("MANUAL_PLAY", Value::Null)
+            }
+            "PLAYBACK_FAILED" => {
+                session.state = CourseState::NeedsInput;
+                ("CHECK_VIDEO", Value::Null)
+            }
             "QUIZ_SUBMITTED" => ("NONE", Value::Null),
             _ => return Err(Fault("BAD_REQUEST", "unsupported course observation")),
         };
@@ -221,5 +233,31 @@ mod tests {
             "frameId":"quiz","seq":1,"kind":"QUIZ_FOUND","chapter":"2.1"})).unwrap();
         assert_eq!(result["action"], "FILL_QUIZ");
         assert_eq!(result["data"][0]["answer"], "A");
+    }
+
+    #[test]
+    fn verification_and_blocked_playback_require_manual_resume() {
+        let mut engine = CourseEngine::default();
+        let base = json!({"sessionId":"manual","generation":1});
+        engine.request("course.open", &json!({"sessionId":"manual","generation":1,
+            "courseUrl":"https://mooc1.chaoxing.com/mycourse/studentstudy"})).unwrap();
+        engine.request("course.command", &json!({"sessionId":"manual","generation":1,"command":"start"})).unwrap();
+        let challenge = engine.request("course.observe", &json!({"sessionId":"manual","generation":1,
+            "frameId":"main","seq":1,"kind":"CHALLENGE_FOUND"})).unwrap();
+        assert_eq!(challenge["state"], "NEEDS_INPUT");
+        assert_eq!(challenge["action"], "WAIT_FOR_HUMAN");
+        assert_eq!(engine.request("course.observe", &json!({"sessionId":"manual","generation":1,
+            "frameId":"main","seq":2,"kind":"VIDEO_FOUND"})).unwrap()["action"], "NONE");
+        let mut resume = base.clone(); resume["command"] = json!("start");
+        engine.request("course.command", &resume).unwrap();
+        let playback = engine.request("course.observe", &json!({"sessionId":"manual","generation":1,
+            "frameId":"main","seq":2,"kind":"PLAYBACK_BLOCKED"})).unwrap();
+        assert_eq!(playback["state"], "NEEDS_INPUT");
+        assert_eq!(playback["action"], "MANUAL_PLAY");
+        engine.request("course.command", &resume).unwrap();
+        let failed = engine.request("course.observe", &json!({"sessionId":"manual","generation":1,
+            "frameId":"main","seq":3,"kind":"PLAYBACK_FAILED"})).unwrap();
+        assert_eq!(failed["state"], "NEEDS_INPUT");
+        assert_eq!(failed["action"], "CHECK_VIDEO");
     }
 }
