@@ -10,7 +10,7 @@
 {"v":1,"id":"ui-request-id","command":"session.start"}
 ```
 
-`command` 由 C# 明确列举；演示模块允许 `session.start`、`session.cancel`，学习模块允许 `course.open/start/pause/stop`、`answers.save`，密码箱允许 `vault.list/save/delete`。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
+`command` 由 C# 明确列举；演示模块允许 `demo.activate`、`session.start/cancel`，学习模块允许 `course.activate/open/start/pause/stop/jump`、`answers.save`，密码箱允许 `vault.list/save/delete`。`ai.configure` 只打开原生设置窗口。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
 
 ```json
 {"v":1,"kind":"status","state":"OBSERVING","detail":"已发现视频"}
@@ -29,6 +29,8 @@ UI 消息只是操作意图；模块 ID 和能力由 C# 确定，网页不能自
 C# 检查准确的页面 URL、协议版本、模块 ID、会话 ID、代数、主帧标识、递增序号、允许的事件类型和大小上限。不接受页面直接要求文件读写或执行原生命令。每次重新开始都更换 `sessionId` 和注入脚本，旧页面消息失效。
 
 ## 边界 3：C# ↔ Rust
+
+Rust 将协议解析与命令路由分开。`session.*` 归演示模块，`course.*`、`answers.*`、`catalog.*` 归学习通模块，`vault.*` 归密码箱服务。每个模块仅管理自己的状态与数据；分派表及扩展步骤见 [Rust 后端架构](../../apps/rust-backend/ARCHITECTURE.md)。后端在读取阶段限制单行大小；超长行被丢弃后，下一条请求仍可继续处理。
 
 C# 启动一个 Rust 子进程，使用重定向的标准输入/输出进行一行一个 JSON 对象的请求/响应通信（NDJSON）。Rust 的标准输出只包含协议响应；诊断写标准错误。单行不超过 32 KiB。当前同一连接一次只发一个请求；请求 ID 仍用于核对响应，后续可以扩展为多路复用。
 
@@ -74,6 +76,7 @@ C# 启动一个 Rust 子进程，使用重定向的标准输入/输出进行一�
 | UI → C# 命令 | 作用 |
 | --- | --- |
 | `course.open` | 打开学习通主页，等待用户登录选课 |
+| `course.activate` | 显示已打开的学习通网页，不重新导航；首次进入时打开主页 |
 | `course.start` | 校验当前课程 URL，创建或恢复会话并启动适配器 |
 | `course.pause` / `course.stop` | 暂停决策或停止适配器 |
 | `answers.save` | 保存章节编号与逐题字母答案 |

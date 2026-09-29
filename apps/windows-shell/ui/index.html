@@ -14,14 +14,15 @@
       <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
       <span class="nav-label">工作空间</span>
       <nav aria-label="工具箱导航">
-        <button class="nav-item active" type="button" data-view="home">⌂　首页</button>
-        <button class="nav-item" type="button" data-view="modules">▦　模块</button>
-        <button class="nav-item" type="button" data-view="workspace">▤　工作台</button>
-        <button class="nav-item" type="button" data-view="activity">◷　活动</button>
+        <button class="nav-item active" type="button" data-view="home" title="首页"><span class="nav-icon">⌂</span><span>首页</span></button>
+        <button class="nav-item" type="button" data-view="modules" title="模块"><span class="nav-icon">▦</span><span>模块</span></button>
+        <button class="nav-item" type="button" data-view="workspace" title="工作台"><span class="nav-icon">▤</span><span>工作台</span></button>
+        <button class="nav-item" type="button" data-view="activity" title="活动"><span class="nav-icon">◷</span><span>活动</span></button>
       </nav>
-      <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings">⚙　系统选项</button><div class="connection"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
+      <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings" title="系统选项"><span class="nav-icon">⚙</span><span>设置</span></button><div class="connection" title="后端连接状态"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
     </aside>
     <main class="content">
+    <header class="command-bar"><div class="location"><span class="location-app">工具箱</span><span class="location-separator">›</span><strong id="location-name">首页</strong></div><div class="command-actions"><button type="button" class="mini-switch" data-switch="course">学习通</button><button type="button" class="mini-switch" data-switch="demo">演示</button><button id="quick-actions" type="button" class="quick-actions" aria-label="打开快速操作">快速操作 <kbd>Ctrl K</kbd></button></div></header>
 
     <section id="view-home" class="view">
       <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
@@ -36,26 +37,19 @@
 
     <section id="view-workspace" class="view" hidden><div class="eyebrow">WORKSPACE</div><h2>工作台</h2><p class="lead">选择一个模块后，这里会显示网页与任务控制。</p><div class="card"><span class="label">当前模块</span><strong id="workspace-module">尚未打开模块</strong><p id="workspace-detail" class="muted">从模块列表中打开学习通或页面事件演示。</p></div><button id="workspace-modules" type="button">查看模块 →</button></section>
 
-    <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。启动后，可在页面中触发“模拟视频结束”。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
+    <section id="view-demo" class="view" hidden><div class="module-tabs"><button type="button" data-switch="course">学习通</button><button type="button" data-switch="demo" class="selected">页面事件演示</button></div><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。启动后，可在页面中触发“模拟视频结束”。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
 
     <section id="view-course" class="view" hidden>
-      <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通刷课</h2>
-      <p class="muted">先在右侧登录并打开要学习的课程。工具箱不会读取登录页中的密码。</p>
-      <div class="step"><span>1</span><div><strong>打开学习通</strong><small>首次使用请在右侧页面自行登录</small></div></div>
-      <button id="course-open" type="button">打开学习通</button>
-      <button id="course-save-vault" class="secondary" type="button">手动保存账号到密码箱</button>
-      <div class="step"><span>2</span><div><strong>选择课程</strong><small>进入课程学习页后再启动</small></div></div>
-      <div class="card"><span class="label">当前页面</span><p id="course-url" class="url">尚未打开</p>
-        <span class="label">当前章节</span><p id="course-chapter">等待识别章节名称</p>
-        <p id="course-chapter-id" class="muted"></p></div>
-      <div class="card"><span class="label">章节目录</span>
+      <div class="module-tabs"><button type="button" data-switch="course" class="selected">学习通</button><button type="button" data-switch="demo">页面事件演示</button></div>
+      <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通</h2>
+      <p class="muted">在右侧登录并选择课程。切换模块会保留此页面；工具箱不会读取登录密码。</p>
+      <div class="course-actions"><button id="course-open" class="secondary" type="button">打开学习通首页</button><button id="course-save-vault" class="secondary" type="button">保存账号到密码箱</button></div>
+      <div class="card course-current"><span class="label">当前章节</span><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p></div>
+      <div class="card course-catalog"><span class="label">章节目录</span>
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>
         <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></div>
-      <div class="step"><span>3</span><div><strong>开始自动完成</strong><small>根据当前任务点执行视频、文档或答案库动作</small></div></div>
-      <button id="course-start" type="button" disabled>开始自动完成</button>
-      <div class="button-row"><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div>
-      <div class="card status" aria-live="polite"><span class="label">课程状态</span><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div>
+      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" disabled>暂停</button><button id="course-stop" class="secondary" type="button" disabled>停止</button></div><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
       <div class="card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，读取当前可见题目，向你配置的模型服务请求答案。只接受题号和选项完整匹配的结果；答案可能有误，请留意提交结果。</p>
         <button id="ai-configure" class="secondary" type="button">配置模型服务</button>
         <p id="ai-result" class="muted" aria-live="polite">尚未配置模型服务。</p></div>
@@ -75,10 +69,11 @@
 
     <section id="view-activity" class="view" hidden><div class="eyebrow">ACTIVITY</div><h2>活动</h2><p class="lead">本次运行的最近状态变化。关闭软件后记录会清空。</p><div id="activity-list" class="card activity-list" aria-live="polite"><p class="muted">等待事件…</p></div></section>
 
-    <section id="view-settings" class="view" hidden><div class="eyebrow">PREFERENCES</div><h2>系统选项</h2><p class="lead">管理外观与本地数据。</p><div class="card"><h3>外观</h3><p class="muted">主题仅影响工具箱界面，偏好保存在本机。</p><div class="theme-switch" role="group" aria-label="界面主题"><button type="button" data-theme="dark">深色</button><button type="button" data-theme="light">浅色</button></div></div><div class="card"><h3>网络连接</h3><p class="muted">工具箱网页直接联网，不使用系统或环境变量代理。</p></div><div class="card"><h3>密码箱</h3><p class="muted">使用 Windows 当前用户加密保护，密码仅在原生输入窗口中填写。</p><button id="settings-vault" type="button">打开密码箱 →</button></div></section>
+    <section id="view-settings" class="view" hidden><div class="eyebrow">PREFERENCES</div><h2>系统选项</h2><p class="lead">管理外观、模型服务与本地数据。</p><div class="card"><h3>外观</h3><p class="muted">主题仅影响工具箱界面，偏好保存在本机。</p><div class="theme-switch" role="group" aria-label="界面主题"><button type="button" data-theme="dark">深色</button><button type="button" data-theme="light">浅色</button></div></div><div class="card"><h3>AI 答题服务</h3><p class="muted">选择常见服务商并输入 API Key，也可使用自定义兼容接口。</p><button id="settings-ai" type="button">配置模型服务 →</button></div><div class="card"><h3>网络连接</h3><p class="muted">工具箱网页直接联网，不使用系统或环境变量代理。</p></div><div class="card"><h3>密码箱</h3><p class="muted">使用 Windows 当前用户加密保护，密码仅在原生输入窗口中填写。</p><button id="settings-vault" type="button">打开密码箱 →</button></div></section>
 
     <footer><span id="detail">正在连接后端…</span></footer>
     </main>
   </div>
+  <div id="command-palette" class="palette-backdrop" hidden><div class="palette" role="dialog" aria-modal="true" aria-label="快速操作"><div class="palette-heading">快速操作 <span>Esc 关闭</span></div><button type="button" data-action="course">打开学习通模块 <span>↵</span></button><button type="button" data-action="demo">打开页面事件演示</button><button type="button" data-action="modules">查看所有模块</button><button type="button" data-action="ai">配置 AI 答题服务</button><button type="button" data-action="settings">打开系统选项</button></div></div>
 </body>
 </html>

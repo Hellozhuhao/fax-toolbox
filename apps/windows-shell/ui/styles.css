@@ -85,3 +85,40 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-vis
 .url{color:var(--subtle)}footer{border-color:var(--border)}
 @media(max-width:700px){.app{display:block}.sidebar{padding:12px 14px 8px}.brand{margin:0 0 9px}
   .sidebar nav{gap:2px}.nav-item{min-height:32px}main.content{padding:18px 16px}.hero{min-height:155px;padding:22px}}
+
+/* Compact activity rail and module workspace. */
+.app{grid-template-columns:78px minmax(0,1fr)}
+.sidebar{width:78px;padding:17px 8px;align-items:center}
+.brand{margin:0 0 27px}.brand>div:last-child,.nav-label{display:none}
+.brand-mark{width:42px;height:42px;font-size:21px}
+.sidebar nav,.sidebar-bottom{width:100%}
+.sidebar nav{gap:6px}
+.sidebar .nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 2px;min-height:55px;text-align:center;font-size:10px}
+.nav-icon{font-size:20px;line-height:1.1;font-weight:400}
+.connection{justify-content:center;padding:15px 0 0}.connection #state{display:none}
+main.content{padding:0 0 15px;min-height:100vh}
+.command-bar{height:54px;min-height:54px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 22px;background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
+.location{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap;font-size:12px;color:var(--subtle)}
+.location strong{color:var(--text);overflow:hidden;text-overflow:ellipsis;font-size:12px}.location-separator{font-size:18px;color:var(--subtle)}
+.command-actions{display:flex;align-items:center;gap:4px}.command-actions button{min-height:30px;padding:0 9px;border-radius:7px;background:transparent;color:var(--subtle);font-size:11px;white-space:nowrap}
+.command-actions button:hover,.command-actions button.selected{background:var(--surface);color:var(--text)}
+.command-actions .quick-actions{border:1px solid var(--border);background:var(--surface);color:var(--text);margin-left:7px}
+kbd{font:10px "Segoe UI",sans-serif;color:var(--subtle);margin-left:5px}
+.content .view{max-width:none;padding:22px clamp(18px,3vw,34px) 24px}
+.content h2{margin:7px 0 9px}.content footer{margin:0 clamp(18px,3vw,34px);padding-top:10px}
+.hero{min-height:190px;padding:23px 26px}.hero-art{width:85px;height:85px;font-size:52px;border-radius:20px}
+.section-head{margin:22px 0 12px}.module-grid,.overview-grid{gap:11px}.module-card{height:auto;min-height:88px;padding:13px;gap:9px}.module-icon{width:40px;height:40px;font-size:17px}
+.module-tabs{display:flex;gap:4px;margin:0 0 22px;padding:4px;background:var(--surface);border:1px solid var(--border);border-radius:11px}
+.module-tabs button{flex:1;min-width:0;background:transparent;color:var(--subtle);font-size:11px;min-height:32px;padding:2px 6px}
+.module-tabs button:hover,.module-tabs button.selected{background:var(--panel);color:var(--text);box-shadow:0 1px 5px #00000013}
+.course-actions{display:flex;gap:8px;margin:15px 0 14px}.course-actions button{flex:1;min-width:0;padding:5px;font-size:11px}
+.course-current,.course-catalog,.course-control{padding:14px;margin:0 0 10px}
+.course-current #course-chapter{font-size:18px;margin:8px 0 4px}.course-current #course-url{font-size:10px;line-height:1.35;margin:9px 0 0;overflow-wrap:anywhere}
+.course-catalog select{margin-top:10px}.course-catalog button{margin-top:8px}.course-catalog #course-catalog-note{line-height:1.35}
+.course-run{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:5px;margin-top:10px}.course-run button{width:auto;min-width:54px;margin:0;padding:0 6px;font-size:11px;white-space:nowrap}
+.course-control .status{border-top:1px solid var(--border);padding-top:10px;margin-top:12px}.course-control .status strong{margin:0;font-size:14px}.course-control .status p{margin:4px 0 0}
+.palette-backdrop{position:fixed;inset:0;background:#0007;display:flex;justify-content:center;align-items:flex-start;padding:9vh 14px;z-index:20}.palette-backdrop[hidden]{display:none}
+.palette{width:min(480px,100%);background:var(--panel);border:1px solid var(--border);border-radius:14px;box-shadow:0 20px 70px #0005;padding:8px}
+.palette-heading{display:flex;justify-content:space-between;color:var(--subtle);font-size:11px;padding:12px 13px;border-bottom:1px solid var(--border);margin-bottom:5px}
+.palette button{display:flex;width:100%;align-items:center;justify-content:space-between;min-height:38px;background:transparent;color:var(--text);font-size:12px;text-align:left}.palette button:hover,.palette button:focus{background:var(--surface)}
+@media(max-width:700px){.app{display:grid;grid-template-columns:62px minmax(0,1fr)}.sidebar{position:sticky;top:0;height:100vh;width:62px;padding:10px 5px;border-right:1px solid var(--border);border-bottom:0}.brand{margin:0 0 15px}.brand-mark{width:35px;height:35px;font-size:18px}.sidebar nav{display:grid;overflow:visible}.sidebar .nav-item{width:100%;min-height:48px;font-size:9px}.nav-icon{font-size:18px}.sidebar-bottom{position:static;margin-top:auto}.command-bar{padding:0 12px}.location-app,.location-separator,.mini-switch,kbd{display:none}.command-actions .quick-actions{margin-left:0}.content .view{padding:18px 14px}.content footer{margin:0 14px}.module-grid,.overview-grid{grid-template-columns:1fr}.hero{min-height:145px;padding:17px}.hero-art{display:none}}

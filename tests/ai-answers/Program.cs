@@ -31,4 +31,14 @@ try { AiSettings.Validate("http://example.com/v1/chat/completions", "model");
     throw new Exception("insecure endpoint was accepted"); }
 catch (InvalidDataException) { }
 AiSettings.Validate("https://example.com/v1/chat/completions", "model");
+if (AiProviderPresets.All.Select(item => item.Id).Distinct().Count() != AiProviderPresets.All.Length)
+    throw new Exception("provider IDs must be unique");
+if (AiProviderPresets.Match(null).Id != "deepseek")
+    throw new Exception("first-time configuration should start with a provider preset");
+foreach (var preset in AiProviderPresets.All.Where(item => item.Id != "custom"))
+{
+    AiSettings.Validate(preset.Endpoint, preset.Model);
+    if (AiProviderPresets.Match(new AiSettings(preset.Endpoint, preset.Model, "")) != preset)
+        throw new Exception("provider preset cannot be restored: " + preset.Id);
+}
 Console.WriteLine("PASS AI response validation");

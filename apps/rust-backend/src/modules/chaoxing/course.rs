@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{Fault, positive, text};
+use crate::protocol::{Fault, positive, text};
 
 const MAX_ANSWER_CHAPTERS: usize = 512;
 const MAX_ANSWERS_PER_CHAPTER: usize = 200;

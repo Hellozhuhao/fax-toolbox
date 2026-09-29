@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use crate::{Fault, text};
+use crate::protocol::{Fault, text};
+use crate::modules::ModuleHandler;
 
 #[derive(Default)]
 pub struct VaultStore {
@@ -86,6 +87,12 @@ impl VaultStore {
             }
             _ => Err(Fault("UNKNOWN_METHOD", "vault method is not supported")),
         }
+    }
+}
+
+impl ModuleHandler for VaultStore {
+    fn handle(&mut self, method: &str, params: &Value) -> Result<Value, Fault> {
+        self.request(method, params)
     }
 }
 

@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Threading;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 
 namespace FaxToolbox.Windows;
@@ -37,9 +38,9 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
-        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke";
+        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke" or "--module-switch-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
-        smokeMode = args.Length == 3 && (args[1] == "--smoke" || courseSmokeMode || courseLiveSmokeMode);
+        smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
         smokeDataDirectory = smokeMode ? Path.Combine(Path.GetTempPath(), "FaxToolbox-smoke-" + Guid.NewGuid().ToString("N")) : null;
         Trace("before XAML initialization; args=" + args.Length);
@@ -198,7 +199,22 @@ public partial class MainWindow : Window
                 await using var output = File.Create(preview);
                 await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
             }
-            if (courseSmokeMode || courseLiveSmokeMode)
+            if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
+            {
+                var dialog = new AiSettingsDialog(this, null);
+                dialog.Show();
+                await Task.Delay(200);
+                var image = new RenderTargetBitmap((int)dialog.ActualWidth, (int)dialog.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                image.Render(dialog);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(image));
+                var preview = Path.Combine(root, ".cache", "ai-dialog-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
+                await using (var output = File.Create(preview)) encoder.Save(output);
+                dialog.Close();
+                PassSmoke();
+            }
+            else if (courseSmokeMode || courseLiveSmokeMode)
             {
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
             }
@@ -246,6 +262,8 @@ public partial class MainWindow : Window
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
                 case "course.open": await OpenCourseAsync(); break;
+                case "course.activate": await ActivateCourseAsync(); break;
+                case "demo.activate": await ActivateDemoAsync(); break;
                 case "course.start": await StartCourseAsync(); break;
                 case "course.pause": await CourseCommandAsync("pause"); break;
                 case "course.stop": await CourseCommandAsync("stop"); break;
@@ -271,7 +289,7 @@ public partial class MainWindow : Window
         BrowserToolbar.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
         ToolbarRow.Height = showModule ? GridLength.Auto : new GridLength(0);
         var split = showModule && !controlsCollapsed;
-        ShellColumn.MinWidth = split ? 260 : 0;
+        ShellColumn.MinWidth = split ? 330 : 0;
         WorkspaceColumn.MinWidth = showModule ? 400 : 0;
         ShellColumn.Width = !showModule ? new GridLength(1, GridUnitType.Star) :
             split ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
@@ -299,15 +317,7 @@ public partial class MainWindow : Window
 
     private async Task StartSessionAsync()
     {
-        SetWorkspaceLayout(true);
-        if (activeModule == "chaoxing")
-        {
-            if (courseSessionId is not null && courseState is "RUNNING" or "PAUSED" or "NEEDS_INPUT")
-                await CourseCommandAsync("stop");
-            activeModule = "smoke";
-            CourseView.Visibility = Visibility.Collapsed;
-            ModuleView.Visibility = Visibility.Visible;
-        }
+        await ActivateDemoAsync();
         Trace("start requested");
         if (backend is null || actionInProgress) return;
         actionInProgress = true;

@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../../apps/windows-shell/AiAnswerService.cs" Link="AiAnswerService.cs" />
+    <Compile Include="../../apps/windows-shell/AiProviderPresets.cs" Link="AiProviderPresets.cs" />
     <Compile Include="../../apps/windows-shell/VaultCrypto.cs" Link="VaultCrypto.cs" />
   </ItemGroup>
 </Project>

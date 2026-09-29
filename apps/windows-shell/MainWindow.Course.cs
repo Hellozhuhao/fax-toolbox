@@ -25,9 +25,11 @@ public partial class MainWindow
         "--course-login-smoke" => LoginFixture,
         "--course-catalog-smoke" => CourseFixture,
         "--course-ai-smoke" => CourseFixture,
+        "--module-switch-smoke" => CourseFixture,
         _ => CourseHome
     };
     private string activeModule = "smoke";
+    private bool courseHasOpened;
     private string courseState = "WAITING_LOGIN";
     private string courseDetail = "请在右侧登录并选择课程。";
     private string? courseSessionId;
@@ -88,6 +90,17 @@ public partial class MainWindow
 
     private async void ModuleNavigationCompleted(CoreWebView2NavigationCompletedEventArgs args)
     {
+        try { await HandleCourseNavigationCompletedAsync(args); }
+        catch (Exception error)
+        {
+            Trace("course navigation handler failed: " + error);
+            PublishCourse("ERROR", "课程页面处理失败：" + error.Message, false);
+            if (smokeMode) FailSmoke(error.ToString());
+        }
+    }
+
+    private async Task HandleCourseNavigationCompletedAsync(CoreWebView2NavigationCompletedEventArgs args)
+    {
         if (activeModule != "chaoxing") return;
         Trace("course navigation completed: " + args.IsSuccess + " " + DisplayUrl(CourseView.CoreWebView2.Source));
         aiAnswerCancellation?.Cancel();
@@ -139,8 +152,38 @@ public partial class MainWindow
         }
         else PublishCourse(courseState, courseDetail, IsCoursePage(url));
         await RefreshCatalogAsync();
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--module-switch-smoke")
+        {
+            var before = CourseView.CoreWebView2.Source;
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=demo]').click()");
+            await Task.Delay(400);
+            if (activeModule != "smoke" || CourseView.Visibility != Visibility.Collapsed ||
+                ModuleView.Visibility != Visibility.Visible ||
+                !string.Equals(ModuleView.CoreWebView2.Source, ModuleUrl, StringComparison.OrdinalIgnoreCase))
+            { FailSmoke("demo module did not activate"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=course]').click()");
+            await Task.Delay(400);
+            if (activeModule != "chaoxing" || CourseView.Visibility != Visibility.Visible ||
+                ModuleView.Visibility != Visibility.Collapsed || CourseView.CoreWebView2.Source != before ||
+                courseState != "READY")
+            { FailSmoke("course module did not restore its page and state"); return; }
+            if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+            {
+                var preview = Path.Combine(root, ".cache", "ui-course-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
+                await using var output = File.Create(preview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+            }
+            PassSmoke();
+            return;
+        }
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-smoke")
         {
+            for (var attempt = 0; attempt < 20 && catalogEntries.Count == 0; attempt++)
+            {
+                await Task.Delay(100);
+                await RefreshCatalogAsync();
+            }
             if (catalogEntries.Count != 2 || catalogEntries[0].Name != "2.1 课程介绍" ||
                 catalogKey is null || backend is null)
             { FailSmoke("course catalog was not extracted: " + string.Join(" | ", catalogEntries.Select(item => item.Name))); return; }
@@ -227,6 +270,7 @@ public partial class MainWindow
         if (sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
             await CancelSessionAsync();
         activeModule = "chaoxing";
+        courseHasOpened = true;
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = Visibility.Visible;
         catalogTimer.Start();
@@ -244,6 +288,37 @@ public partial class MainWindow
         var target = CourseTarget(mode);
         Trace("course navigation started: " + DisplayUrl(target));
         CourseView.CoreWebView2.Navigate(target);
+    }
+
+    private async Task ActivateCourseAsync()
+    {
+        if (!courseHasOpened)
+        {
+            await OpenCourseAsync();
+            return;
+        }
+        if (activeModule == "smoke" && sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
+            await CancelSessionAsync();
+        activeModule = "chaoxing";
+        SetWorkspaceLayout(true);
+        ModuleView.Visibility = Visibility.Collapsed;
+        CourseView.Visibility = Visibility.Visible;
+        catalogTimer.Start();
+        PublishCourse(courseState, courseDetail);
+    }
+
+    private async Task ActivateDemoAsync()
+    {
+        if (activeModule == "chaoxing" && courseState == "RUNNING")
+            await CourseCommandAsync("pause", "切换到其他模块，学习任务已暂停。");
+        activeModule = "smoke";
+        SetWorkspaceLayout(true);
+        catalogTimer.Stop();
+        CourseView.Visibility = Visibility.Collapsed;
+        ModuleView.Visibility = Visibility.Visible;
+        if (!string.Equals(ModuleView.CoreWebView2.Source, ModuleUrl, StringComparison.OrdinalIgnoreCase))
+            ModuleView.CoreWebView2.Navigate(ModuleUrl);
+        Publish(state, detail);
     }
 
     private object CourseParams(string command) => new { sessionId = courseSessionId, generation = courseGeneration, command };
