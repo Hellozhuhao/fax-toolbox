@@ -47,6 +47,8 @@ public partial class MainWindow
     private long courseSequence;
     private bool pauseSmokeStarted;
     private bool retrySmokeStarted;
+    private bool autoRetrySmokeStarted;
+    private int courseAutoRetryCount;
     private ulong courseLatestNavigationId;
     private string courseLastAttemptedUrl = CourseHome;
     private readonly List<CoreWebView2Frame> courseFrames = [];
@@ -148,11 +150,29 @@ public partial class MainWindow
     private void RetryCourseNavigation()
     {
         if (CourseView.CoreWebView2 is null) return;
+        courseAutoRetryCount = 0;
         ShowCourseLoading();
         PublishCourse("WAITING_LOGIN", "正在重新打开学习通…", false);
         var target = IsChaoxingUrl(courseLastAttemptedUrl) ? courseLastAttemptedUrl : CourseHome;
         Trace("course retry: " + DisplayUrl(target));
         CourseView.CoreWebView2.Navigate(target);
+    }
+
+    private async Task<bool> RetryTransientCourseNavigationAsync(
+        CoreWebView2WebErrorStatus status, ulong failedNavigationId, bool unusablePage)
+    {
+        if (status != CoreWebView2WebErrorStatus.OperationCanceled || !unusablePage ||
+            courseAutoRetryCount != 0 || activeModule != "chaoxing") return false;
+        courseAutoRetryCount = 1;
+        ShowCourseLoading();
+        PublishCourse("WAITING_LOGIN", "首次页面跳转被中断，正在自动重试一次…", false);
+        await Task.Delay(300);
+        if (failedNavigationId != courseLatestNavigationId || CourseView.CoreWebView2 is null ||
+            activeModule != "chaoxing") return true;
+        var target = courseSmokeMode ? CourseTarget(Environment.GetCommandLineArgs()[1]) : CourseHome;
+        Trace("course automatic retry: " + DisplayUrl(target));
+        CourseView.CoreWebView2.Navigate(target);
+        return true;
     }
 
     private async Task HandleCourseNavigationCompletedAsync(CoreWebView2NavigationCompletedEventArgs args)
@@ -166,6 +186,8 @@ public partial class MainWindow
                 Trace("ignored superseded course navigation: " + args.WebErrorStatus);
                 return;
             }
+            if (await RetryTransientCourseNavigationAsync(args.WebErrorStatus, args.NavigationId,
+                !IsChaoxingUrl(CourseView.CoreWebView2.Source))) return;
             var reason = $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。";
             ShowCourseError(reason);
             PublishCourse(courseState == "RUNNING" ? "RUNNING" : "ERROR", reason, false);
@@ -298,7 +320,16 @@ public partial class MainWindow
                 CourseRetryButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
                 return;
             }
-            if (CourseOverlay.Visibility != Visibility.Collapsed || !IsCoursePage(CourseView.CoreWebView2.Source))
+            if (!autoRetrySmokeStarted)
+            {
+                autoRetrySmokeStarted = true;
+                if (!await RetryTransientCourseNavigationAsync(
+                    CoreWebView2WebErrorStatus.OperationCanceled, courseLatestNavigationId, true))
+                { FailSmoke("transient navigation did not trigger automatic retry"); return; }
+                return;
+            }
+            if (CourseOverlay.Visibility != Visibility.Collapsed || !IsCoursePage(CourseView.CoreWebView2.Source) ||
+                courseAutoRetryCount != 1)
             { FailSmoke("course retry did not recover the browser view"); return; }
             PassSmoke();
             return;
@@ -484,6 +515,7 @@ public partial class MainWindow
         activeModule = "chaoxing";
         UpdateTaskTabs();
         courseHasOpened = true;
+        courseAutoRetryCount = 0;
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = Visibility.Visible;
         catalogTimer.Start();
