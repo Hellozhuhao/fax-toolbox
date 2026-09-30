@@ -1,22 +1,49 @@
 # Toolbox 起步工程
 
-这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前只实现一个本地演示模块，用来验证模块页面、共享页面代理、平台消息桥和 C++ 状态核心能连通。它不执行学习通自动化，也不包含现有脚本的迁移。
+这是面向 **Windows + Android（免 root）** 的工具箱起步代码。当前 Windows 主线采用 C# WPF + WebView2 外壳和 Rust 后端；原有 C++ Windows PoC 与 Android 起步工程保留。Windows 版已有学习通模块的独立页面、课程会话、视频与文档动作、章节答案库、可配置 AI 答题，以及密码箱。
 
 ## 目录
 
 | 路径 | 作用 |
 | --- | --- |
 | `apps/windows-host/` | Win32 + WebView2 桌面宿主，可运行 |
+| `apps/windows-shell/` | C# WPF + WebView2 桌面外壳 |
+| `apps/rust-backend/` | Rust 独立进程与会话状态机 |
+| `modules/chaoxing/` | 学习通页面适配器与本地测试夹具 |
 | `apps/android-host/` | Android WebView 宿主与 JNI 工程 |
+| `packages/protocol/` | Windows 前后端接口约定 |
 | `packages/page-agent/` | 两端共用的文档注入代理 |
 | `native/core/` | 两端共用的 C++ 状态核心 |
 | `modules/smoke/` | 第一个模块的清单和本地页面 |
 | `tests/` | 共享代理与模块清单检查 |
 | `poc/` | 上一阶段独立可行性验证 |
 
-模块页面含一个视频节点和“模拟视频结束”按钮。代理发出 `HELLO`、`VIDEO_FOUND`、`VIDEO_ENDED`，宿主把事件交给 C++ 核心，状态依次变为 `READY`、`OBSERVING`、`COMPLETE`。
+模块页面含一个视频节点和“模拟视频结束”按钮。代理发出 `HELLO`、`VIDEO_FOUND`、`VIDEO_ENDED`，Windows 新外壳把事件交给 Rust 状态机，状态依次变为 `READY`、`OBSERVING`、`COMPLETE`。
 
-## Windows 运行
+## Windows 主线：C# + Rust
+
+在 PowerShell 中进入项目根目录，运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test
+powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
+```
+
+`-Test` 同时运行 Rust 单元测试及演示、课程、章节目录、AI 设置、多标签与加载失败重试等隐藏窗口端到端测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)；代码边界与新模块开发步骤见 [Rust 后端架构](apps/rust-backend/ARCHITECTURE.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
+
+## Windows EXE 发布
+
+开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Test`。脚本生成 `dist/FaxToolbox-Windows-win-x64.zip`，并在临时目录解压后验证启动。将整个 ZIP 上传到 GitHub Releases；用户解压到任意目录，运行其中的 `FaxToolbox.Windows.exe`。EXE 与同目录下的 Rust 后端、页面资源必须一起保留，不需要单独安装 .NET 10 运行时。Windows 仍需安装 WebView2 Runtime。开发工具链由 `scripts/Enter-ToolboxDev.ps1` 在本机发现，不依赖仓库所在路径。
+
+当前 UI 采用紧凑活动栏、模块工作台与顶部快速入口，包含首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。按 `Ctrl+K` 可打开快速操作，直接切换模块或打开设置。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
+
+AI 答题设置可从学习通工作台、系统选项或快速操作打开。支持 DeepSeek、阿里百炼、硅基流动与 OpenAI 预设，选择后只需填写 API Key；自定义选项可填写兼容 Chat Completions 的 HTTPS 完整地址和模型名，不需要密钥的服务可以留空。工作台与系统选项显示已保存的服务商、模型、接口和密钥状态，并提供只发送示例题的“测试连接”。DeepSeek 配置会使用官方只读接口显示 API 余额并支持手动刷新；其他服务商尚无已适配的余额接口，界面会明确提示。是否有免费额度、额度大小与可用模型由服务商决定。没有本章答案或已有答案与页面不匹配时，工具箱会尝试读取当前可见题目并请求模型；模型返回不完整答案、请求超时或页面发生变化时显示原因并允许用户处理。密钥由 Windows 当前用户加密保存；切换到其他服务或模型时不会沿用旧密钥。当前题目文本和选项会发送给配置的服务。验证答案格式可运行 `dotnet run --project tests/ai-answers/AiAnswers.csproj`；本机保存了密钥时，加 `-- --live` 可主动发送一条短测试请求，`-- --live-balance` 可只读验证余额接口。
+
+活动栏按“首页 → 模块 → 工作台 → 活动 → 系统选项”组织；密码箱位于系统选项内。顶部“＋”会新建工具箱首页标签；从首页打开学习通或演示模块会创建独立任务标签，同一模块也可多开。切换标签保留各自的网页和任务状态；关闭标签会结束对应任务，点击窗口关闭按钮则退出全部任务。学习通加载失败时显示原因和重试按钮；“打开学习通”也可在失败后重新导航。暂停、结束、重新开始及 AI 错误的操作规则见 [学习通工作台状态约定](modules/chaoxing/UX_STATES.md)。
+
+工具箱内的 WebView2 网页会话直接联网，不使用 Windows 系统代理、`HTTPS_PROXY` 或其他代理环境变量；Rust 后端进程也不会继承代理环境变量。当前预览版通过 WebView2 的 `--no-proxy-server` 参数强制直连。如果本机无法直连目标网站，应用会报告加载失败，不会自动切回代理。
+
+## 原有 C++ Windows PoC
 
 需要 Visual Studio Build Tools 的 C++ 桌面工具、Windows SDK 和 WebView2 Runtime。在 **x64 Native Tools Command Prompt** 中进入本目录：
 

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>本地学习通课程夹具</title></head>
+<body>
+  <h1>本地课程夹具 2.1</h1>
+  <nav id="coursetree"><a href="studentstudy.html?chapterId=2.1">1 绪论 1.1 总览 1.2 导论 1.3 说明</a>
+    <a class="active" href="studentstudy.html?chapterId=2.1">2.1 课程介绍</a>
+    <a href="studentstudy-video.html?chapterId=2.1">2.2 视频任务</a></nav>
+  <div class="question"><p>1. 原生选项</p><label><input type="radio" name="q1" value="A" onclick="ready()">A</label><label><input type="radio" name="q1" value="B" onclick="ready()">B</label></div>
+  <div class="StudentTimu"><p>2. 学习通式自定义选项</p><ul><li role="radio" onclick="select(this)">A</li><li role="radio" onclick="select(this)">B</li></ul></div>
+  <div class="question"><p>3. 填空题</p><textarea id="q3" oninput="ready()"></textarea></div>
+  <div class="question"><p>4. 判断题</p><ul><li role="radio" onclick="judge(this)">对</li><li role="radio" onclick="judge(this)">错</li></ul></div>
+  <button id="submit" type="button" disabled onclick="showConfirmation()">提交</button>
+  <div id="confirm-mask" hidden style="position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center">
+    <div class="modal" role="dialog" style="background:white;padding:28px;min-width:260px">
+      <h2>提示</h2><p>确认提交?</p>
+      <button id="confirm-cancel" type="button" onclick="hideConfirmation()">取消</button>
+      <button id="confirm-submit" type="button" onclick="confirmSubmission()">提交</button>
+    </div>
+  </div>
+  <script>
+    function showConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = false; mask.style.display = 'flex'; }
+    function hideConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = true; mask.style.display = 'none'; }
+    function confirmSubmission() { hideConfirmation(); document.getElementById('submit').textContent = '已提交'; document.body.dataset.quizSubmitted = 'true'; }
+    function ready() { document.getElementById('submit').disabled = !document.querySelector('input[value="A"]').checked || !document.querySelectorAll('.StudentTimu li')[1].classList.contains('selected') || document.getElementById('q3').value !== '测试答案' || document.querySelectorAll('.question li')[0].getAttribute('aria-checked') !== 'true'; }
+    function select(item) { for (const li of item.parentElement.children) li.classList.remove('selected'); item.classList.add('selected'); ready(); }
+    function judge(item) { for (const li of item.parentElement.children) li.setAttribute('aria-checked','false'); item.setAttribute('aria-checked','true'); ready(); }
+  </script>
+</body>
+</html>

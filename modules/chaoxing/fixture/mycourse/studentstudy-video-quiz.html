@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>本地视频与同章测验夹具</title></head>
+<body>
+  <h1>同章视频与测验 2.5</h1>
+  <nav><button id="video-tab" class="active" type="button" onclick="showTab('video')">1 视频</button>
+    <button id="quiz-tab" type="button" onclick="showTab('quiz')">2 测验</button></nav>
+  <section id="video-panel"><video controls width="320" height="180"></video></section>
+  <section id="quiz-panel" hidden><iframe id="quiz-frame" width="540" height="300" title="章节测验"></iframe></section>
+  <button id="next" type="button" hidden onclick="location.href='studentstudy-video-quiz-done.html?chapterId=2.6'">下一节</button>
+  <div id="confirm-mask" hidden style="position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center">
+    <div class="modal" role="dialog" style="background:white;padding:28px;min-width:260px">
+      <h2>提示</h2><p>确认提交?</p>
+      <div class="cancel-button" onclick="hideConfirmation()"><span>取消</span></div>
+      <div id="confirm-submit" class="confirm-button" onclick="confirmSubmission()"><span>提交</span></div>
+    </div>
+  </div>
+  <script>
+    function showTab(name) {
+      document.getElementById('video-tab').className = name === 'video' ? 'active' : '';
+      document.getElementById('quiz-tab').className = name === 'quiz' ? 'active' : '';
+      document.getElementById('video-panel').hidden = name !== 'video';
+      document.getElementById('quiz-panel').hidden = name !== 'quiz';
+      if (name === 'quiz' && !document.getElementById('quiz-frame').src)
+        document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5';
+    }
+    function showConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = false; mask.style.display = 'flex'; }
+    function hideConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = true; mask.style.display = 'none'; }
+    function confirmSubmission() {
+      hideConfirmation(); document.body.dataset.quizSubmitted = 'true';
+      if (new URLSearchParams(location.search).get('result') === '1') {
+        document.getElementById('quiz-frame').contentWindow.showResult();
+        document.getElementById('next').hidden = false;
+      }
+    }
+    document.querySelector('video').play = () => Promise.resolve();
+    setTimeout(() => document.querySelector('video').dispatchEvent(new Event('ended')), 700);
+  </script>
+</body>
+</html>

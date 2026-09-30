@@ -9,14 +9,14 @@
 | --- | --- | --- |
 | .NET SDK | 10.0.401，`%LOCALAPPDATA%\Microsoft\dotnet` | `dotnet new wpf` 与 Release 构建成功，0 警告/0 错误 |
 | Rust | stable 1.98.1，`%USERPROFILE%\.cargo\bin`，MSVC 目标 | `rustc` 编译并运行最小程序，输出 `RUST_SMOKE_OK` |
-| Go | 1.27.1，`%LOCALAPPDATA%\Programs\Toolbox\Go-1.27.1\go\bin` | `go build` 编译并运行最小程序，输出 `GO_SMOKE_OK` |
+| Go | 首次验证为 1.27.1；可选，从系统 `PATH` 发现 | `go build` 编译并运行最小程序，输出 `GO_SMOKE_OK` |
 | C++ | Visual Studio Build Tools 18，Windows SDK | 已有 WebView2/C++ 程序编译并通过 `--smoke` |
 | WebView2 | Runtime 和 SDK 均可用 | 页面代理到 C++ 状态机的 Windows 测试通过 |
 
-安装采用当前用户目录，没有覆盖系统自带的旧 .NET 运行时。普通命令行可能先找到 `C:\Program Files\dotnet\dotnet.exe`，所以开发时在 PowerShell **点源**项目脚本：
+上表记录的是首次开发机器的验证环境，不是要求其他机器使用相同的目录。开发时从仓库根目录在 PowerShell **点源**脚本，它会发现本机的 .NET、Rust 和 Visual Studio C++ 工具链；Go 是可选工具链：
 
 ```powershell
-. C:\Users\21588\Desktop\toolbox\scripts\Enter-ToolboxDev.ps1
+. .\scripts\Enter-ToolboxDev.ps1
 dotnet --list-sdks
 rustc --version
 go version
