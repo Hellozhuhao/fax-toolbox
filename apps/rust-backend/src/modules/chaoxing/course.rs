@@ -200,7 +200,8 @@ impl CourseEngine {
                 session.state = CourseState::NeedsInput;
                 ("CHECK_VIDEO", Value::Null)
             }
-            "QUIZ_CONFIRM_PENDING" | "QUIZ_SUBMITTED" => ("NONE", Value::Null),
+            "QUIZ_CONFIRM_PENDING" => ("CONFIRM_QUIZ_SUBMISSION", Value::Null),
+            "QUIZ_SUBMITTED" => ("ACK_QUIZ_SUBMISSION", Value::Null),
             _ => return Err(Fault("BAD_REQUEST", "unsupported course observation")),
         };
         session.last_action = action.to_owned();

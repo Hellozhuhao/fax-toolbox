@@ -559,8 +559,9 @@ public partial class MainWindow
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
             Trace("course observation: " + observation + " action=" + action + " state=" + nextState);
-            if (courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
-                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke"))
+            var smokeSubmission = courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
+                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke");
+            if (smokeSubmission)
             {
                 var confirmed = await CourseView.CoreWebView2.ExecuteScriptAsync(
                     "document.body.dataset.quizSubmitted === 'true' && document.getElementById('confirm-mask').hidden");
@@ -573,9 +574,6 @@ public partial class MainWindow
                     if (quizTab != "true")
                     { FailSmoke("video did not advance to the quiz in the same chapter"); return; }
                 }
-                Trace("course quiz submitted through Rust");
-                PassSmoke();
-                return;
             }
             PublishCourse(nextState, action switch
             {
@@ -614,9 +612,33 @@ public partial class MainWindow
                 v = 1, kind = "course.action", sessionId = activeSession, generation = activeGeneration,
                 action, data = result.GetProperty("data")
             });
-            if (action is "NEXT_UNIT" or "ADVANCE_AFTER_VIDEO" || frame is null)
+            if (action is "CONFIRM_QUIZ_SUBMISSION" or "ACK_QUIZ_SUBMISSION")
+            {
+                CourseView.CoreWebView2.PostWebMessageAsJson(payload);
+                if (action == "ACK_QUIZ_SUBMISSION")
+                {
+                    foreach (var activeFrame in courseFrames.ToArray())
+                        if (activeFrame.IsDestroyed() == 0) activeFrame.PostWebMessageAsJson(payload);
+                }
+                else if (frame is not null && frame.IsDestroyed() == 0)
+                    frame.PostWebMessageAsJson(payload);
+            }
+            else if (action is "NEXT_UNIT" or "ADVANCE_AFTER_VIDEO" || frame is null)
                 CourseView.CoreWebView2.PostWebMessageAsJson(payload);
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
+            if (smokeSubmission)
+            {
+                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                {
+                    await Task.Delay(11000);
+                    if (courseState != "RUNNING")
+                    { FailSmoke("quiz frame timed out after outer-page confirmation"); return; }
+                }
+                else await Task.Delay(150);
+                Trace("course quiz submitted through Rust and acknowledged in every frame");
+                PassSmoke();
+                return;
+            }
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-pause-smoke" &&
                 action == "DOCUMENT_NEXT" && frame is not null && !pauseSmokeStarted)
             {

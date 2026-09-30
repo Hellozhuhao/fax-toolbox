@@ -19,6 +19,7 @@
       let quizSubmitPhase = '';
       let quizSubmitStartedAt = 0;
       let quizSubmitButton = null;
+      const confirmationTargets = 'button,a,[role="button"],input[type="button"],input[type="submit"],div,span';
       let pendingInspection = 0;
       let pendingAction = 0;
 
@@ -52,17 +53,18 @@
         return (element.innerText || element.value || element.getAttribute('aria-label') || '').trim();
       }
       function confirmationButton() {
-        const buttons = document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]');
+        const buttons = document.querySelectorAll(confirmationTargets);
         for (const button of buttons) {
           if (!visible(button) || !['提交', '确认提交'].includes(buttonLabel(button)) || button === quizSubmitButton) continue;
           for (let dialog = button.parentElement, depth = 0;
-            dialog && depth < 7 && dialog !== document.body; dialog = dialog.parentElement, depth++) {
+            dialog && depth < 12 && dialog !== document.body; dialog = dialog.parentElement, depth++) {
             if (!visible(dialog)) continue;
             const content = (dialog.innerText || dialog.textContent || '').replace(/\s+/g, ' ').trim();
             if (content.length > 240 || !/确认提交[？?]?/.test(content) ||
                 /验证码|人机验证|安全验证|风险提示/.test(content) ||
-                dialog.querySelector('input:not([type="button"]):not([type="submit"]),textarea,select,[contenteditable="true"]')) continue;
-            const cancel = byText(['取消'], dialog);
+                Array.from(dialog.querySelectorAll('input:not([type="button"]):not([type="submit"]),textarea,select,[contenteditable="true"]')).some(visible)) continue;
+            const cancel = Array.from(dialog.querySelectorAll(confirmationTargets)).find(element =>
+              visible(element) && buttonLabel(element) === '取消');
             if (cancel && cancel !== button && !button.disabled && button.getAttribute('aria-disabled') !== 'true')
               return button;
           }
@@ -272,6 +274,14 @@
             break;
           }
           case 'FILL_QUIZ': fillQuiz(action.data); break;
+          case 'CONFIRM_QUIZ_SUBMISSION':
+            if (!quizSubmitPhase) {
+              quizSubmitPhase = 'requested';
+              quizSubmitStartedAt = Date.now();
+            }
+            inspectQuizSubmission();
+            break;
+          case 'ACK_QUIZ_SUBMISSION': quizSubmitPhase = 'confirmed'; break;
           case 'DISMISS_PROMPT': benignPromptButton()?.click(); break;
           case 'SWITCH_VIDEO_TAB': {
             const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>

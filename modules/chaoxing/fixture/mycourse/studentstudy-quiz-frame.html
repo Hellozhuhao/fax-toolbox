@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>同章测验内嵌页</title></head>
+<body>
+  <div class="question"><p>1. 本章示例题</p>
+    <label><input type="radio" name="q1" value="A" onclick="ready()">A. 正确</label>
+    <label><input type="radio" name="q1" value="B" onclick="ready()">B. 错误</label></div>
+  <button id="submit" type="button" disabled onclick="parent.showConfirmation()">提交</button>
+  <script>
+    function ready() { document.getElementById('submit').disabled = !document.querySelector('input[value="A"]').checked; }
+  </script>
+</body>
+</html>
