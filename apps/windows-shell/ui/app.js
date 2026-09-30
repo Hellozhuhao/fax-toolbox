@@ -21,8 +21,7 @@
     const navigation = ['course', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     $('location-name').textContent = viewNames[view];
-    for (const item of document.querySelectorAll('.mini-switch')) item.classList.toggle('selected', item.dataset.switch === view);
-    send('ui.layout', {mode: ['course', 'demo'].includes(view) ? 'module' : 'home'});
+    send('ui.layout', {mode: ['course', 'demo'].includes(view) ? 'module' : 'home', view});
     if (view === 'vault') send('vault.list');
   }
   function showWorkspace() {
@@ -68,6 +67,7 @@
     $('home-course').textContent = stateName(courseState);
     logActivity('学习通刷课', stateName(courseState), message.detail || '状态已更新');
     if (message.url) $('course-url').textContent = message.url;
+    $('course-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
     if (message.chapter !== undefined && message.chapter !== currentChapterId) {
       currentChapterId = message.chapter || ''; currentChapterName = '';
       updateChapter();
@@ -169,7 +169,7 @@
   for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : openDemo());
   $('module-course').addEventListener('click', openCourse);
   $('module-demo').addEventListener('click', openDemo);
-  for (const item of document.querySelectorAll('[data-switch]')) item.addEventListener('click', () => item.dataset.switch === 'course' ? openCourse() : openDemo());
+  window.FaxToolboxUi = Object.freeze({openCourse, openDemo, showHome: () => show('home')});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
   $('quick-actions').addEventListener('click', () => togglePalette(true));

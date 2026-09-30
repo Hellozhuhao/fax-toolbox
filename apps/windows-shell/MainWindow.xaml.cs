@@ -250,6 +250,7 @@ public partial class MainWindow : Window
     {
         state = nextState;
         detail = nextDetail;
+        UpdateTaskTabs();
         Title = $"Fax Toolbox — {nextState}";
         if (ShellView.CoreWebView2 is not null)
         {
@@ -274,6 +275,11 @@ public partial class MainWindow : Window
             {
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() == "module");
+                    selectedTaskTab = (message.TryGetProperty("view", out var view) ? view.GetString() : null) switch
+                    {
+                        "course" => "course", "demo" => "demo", _ => null
+                    };
+                    UpdateTaskTabs();
                     break;
                 case "ui.theme":
                     ApplyHostTheme(message.GetProperty("theme").GetString() == "dark");
@@ -308,8 +314,9 @@ public partial class MainWindow : Window
 
     private void SetWorkspaceLayout(bool showModule)
     {
-        BrowserToolbar.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
-        ToolbarRow.Height = showModule ? GridLength.Auto : new GridLength(0);
+        BrowserToolbar.Visibility = Visibility.Visible;
+        ToolbarRow.Height = GridLength.Auto;
+        ToggleControlsButton.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
         var split = showModule && !controlsCollapsed;
         ShellColumn.MinWidth = split ? 330 : 0;
         WorkspaceColumn.MinWidth = showModule ? 400 : 0;
@@ -329,6 +336,8 @@ public partial class MainWindow : Window
 
     private void ApplyHostTheme(bool dark)
     {
+        darkTaskTabs = dark;
+        UpdateTaskTabs();
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
         Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
         BrowserToolbar.Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
@@ -421,9 +430,9 @@ public partial class MainWindow : Window
                 "COMPLETE" => "演示模块已完成。",
                 _ => "会话状态已更新。"
             });
-            if (smokeMode && nextState == "OBSERVING")
+            if (smokeMode && !courseSmokeMode && nextState == "OBSERVING")
                 await ModuleView.CoreWebView2.ExecuteScriptAsync("document.getElementById('finish').click();");
-            if (smokeMode && nextState == "COMPLETE") PassSmoke();
+            if (smokeMode && !courseSmokeMode && nextState == "COMPLETE") PassSmoke();
         }
         catch (Exception error)
         {

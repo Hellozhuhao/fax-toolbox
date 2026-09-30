@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 ## Windows EXE 发布
 
-开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/publish-windows.ps1 -Test`。它生成 `dist/windows/FaxToolbox.Windows.exe` 和同目录下必需的 Rust 后端、WebView2 页面资源；直接双击 EXE 即可启动，不需要先运行 PowerShell 或安装 .NET 10 运行时。发布时保留整个 `dist/windows` 目录。Windows 仍需安装 WebView2 Runtime。
+开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Test`。脚本生成 `dist/FaxToolbox-Windows-win-x64.zip`，并在临时目录解压后验证启动。将整个 ZIP 上传到 GitHub Releases；用户解压到任意目录，运行其中的 `FaxToolbox.Windows.exe`。EXE 与同目录下的 Rust 后端、页面资源必须一起保留，不需要单独安装 .NET 10 运行时。Windows 仍需安装 WebView2 Runtime。开发工具链由 `scripts/Enter-ToolboxDev.ps1` 在本机发现，不依赖仓库所在路径。
 
 当前 UI 采用紧凑活动栏、模块工作台与顶部快速入口，包含首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。按 `Ctrl+K` 可打开快速操作，直接切换模块或打开设置。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
 

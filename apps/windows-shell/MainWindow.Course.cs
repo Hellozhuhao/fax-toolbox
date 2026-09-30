@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
 
 namespace FaxToolbox.Windows;
@@ -107,21 +109,20 @@ public partial class MainWindow
 
     private async Task HandleCourseNavigationCompletedAsync(CoreWebView2NavigationCompletedEventArgs args)
     {
-        if (activeModule != "chaoxing") return;
         Trace("course navigation completed: " + args.IsSuccess + " " + DisplayUrl(CourseView.CoreWebView2.Source));
         CancelAiRequest("页面已切换，本次 AI 答题请求已取消。");
         if (!args.IsSuccess)
         {
             var reason = $"学习通页面加载失败（{args.WebErrorStatus}）。请检查网络后重试。";
-            if (courseState == "RUNNING") await CourseCommandAsync("pause", reason);
-            else PublishCourse("ERROR", reason, false);
+            PublishCourse(courseState == "RUNNING" ? "RUNNING" : "ERROR", reason, false);
             return;
         }
         var url = CourseView.CoreWebView2.Source;
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-smoke" &&
             url.Contains("studentstudy-video.html", StringComparison.Ordinal))
         {
-            PassSmoke();
+            if (courseState == "RUNNING") PassSmoke();
+            else FailSmoke("jumping chapters paused the running course");
             return;
         }
         if (courseLiveSmokeMode && Uri.TryCreate(url, UriKind.Absolute, out var liveUri) &&
@@ -144,7 +145,7 @@ public partial class MainWindow
         }
         if (courseState == "RUNNING" && !IsCoursePage(url))
         {
-            await CourseCommandAsync("pause", "已离开课程学习页。请完成登录或验证，返回课程后再继续。");
+            PublishCourse("RUNNING", "已离开课程学习页。返回课程后任务会自动继续。", false);
             return;
         }
         if (courseState is not ("RUNNING" or "PAUSED" or "NEEDS_INPUT"))
@@ -220,7 +221,7 @@ public partial class MainWindow
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--module-switch-smoke")
         {
             var before = CourseView.CoreWebView2.Source;
-            await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=demo]').click()");
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('module-demo').click()");
             for (var attempt = 0; attempt < 30 &&
                 (activeModule != "smoke" || CourseView.Visibility != Visibility.Collapsed ||
                  ModuleView.Visibility != Visibility.Visible ||
@@ -230,7 +231,9 @@ public partial class MainWindow
                 ModuleView.Visibility != Visibility.Visible ||
                 !string.Equals(ModuleView.CoreWebView2.Source, ModuleUrl, StringComparison.OrdinalIgnoreCase))
             { FailSmoke("demo module did not activate"); return; }
-            await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.command-bar [data-switch=course]').click()");
+            if (CourseTaskTab.Visibility != Visibility.Visible || DemoTaskTab.Visibility != Visibility.Visible)
+            { FailSmoke("both module tabs were not opened"); return; }
+            CourseTaskTabButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             for (var attempt = 0; attempt < 30 &&
                 (activeModule != "chaoxing" || CourseView.Visibility != Visibility.Visible ||
                  ModuleView.Visibility != Visibility.Collapsed); attempt++)
@@ -239,6 +242,49 @@ public partial class MainWindow
                 ModuleView.Visibility != Visibility.Collapsed || CourseView.CoreWebView2.Source != before ||
                 courseState != "READY")
             { FailSmoke("course module did not restore its page and state"); return; }
+            courseSessionId = Guid.NewGuid().ToString("N");
+            courseGeneration++;
+            await backend!.RequestAsync("course.open", new
+            {
+                sessionId = courseSessionId, generation = courseGeneration,
+                courseUrl = CourseView.CoreWebView2.Source
+            });
+            await backend.RequestAsync("course.command", CourseParams("start"));
+            PublishCourse("RUNNING", "正在处理当前章节。", true);
+            DemoTaskTabButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            for (var attempt = 0; attempt < 30 && activeModule != "smoke"; attempt++) await Task.Delay(100);
+            var backgroundState = await backend.RequestAsync("course.state", CourseParams("state"));
+            if (activeModule != "smoke" || courseState != "RUNNING" ||
+                backgroundState.GetProperty("state").GetString() != "RUNNING")
+            { FailSmoke("switching modules paused the running course"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('start').click()");
+            for (var attempt = 0; attempt < 30 && state != "OBSERVING"; attempt++) await Task.Delay(100);
+            if (state != "OBSERVING") { FailSmoke("demo session did not start beside the course"); return; }
+            CourseTaskTabButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            for (var attempt = 0; attempt < 30 && activeModule != "chaoxing"; attempt++) await Task.Delay(100);
+            var demoState = await backend.RequestAsync("session.state", SessionParams());
+            if (activeModule != "chaoxing" || courseState != "RUNNING" ||
+                demoState.GetProperty("state").GetString() != "OBSERVING")
+            { FailSmoke("running course did not restore after switching modules"); return; }
+            if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+            {
+                var tabsPreview = Path.Combine(root, ".cache", "ui-task-tabs-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(tabsPreview)!);
+                await using var tabsOutput = File.Create(tabsPreview);
+                await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, tabsOutput);
+                var windowPreview = new RenderTargetBitmap((int)ActualWidth, (int)ActualHeight,
+                    96, 96, PixelFormats.Pbgra32);
+                windowPreview.Render(this);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(windowPreview));
+                await using var windowOutput = File.Create(Path.Combine(root, ".cache", "ui-task-window-preview.png"));
+                encoder.Save(windowOutput);
+            }
+            CloseDemoTaskTabButton.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            demoState = await backend.RequestAsync("session.state", SessionParams());
+            if (DemoTaskTab.Visibility != Visibility.Collapsed ||
+                demoState.GetProperty("state").GetString() != "OBSERVING")
+            { FailSmoke("closing a tab stopped its background task"); return; }
             if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-course-preview.png");
@@ -270,10 +316,25 @@ public partial class MainWindow
             if (ShellColumn.Width.Value != 0 || WorkspaceColumn.Width.GridUnitType != GridUnitType.Star)
             { FailSmoke("browser focus layout failed"); return; }
             ToggleControls_Click(this, new RoutedEventArgs());
-            var menu = await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "document.getElementById('course-chapters').options[2].textContent");
+            var menu = "null";
+            for (var attempt = 0; attempt < 30; attempt++)
+            {
+                menu = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('course-chapters').options[2]?.textContent ?? null");
+                if (JsonSerializer.Deserialize<string>(menu) == "2.2 视频任务") break;
+                await Task.Delay(100);
+            }
             if (JsonSerializer.Deserialize<string>(menu) != "2.2 视频任务")
             { FailSmoke("course selector does not show chapter name"); return; }
+            courseSessionId = Guid.NewGuid().ToString("N");
+            courseGeneration++;
+            await backend.RequestAsync("course.open", new
+            {
+                sessionId = courseSessionId, generation = courseGeneration,
+                courseUrl = CourseView.CoreWebView2.Source
+            });
+            await backend.RequestAsync("course.command", CourseParams("start"));
+            PublishCourse("RUNNING", "正在处理当前章节。", true);
             if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-course-preview.png");
@@ -330,6 +391,7 @@ public partial class MainWindow
     {
         courseState = nextState;
         courseDetail = nextDetail;
+        UpdateTaskTabs();
         if (ShellView.CoreWebView2 is null) return;
         var url = CourseView.CoreWebView2?.Source;
         var json = JsonSerializer.Serialize(new
@@ -342,12 +404,18 @@ public partial class MainWindow
 
     private async Task OpenCourseAsync()
     {
+        if (courseHasOpened)
+        {
+            await ActivateCourseAsync();
+            return;
+        }
         CancelAiRequest("已重新打开学习通，之前的 AI 请求已取消。");
         SetWorkspaceLayout(true);
         if (backend is null) return;
-        if (sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
-            await CancelSessionAsync();
         activeModule = "chaoxing";
+        courseTaskTabOpen = true;
+        selectedTaskTab = "course";
+        UpdateTaskTabs();
         courseHasOpened = true;
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = Visibility.Visible;
@@ -397,9 +465,10 @@ public partial class MainWindow
             await OpenCourseAsync();
             return;
         }
-        if (activeModule == "smoke" && sessionId is not null && state is not "COMPLETE" and not "CANCELLED")
-            await CancelSessionAsync();
         activeModule = "chaoxing";
+        courseTaskTabOpen = true;
+        selectedTaskTab = "course";
+        UpdateTaskTabs();
         SetWorkspaceLayout(true);
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = Visibility.Visible;
@@ -409,9 +478,10 @@ public partial class MainWindow
 
     private async Task ActivateDemoAsync()
     {
-        if (activeModule == "chaoxing" && courseState == "RUNNING")
-            await CourseCommandAsync("pause", "切换到其他模块，学习任务已暂停。");
         activeModule = "smoke";
+        demoTaskTabOpen = true;
+        selectedTaskTab = "demo";
+        UpdateTaskTabs();
         SetWorkspaceLayout(true);
         catalogTimer.Stop();
         CourseView.Visibility = Visibility.Collapsed;
@@ -530,7 +600,7 @@ public partial class MainWindow
 
     private async Task HandleCourseMessageAsync(CoreWebView2WebMessageReceivedEventArgs args, CoreWebView2Frame? frame)
     {
-        if (backend is null || activeModule != "chaoxing" || courseSessionId is null ||
+        if (backend is null || courseSessionId is null ||
             courseState != "RUNNING" || !IsChaoxingUrl(args.Source)) return;
         try
         {

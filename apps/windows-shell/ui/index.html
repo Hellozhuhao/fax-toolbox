@@ -22,7 +22,7 @@
       <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings" title="系统选项"><span class="nav-icon">⚙</span><span>设置</span></button><div class="connection" title="后端连接状态"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
     </aside>
     <main class="content">
-    <header class="command-bar"><div class="location"><span class="location-app">工具箱</span><span class="location-separator">›</span><strong id="location-name">首页</strong></div><div class="command-actions"><button type="button" class="mini-switch" data-switch="course">学习通</button><button type="button" class="mini-switch" data-switch="demo">演示</button><button id="quick-actions" type="button" class="quick-actions" aria-label="打开快速操作">快速操作 <kbd>Ctrl K</kbd></button></div></header>
+    <header class="command-bar"><div class="location"><strong id="location-name">首页</strong></div><div class="command-actions"><button id="quick-actions" type="button" class="quick-actions" aria-label="打开快速操作">快速操作 <kbd>Ctrl K</kbd></button></div></header>
 
     <section id="view-home" class="view">
       <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
@@ -37,10 +37,9 @@
 
     <section id="view-workspace" class="view" hidden><div class="eyebrow">WORKSPACE</div><h2>工作台</h2><p class="lead">选择一个模块后，这里会显示网页与任务控制。</p><div class="card"><span class="label">当前模块</span><strong id="workspace-module">尚未打开模块</strong><p id="workspace-detail" class="muted">从模块列表中打开学习通或页面事件演示。</p></div><button id="workspace-modules" type="button">查看模块 →</button></section>
 
-    <section id="view-demo" class="view" hidden><div class="module-tabs"><button type="button" data-switch="course">学习通</button><button type="button" data-switch="demo" class="selected">页面事件演示</button></div><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。启动后，可在页面中触发“模拟视频结束”。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
+    <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。切换顶部标签不会结束其他模块的任务。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
 
     <section id="view-course" class="view" hidden>
-      <div class="module-tabs"><button type="button" data-switch="course" class="selected">学习通</button><button type="button" data-switch="demo">页面事件演示</button></div>
       <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通</h2>
       <p class="muted">在右侧登录并选择课程。切换模块会保留此页面；工具箱不会读取登录密码。</p>
       <div class="course-actions"><button id="course-open" class="secondary" type="button">打开学习通首页</button><button id="course-save-vault" class="secondary" type="button">保存账号到密码箱</button></div>
@@ -49,7 +48,7 @@
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>
         <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></div>
-      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">暂停会保留当前任务，稍后可继续；结束会退出本次任务，下次从当前网页重新开始。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
+      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">任务会持续运行，切换模块或章节不会自动暂停。点击“暂停任务”可稍后继续；点击“结束任务”会退出本次任务。遇到验证码或无法处理的题目时会提示你处理。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
       <div class="card ai-card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，向模型发送当前可见题目。答案可能有误，请留意提交结果。</p>
         <p id="ai-config-summary" class="ai-config-summary">正在读取 AI 配置…</p>
           <div class="ai-balance-row"><span id="ai-balance" aria-live="polite">API 余额：正在读取…</span><button id="ai-balance-refresh" class="secondary" type="button" disabled>刷新</button></div>
