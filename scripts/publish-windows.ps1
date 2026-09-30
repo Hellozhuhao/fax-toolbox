@@ -32,6 +32,9 @@ if (Test-Path -LiteralPath $resolvedDist) { Remove-Item -LiteralPath $resolvedDi
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 & dotnet publish $project -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $dist --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET self-contained publish failed' }
+# Debug symbols can contain developer-machine paths; API XML files are not runtime assets.
+Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Extension -in @('.pdb', '.xml') } |
+    Remove-Item -Force
 
 foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'modules\chaoxing', 'packages\page-agent')) {
     $source = Join-Path $root $relative

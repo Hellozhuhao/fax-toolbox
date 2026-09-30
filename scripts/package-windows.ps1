@@ -36,8 +36,8 @@ if ($Test) {
         [IO.Compression.ZipFile]::ExtractToDirectory($archive, $extract)
         $output = Join-Path $cacheRoot 'portable-smoke.txt'
         $process = Start-Process -FilePath (Join-Path $extract 'FaxToolbox.Windows.exe') `
-            -ArgumentList @('--module-switch-smoke', $output) -WindowStyle Hidden -PassThru
-        if (-not $process.WaitForExit(30000)) {
+            -ArgumentList @('--tabs-smoke', $output) -WindowStyle Hidden -PassThru
+        if (-not $process.WaitForExit(45000)) {
             Stop-Process -Id $process.Id -Force
             throw 'Relocated package smoke timed out'
         }

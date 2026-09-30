@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test
 powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 ```
 
-`-Test` 同时运行 Rust 单元测试及演示、课程、章节目录、AI 设置、模块切换等隐藏窗口端到端测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)；代码边界与新模块开发步骤见 [Rust 后端架构](apps/rust-backend/ARCHITECTURE.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
+`-Test` 同时运行 Rust 单元测试及演示、课程、章节目录、AI 设置、多标签与加载失败重试等隐藏窗口端到端测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)；代码边界与新模块开发步骤见 [Rust 后端架构](apps/rust-backend/ARCHITECTURE.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
 
 ## Windows EXE 发布
 
@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 AI 答题设置可从学习通工作台、系统选项或快速操作打开。支持 DeepSeek、阿里百炼、硅基流动与 OpenAI 预设，选择后只需填写 API Key；自定义选项可填写兼容 Chat Completions 的 HTTPS 完整地址和模型名，不需要密钥的服务可以留空。工作台与系统选项显示已保存的服务商、模型、接口和密钥状态，并提供只发送示例题的“测试连接”。DeepSeek 配置会使用官方只读接口显示 API 余额并支持手动刷新；其他服务商尚无已适配的余额接口，界面会明确提示。是否有免费额度、额度大小与可用模型由服务商决定。没有本章答案或已有答案与页面不匹配时，工具箱会尝试读取当前可见题目并请求模型；模型返回不完整答案、请求超时或页面发生变化时显示原因并允许用户处理。密钥由 Windows 当前用户加密保存；切换到其他服务或模型时不会沿用旧密钥。当前题目文本和选项会发送给配置的服务。验证答案格式可运行 `dotnet run --project tests/ai-answers/AiAnswers.csproj`；本机保存了密钥时，加 `-- --live` 可主动发送一条短测试请求，`-- --live-balance` 可只读验证余额接口。
 
-活动栏按“首页 → 模块 → 工作台 → 活动 → 系统选项”组织；密码箱位于系统选项内。工作台顶部可在学习通和演示模块间直接切换。首次进入学习通工作台时打开登录页，切换模块再返回会保留当前网页和章节；若学习任务正在运行，切离时会先暂停。“打开学习通首页”按钮用于重新导航到首页。暂停、结束、重新开始及 AI 错误的操作规则见 [学习通工作台状态约定](modules/chaoxing/UX_STATES.md)。
+活动栏按“首页 → 模块 → 工作台 → 活动 → 系统选项”组织；密码箱位于系统选项内。顶部“＋”会新建工具箱首页标签；从首页打开学习通或演示模块会创建独立任务标签，同一模块也可多开。切换标签保留各自的网页和任务状态；关闭标签会结束对应任务，点击窗口关闭按钮则退出全部任务。学习通加载失败时显示原因和重试按钮；“打开学习通”也可在失败后重新导航。暂停、结束、重新开始及 AI 错误的操作规则见 [学习通工作台状态约定](modules/chaoxing/UX_STATES.md)。
 
 工具箱内的 WebView2 网页会话直接联网，不使用 Windows 系统代理、`HTTPS_PROXY` 或其他代理环境变量；Rust 后端进程也不会继承代理环境变量。当前预览版通过 WebView2 的 `--no-proxy-server` 参数强制直连。如果本机无法直连目标网站，应用会报告加载失败，不会自动切回代理。
 

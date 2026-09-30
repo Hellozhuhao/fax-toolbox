@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         Title="Fax Toolbox" Width="1280" Height="800" MinWidth="780" MinHeight="560"
-        Background="#F5F5F7" Loaded="Window_Loaded" Closed="Window_Closed">
+        Background="#F5F5F7" Loaded="Window_Loaded" Closing="Window_Closing" Closed="Window_Closed">
     <Window.Resources>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#007AFF" />
@@ -52,30 +52,12 @@
             <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="130" Margin="4"
                     Style="{StaticResource ToolbarButtonStyle}" Click="ToggleControls_Click" Content="展开学习页面" />
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,3,0,3">
-                <StackPanel x:Name="CourseTaskTab" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,5,0">
-                    <Button x:Name="CourseTaskTabButton" MinWidth="124" Height="35" Style="{StaticResource TaskTabButtonStyle}"
-                            Click="CourseTaskTab_Click" Content="学习通" />
-                    <Button x:Name="CloseCourseTaskTabButton" Width="27" Height="35" Margin="2,0,0,0" Padding="0"
-                            Style="{StaticResource TaskTabButtonStyle}" Click="CloseCourseTaskTab_Click"
-                            ToolTip="关闭标签，任务继续运行" Content="×" />
-                </StackPanel>
-                <StackPanel x:Name="DemoTaskTab" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,5,0">
-                    <Button x:Name="DemoTaskTabButton" MinWidth="124" Height="35" Style="{StaticResource TaskTabButtonStyle}"
-                            Click="DemoTaskTab_Click" Content="页面演示" />
-                    <Button x:Name="CloseDemoTaskTabButton" Width="27" Height="35" Margin="2,0,0,0" Padding="0"
-                            Style="{StaticResource TaskTabButtonStyle}" Click="CloseDemoTaskTab_Click"
-                            ToolTip="关闭标签，任务继续运行" Content="×" />
-                </StackPanel>
+                <StackPanel x:Name="TaskTabsPanel" Orientation="Horizontal" />
                 <Button x:Name="NewTaskTabButton" Width="35" Height="35" Padding="0" Style="{StaticResource TaskTabButtonStyle}"
-                        Click="NewTaskTab_Click" ToolTip="新建任务标签" Content="＋">
-                    <Button.ContextMenu><ContextMenu>
-                        <MenuItem Header="学习通" Click="NewCourseTaskTab_Click" />
-                        <MenuItem Header="页面事件演示" Click="NewDemoTaskTab_Click" />
-                    </ContextMenu></Button.ContextMenu>
-                </Button>
+                        Click="NewTaskTab_Click" ToolTip="新建首页标签" Content="＋" />
             </StackPanel>
             <TextBlock x:Name="ToolbarTitle" Margin="14,0" VerticalAlignment="Center" Foreground="#6E6E73"
-                       Text="关闭标签不会结束任务" />
+                       Text="关闭标签将结束该标签的任务" />
         </DockPanel>
         <wv2:WebView2 x:Name="ShellView" Grid.Row="1" Grid.Column="0" />
         <GridSplitter x:Name="WorkspaceSplitter" Grid.Row="1" Grid.Column="1" Width="6"
@@ -83,5 +65,16 @@
                       ResizeBehavior="PreviousAndNext" Visibility="Collapsed" />
         <wv2:WebView2 x:Name="ModuleView" Grid.Row="1" Grid.Column="2" />
         <wv2:WebView2 x:Name="CourseView" Grid.Row="1" Grid.Column="2" Visibility="Collapsed" />
+        <Border x:Name="CourseOverlay" Grid.Row="1" Grid.Column="2" Visibility="Collapsed"
+                Background="#F5F5F7" Padding="32">
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440">
+                <TextBlock x:Name="CourseOverlayTitle" Text="正在打开学习通…" FontSize="24" FontWeight="SemiBold"
+                           Foreground="#1D1D1F" Margin="0,0,0,12" />
+                <TextBlock x:Name="CourseOverlayDetail" Text="页面加载中，请稍候。" FontSize="15"
+                           TextWrapping="Wrap" Foreground="#6E6E73" Margin="0,0,0,22" />
+                <Button x:Name="CourseRetryButton" Content="重试打开学习通" Height="40" MinWidth="180"
+                        Visibility="Collapsed" Style="{StaticResource ToolbarButtonStyle}" Click="CourseRetry_Click" />
+            </StackPanel>
+        </Border>
     </Grid>
 </Window>

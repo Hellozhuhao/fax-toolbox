@@ -22,6 +22,8 @@ public partial class MainWindow : Window
     private readonly bool smokeMode;
     private readonly bool courseSmokeMode;
     private readonly bool courseLiveSmokeMode;
+    private readonly bool tabSmokeMode;
+    private readonly bool tabSmokeChild;
     private readonly string? smokeOutput;
     private readonly DispatcherTimer smokeTimer = new() { Interval = TimeSpan.FromSeconds(20) };
     private BackendClient? backend;
@@ -32,20 +34,27 @@ public partial class MainWindow : Window
     private string detail = "正在启动…";
     private string root = "";
     private readonly string? smokeDataDirectory;
+    private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
     private bool controlsCollapsed;
 
-    public MainWindow()
+    public MainWindow() : this(false) { }
+
+    private MainWindow(bool childForTabSmoke)
     {
         var args = Environment.GetCommandLineArgs();
+        tabSmokeMode = args.Length == 3 && args[1] == "--tabs-smoke";
+        tabSmokeChild = childForTabSmoke;
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
             "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
-            "--course-ai-smoke" or "--course-controls-smoke" or "--module-switch-smoke";
+            "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
-        smokeDataDirectory = smokeMode ? Path.Combine(Path.GetTempPath(), "FaxToolbox-smoke-" + Guid.NewGuid().ToString("N")) : null;
+        smokeDataDirectory = tabSmokeMode ? tabsSmokeDataDirectory ??=
+                Path.Combine(Path.GetTempPath(), "FaxToolbox-tabs-smoke-" + Guid.NewGuid().ToString("N")) :
+            smokeMode ? Path.Combine(Path.GetTempPath(), "FaxToolbox-smoke-" + Guid.NewGuid().ToString("N")) : null;
         Trace("before XAML initialization; args=" + args.Length);
         try { InitializeComponent(); }
         catch (Exception error)
@@ -55,12 +64,13 @@ public partial class MainWindow : Window
         }
         Trace("constructor");
         InitializeCatalog();
+        RegisterTaskWindow();
         if (smokeMode)
         {
             Left = -3000;
             Top = -3000;
             ShowInTaskbar = false;
-            if (courseLiveSmokeMode) smokeTimer.Interval = TimeSpan.FromSeconds(35);
+            if (courseLiveSmokeMode || tabSmokeMode) smokeTimer.Interval = TimeSpan.FromSeconds(40);
             smokeTimer.Tick += (_, _) => FailSmoke("WebView2/Rust 端到端验证超时");
             smokeTimer.Start();
         }
@@ -91,7 +101,8 @@ public partial class MainWindow : Window
             var packagedBackend = Path.Combine(root, "backend", "toolbox-backend.exe");
             var backendPath = File.Exists(packagedBackend) ? packagedBackend :
                 Path.Combine(root, "apps", "rust-backend", "target", "debug", "toolbox-backend.exe");
-            backend = await BackendClient.StartAsync(backendPath, smokeDataDirectory);
+            backend = smokeMode && !tabSmokeMode ? await BackendClient.StartAsync(backendPath, smokeDataDirectory) :
+                await BackendPool.AcquireAsync(backendPath, smokeDataDirectory);
             Trace("backend ping passed");
             if (smokeMode && Environment.GetCommandLineArgs()[1] != "--course-ai-smoke")
             {
@@ -175,11 +186,15 @@ public partial class MainWindow : Window
         {
             if (!string.Equals(args.Uri, ModuleUrl, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
         };
-        CourseView.CoreWebView2.NavigationStarting += (_, args) =>
-        {
-            if (!IsChaoxingUrl(args.Uri)) args.Cancel = true;
-        };
+        CourseView.CoreWebView2.NavigationStarting += CourseNavigationStarting;
         CourseView.CoreWebView2.NavigationCompleted += (_, args) => ModuleNavigationCompleted(args);
+        CourseView.CoreWebView2.ProcessFailed += (_, args) =>
+        {
+            if (activeModule != "chaoxing") return;
+            var reason = "学习通页面进程已中断（" + args.ProcessFailedKind + "）。请点击重试打开学习通。";
+            ShowCourseError(reason);
+            PublishCourse("ERROR", reason, false);
+        };
         CourseView.CoreWebView2.FrameCreated += CourseFrameCreated;
         ShellView.CoreWebView2.WebMessageReceived += UiMessageReceived;
         ModuleView.CoreWebView2.WebMessageReceived += ModuleMessageReceived;
@@ -197,6 +212,14 @@ public partial class MainWindow : Window
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
+            if (tabSmokeChild) return;
+            if (initialModule is not null)
+            {
+                var target = initialModule;
+                initialModule = null;
+                await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "window.FaxToolboxUi?." + (target == "course" ? "openCourse" : "openDemo") + "()");
+            }
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-home-preview.png");
@@ -250,7 +273,7 @@ public partial class MainWindow : Window
     {
         state = nextState;
         detail = nextDetail;
-        UpdateTaskTabs();
+        RefreshTaskTabs();
         Title = $"Fax Toolbox — {nextState}";
         if (ShellView.CoreWebView2 is not null)
         {
@@ -275,10 +298,6 @@ public partial class MainWindow : Window
             {
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() == "module");
-                    selectedTaskTab = (message.TryGetProperty("view", out var view) ? view.GetString() : null) switch
-                    {
-                        "course" => "course", "demo" => "demo", _ => null
-                    };
                     UpdateTaskTabs();
                     break;
                 case "ui.theme":
@@ -287,8 +306,32 @@ public partial class MainWindow : Window
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
                 case "course.open": await OpenCourseAsync(); break;
-                case "course.activate": await ActivateCourseAsync(); break;
-                case "demo.activate": await ActivateDemoAsync(); break;
+                case "course.activate":
+                    if (assignedModule is not null && assignedModule != "course" && !smokeMode)
+                    {
+                        await RestoreAssignedModuleUiAsync();
+                        OpenModuleInNewTab("course");
+                    }
+                    else
+                    {
+                        assignedModule = "course";
+                        UpdateAllTaskTabs();
+                        await ActivateCourseAsync();
+                    }
+                    break;
+                case "demo.activate":
+                    if (assignedModule is not null && assignedModule != "demo" && !smokeMode)
+                    {
+                        await RestoreAssignedModuleUiAsync();
+                        OpenModuleInNewTab("demo");
+                    }
+                    else
+                    {
+                        assignedModule = "demo";
+                        UpdateAllTaskTabs();
+                        await ActivateDemoAsync();
+                    }
+                    break;
                 case "course.start": await StartCourseAsync(); break;
                 case "course.pause": await CourseCommandAsync("pause"); break;
                 case "course.stop": await CourseCommandAsync("stop"); break;
@@ -461,13 +504,22 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        if (!smokeMode || tabSmokeMode)
+        {
+            TaskWindows.Remove(this);
+            UpdateAllTaskTabs();
+        }
         smokeTimer.Stop();
         catalogTimer.Stop();
         ShellView.Dispose();
         ModuleView.Dispose();
         CourseView.Dispose();
-        backend?.Dispose();
-        if (smokeDataDirectory is not null &&
+        if (backend is not null)
+        {
+            if (smokeMode && !tabSmokeMode) backend.Dispose();
+            else BackendPool.Release(backend);
+        }
+        if (smokeDataDirectory is not null && (!tabSmokeMode || TaskWindows.Count == 0) &&
             smokeDataDirectory.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase) &&
             Directory.Exists(smokeDataDirectory))
         {

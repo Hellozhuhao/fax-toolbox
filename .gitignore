@@ -9,3 +9,20 @@
 *.iml
 *.log
 dist/
+**/WebView2/
+**/User Data/
+**/user-data/
+**/profiles/
+**/vault.json
+**/answers.json
+**/catalog.json
+**/ai-settings.json
+**/cookies*
+**/.env
+**/.env.*
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.pdb
+*.trace
