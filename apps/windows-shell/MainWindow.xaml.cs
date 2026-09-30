@@ -39,7 +39,7 @@ public partial class MainWindow : Window
     {
         var args = Environment.GetCommandLineArgs();
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
-            "--course-video-quiz-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--module-switch-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
@@ -194,6 +194,7 @@ public partial class MainWindow : Window
             }
             Publish(state, detail);
             PublishAiConfiguration();
+            _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             Trace("UI navigation completed");
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
@@ -226,6 +227,10 @@ public partial class MainWindow : Window
                 }
                 if (summary == "正在读取 AI 配置…")
                 { FailSmoke("AI configuration summary was not rendered"); return; }
+                var balance = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('ai-balance').textContent");
+                if ((JsonSerializer.Deserialize<string>(balance) ?? "").Contains("正在读取", StringComparison.Ordinal))
+                { FailSmoke("AI balance status was not rendered"); return; }
                 PassSmoke();
             }
             else if (courseSmokeMode || courseLiveSmokeMode)
@@ -286,6 +291,7 @@ public partial class MainWindow : Window
                 case "ai.configure": ConfigureAi(); break;
                 case "ai.get-config": PublishAiConfiguration(); break;
                 case "ai.test": await TestAiConnectionAsync(); break;
+                case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;

@@ -41,6 +41,14 @@ foreach (var preset in AiProviderPresets.All.Where(item => item.Id != "custom"))
     if (AiProviderPresets.Match(new AiSettings(preset.Endpoint, preset.Model, "")) != preset)
         throw new Exception("provider preset cannot be restored: " + preset.Id);
 }
+var balance = AiBalanceService.Parse(JsonSerializer.SerializeToUtf8Bytes(new
+{
+    is_available = true,
+    balance_infos = new[] { new { currency = "CNY", total_balance = "12.34" } }
+}));
+if (!balance.IsAvailable || balance.Entries.Length != 1 || balance.Entries[0].Total != 12.34m ||
+    AiBalanceService.Supports(new AiSettings(AiProviderPresets.All[1].Endpoint, "qwen-plus", "")))
+    throw new Exception("AI balance parsing or provider support is wrong");
 Console.WriteLine("PASS AI response validation");
 if (args.Contains("--live", StringComparer.Ordinal))
 {
@@ -48,4 +56,12 @@ if (args.Contains("--live", StringComparer.Ordinal))
     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
     await AiAnswerService.TestConnectionAsync(settings, timeout.Token);
     Console.WriteLine("PASS saved AI provider connection and response format");
+}
+if (args.Contains("--live-balance", StringComparer.Ordinal))
+{
+    var settings = AiSettings.Load() ?? throw new Exception("No saved AI provider configuration");
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    var current = await AiBalanceService.QueryAsync(settings, timeout.Token);
+    if (current.Entries.Length == 0) throw new Exception("Balance API returned no balances");
+    Console.WriteLine("PASS saved AI provider balance query");
 }

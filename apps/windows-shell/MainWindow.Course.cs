@@ -13,6 +13,7 @@ public partial class MainWindow
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
+    private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
     private const string LoginFixture = "https://mooc1.chaoxing.com/login.html";
@@ -21,6 +22,7 @@ public partial class MainWindow
         "--course-smoke" => CourseFixture,
         "--course-video-smoke" => VideoFixture,
         "--course-video-quiz-smoke" => VideoQuizFixture,
+        "--course-result-smoke" => ResultFixture,
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
@@ -315,7 +317,7 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
-            if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-result-smoke")
                 await backend.RequestAsync("answers.put", new
                 {
                     chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
@@ -543,7 +545,8 @@ public partial class MainWindow
             var observation = message.GetProperty("observation").GetString();
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
                 "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
-                "QUIZ_SUBMIT_UNCONFIRMED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
+                "QUIZ_SUBMIT_UNCONFIRMED" or "QUIZ_RESULT_READY" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or
+                "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
             var chapter = ChapterFromUrl(args.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = catalogCurrentId;
             if (string.IsNullOrEmpty(chapter)) chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
@@ -580,7 +583,8 @@ public partial class MainWindow
                 "PLAY_VIDEO" => "已发现视频，正在播放。",
                 "SWITCH_VIDEO_TAB" => "正在打开视频页签。",
                 "ADVANCE_AFTER_VIDEO" => "视频已结束，正在检查本章测验。",
-                "NEXT_UNIT" => "当前任务点已结束，正在切换下一节。",
+                "NEXT_UNIT" => observation == "QUIZ_RESULT_READY" ?
+                    "测验结果已出现，正在进入下一节。" : "当前任务点已结束，正在切换下一节。",
                 "DOCUMENT_NEXT" => "正在阅读文档并翻页。",
                 "DISMISS_PROMPT" => "已处理普通继续播放提示。",
                 "FILL_QUIZ" => "已匹配本章答案，正在填写。",

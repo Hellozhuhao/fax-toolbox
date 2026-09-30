@@ -10,7 +10,7 @@
 {"v":1,"id":"ui-request-id","command":"session.start"}
 ```
 
-`command` 由 C# 明确列举；演示模块允许 `demo.activate`、`session.start/cancel`，学习模块允许 `course.activate/open/start/pause/stop/jump`、`answers.save`，密码箱允许 `vault.list/save/delete`。`ai.configure` 只打开原生设置窗口；`ai.get-config` 返回不含密钥的配置摘要，`ai.test` 发起用户点击触发的短连接测试。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
+`command` 由 C# 明确列举；演示模块允许 `demo.activate`、`session.start/cancel`，学习模块允许 `course.activate/open/start/pause/stop/jump`、`answers.save`，密码箱允许 `vault.list/save/delete`。`ai.configure` 只打开原生设置窗口；`ai.get-config` 返回不含密钥的配置摘要，`ai.test` 发起用户点击触发的短连接测试，`ai.balance.refresh` 使用 DeepSeek 官方只读余额接口并返回 `ai.balance` 状态，不向 UI 发送 API Key。其他服务商的余额接口尚未适配，界面显示“暂不支持”。C# 检查来源 URL、消息长度（不超过 16 KiB）、版本、请求 ID 与命令，再执行。C# 使用 `PostWebMessageAsJson` 回送状态对象：
 
 ```json
 {"v":1,"kind":"status","state":"OBSERVING","detail":"已发现视频"}
@@ -81,7 +81,7 @@ C# 启动一个 Rust 子进程，使用重定向的标准输入/输出进行一�
 | `course.pause` / `course.stop` | 暂停决策或停止适配器 |
 | `answers.save` | 保存章节编号与逐题字母答案 |
 
-页面观察格式为 `{v:1,kind:"course.observe",sessionId,generation,seq,observation,chapter}`。C# 校验 HTTPS 学习通来源、当前会话、代数及 16 KiB 上限，再给 Rust 提交 `course.observe`。Rust 根据状态和观察返回 `PLAY_VIDEO`、`ADVANCE_AFTER_VIDEO`、`NEXT_UNIT`、`DOCUMENT_NEXT`、`SWITCH_VIDEO_TAB`、`DISMISS_PROMPT`、`FILL_QUIZ` 或 `NEEDS_ANSWERS`。`ADVANCE_AFTER_VIDEO` 先检查同章测验页签，没有时才进入下一节。答题提交依次上报 `QUIZ_CONFIRM_PENDING` 和 `QUIZ_SUBMITTED`；Rust 返回 `CONFIRM_QUIZ_SUBMISSION` 供外层页及题目内嵌页寻找确认弹窗，随后返回 `ACK_QUIZ_SUBMISSION` 通知各页完成。十秒内无法确认时上报 `QUIZ_SUBMIT_UNCONFIRMED`，后端转为 `NEEDS_INPUT`。C# 只把动作发回当前会话的 WebView2 页面或 frame。Rust 还支持 `course.open`、`course.command`、`course.state`、`answers.put`、`answers.list`。未知测验或题目结构不匹配时，状态变为 `NEEDS_INPUT`，等待人工处理。
+页面观察格式为 `{v:1,kind:"course.observe",sessionId,generation,seq,observation,chapter}`。C# 校验 HTTPS 学习通来源、当前会话、代数及 16 KiB 上限，再给 Rust 提交 `course.observe`。Rust 根据状态和观察返回 `PLAY_VIDEO`、`ADVANCE_AFTER_VIDEO`、`NEXT_UNIT`、`DOCUMENT_NEXT`、`SWITCH_VIDEO_TAB`、`DISMISS_PROMPT`、`FILL_QUIZ` 或 `NEEDS_ANSWERS`。`ADVANCE_AFTER_VIDEO` 先检查同章测验页签，没有时才进入下一节。答题提交依次上报 `QUIZ_CONFIRM_PENDING` 和 `QUIZ_SUBMITTED`；Rust 返回 `CONFIRM_QUIZ_SUBMISSION` 供外层页及题目内嵌页寻找确认弹窗，随后返回 `ACK_QUIZ_SUBMISSION` 通知各页完成。测验结果出现后上报 `QUIZ_RESULT_READY`，Rust 才返回 `NEXT_UNIT`。十秒内无法确认时上报 `QUIZ_SUBMIT_UNCONFIRMED`，后端转为 `NEEDS_INPUT`。C# 只把动作发回当前会话的 WebView2 页面或 frame。Rust 还支持 `course.open`、`course.command`、`course.state`、`answers.put`、`answers.list`。未知测验或题目结构不匹配时，状态变为 `NEEDS_INPUT`，等待人工处理。
 
 ## 密码箱边界
 

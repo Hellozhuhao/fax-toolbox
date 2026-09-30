@@ -202,6 +202,7 @@ impl CourseEngine {
             }
             "QUIZ_CONFIRM_PENDING" => ("CONFIRM_QUIZ_SUBMISSION", Value::Null),
             "QUIZ_SUBMITTED" => ("ACK_QUIZ_SUBMISSION", Value::Null),
+            "QUIZ_RESULT_READY" => ("NEXT_UNIT", Value::Null),
             _ => return Err(Fault("BAD_REQUEST", "unsupported course observation")),
         };
         session.last_action = action.to_owned();

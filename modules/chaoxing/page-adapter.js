@@ -71,9 +71,16 @@
         }
         return null;
       }
+      function quizResultReady() {
+        return /我的答案\s*[:：]/.test(document.body?.innerText || '');
+      }
       function inspectQuizSubmission() {
         if (!quizSubmitPhase) return false;
-        if (quizSubmitPhase === 'confirmed' || quizSubmitPhase === 'needs-review') return true;
+        if (quizSubmitPhase === 'confirmed') {
+          if (quizResultReady()) report('QUIZ_RESULT_READY');
+          return true;
+        }
+        if (quizSubmitPhase === 'needs-review') return true;
         const confirm = confirmationButton();
         if (confirm) {
           quizSubmitPhase = 'confirmed';
@@ -96,8 +103,11 @@
       function nextUnit() {
         if (window.top !== window) return;
         const button = document.querySelector('#next, .nextBtn, .next_btn, [class*="next_btn"]') ||
-          byText(['下一节', '下一章', '下一个任务点']);
-        if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') { button.click(); return; }
+          byText(['下一节', '下一章', '下一个任务点']) ||
+          Array.from(document.querySelectorAll('div,span')).find(element => visible(element) &&
+            /^(下一节|下一章|下一个任务点)$/.test((element.innerText || '').trim()));
+        if (button && visible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true')
+        { button.click(); return; }
         const tree = document.querySelector('#coursetree, .coursetree, #catalog, .catalog, #chapterTree, .ztree');
         if (!tree) return;
         const nodes = Array.from(tree.querySelectorAll('a, .unit, .ncells')).filter(node =>
@@ -230,6 +240,7 @@
         if (!active || !running) return;
         if (challengeVisible()) { report('CHALLENGE_FOUND'); return; }
         if (inspectQuizSubmission()) return;
+        if (quizResultReady()) { report('QUIZ_RESULT_READY'); return; }
         if (benignPromptButton()) { report('PROMPT_FOUND'); return; }
         if (/\/knowledge\/cards/i.test(location.pathname)) {
           const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>

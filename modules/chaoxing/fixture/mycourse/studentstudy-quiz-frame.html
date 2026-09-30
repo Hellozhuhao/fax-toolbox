@@ -8,6 +8,11 @@
   <button id="submit" type="button" disabled onclick="parent.showConfirmation()">提交</button>
   <script>
     function ready() { document.getElementById('submit').disabled = !document.querySelector('input[value="A"]').checked; }
+    function showResult() {
+      const result = document.createElement('p');
+      result.textContent = '我的答案：A 33.3 分';
+      document.body.append(result);
+    }
   </script>
 </body>
 </html>

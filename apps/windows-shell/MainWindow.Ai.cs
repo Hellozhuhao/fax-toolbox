@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Text.Json;
@@ -9,6 +10,7 @@ namespace FaxToolbox.Windows;
 public partial class MainWindow
 {
     private CancellationTokenSource? aiAnswerCancellation;
+    private CancellationTokenSource? aiBalanceCancellation;
     private bool aiTestInProgress;
 
     private void PublishAiStatus(string detail)
@@ -31,6 +33,7 @@ public partial class MainWindow
                 aiAnswerCancellation?.Cancel();
                 PublishAiConfiguration();
                 PublishAiStatus($"已保存 {dialog.Settings.Model}。下次答题将使用此配置。");
+                _ = RefreshAiBalanceAsync();
             }
         }
         catch (Exception error) when (error is InvalidDataException or JsonException)
@@ -50,7 +53,8 @@ public partial class MainWindow
             {
                 v = 1, kind = "ai.config", configured = settings is not null,
                 provider = preset.Name, model = settings?.Model ?? "",
-                endpoint = settings?.Endpoint ?? "", hasKey = !string.IsNullOrEmpty(settings?.EncryptedKey)
+                endpoint = settings?.Endpoint ?? "", hasKey = !string.IsNullOrEmpty(settings?.EncryptedKey),
+                balanceSupported = AiBalanceService.Supports(settings)
             }));
         }
         catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
@@ -69,6 +73,64 @@ public partial class MainWindow
         {
             v = 1, kind = "ai.test.status", state, detail
         }));
+    }
+
+    private void PublishAiBalance(string state, string detail)
+    {
+        if (ShellView.CoreWebView2 is null) return;
+        ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        {
+            v = 1, kind = "ai.balance", state, detail
+        }));
+    }
+
+    private async Task RefreshAiBalanceAsync()
+    {
+        if (smokeMode)
+        {
+            PublishAiBalance("unavailable", "测试环境不查询账户余额。");
+            return;
+        }
+        aiBalanceCancellation?.Cancel();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        aiBalanceCancellation = cancellation;
+        try
+        {
+            var settings = AiSettings.Load();
+            if (settings is null)
+            {
+                PublishAiBalance("unavailable", "保存 AI 配置后可查看余额。");
+                return;
+            }
+            if (!AiBalanceService.Supports(settings))
+            {
+                PublishAiBalance("unavailable", "当前服务商尚无已适配的余额查询接口。");
+                return;
+            }
+            PublishAiBalance("loading", "正在查询 API 余额…");
+            var balance = await AiBalanceService.QueryAsync(settings, cancellation.Token);
+            if (!ReferenceEquals(aiBalanceCancellation, cancellation)) return;
+            var totals = string.Join(" · ", balance.Entries.Select(entry =>
+                (entry.Currency == "CNY" ? "¥" : "$") +
+                entry.Total.ToString("0.00", CultureInfo.InvariantCulture)));
+            PublishAiBalance("success", $"API 余额：{(totals.Length > 0 ? totals : "未返回金额")} · " +
+                (balance.IsAvailable ? "可用" : "不可用") + $" · {DateTime.Now:HH:mm} 更新");
+        }
+        catch (OperationCanceledException) when (!ReferenceEquals(aiBalanceCancellation, cancellation)) { }
+        catch (OperationCanceledException)
+        {
+            PublishAiBalance("error", "余额查询超时，请稍后刷新。");
+        }
+        catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
+            System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            if (ReferenceEquals(aiBalanceCancellation, cancellation))
+                PublishAiBalance("error", error.Message);
+        }
+        finally
+        {
+            if (ReferenceEquals(aiBalanceCancellation, cancellation)) aiBalanceCancellation = null;
+        }
     }
 
     private async Task TestAiConnectionAsync()
