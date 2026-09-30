@@ -50,11 +50,11 @@ public partial class MainWindow
             {
                 Content = label, MinWidth = 105, Height = 35,
                 Style = (Style)FindResource("TaskTabButtonStyle"),
-                Background = Color(selected ? darkTaskTabs ? "#0A84FF" : "#E5F1FF" :
-                    darkTaskTabs ? "#2C2C2E" : "#FFFFFF"),
-                Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#0068D9" :
-                    darkTaskTabs ? "#F5F5F7" : "#1D1D1F"),
-                BorderBrush = Color(darkTaskTabs ? "#48484A" : "#DEDEE3")
+                Background = Color(selected ? darkTaskTabs ? "#7858EB" : "#F5E5DD" :
+                    darkTaskTabs ? "#24252C" : "#FFFFFF"),
+                Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#A94F33" :
+                    darkTaskTabs ? "#F5F5F8" : "#171716"),
+                BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1")
             };
             open.Click += (_, _) => ActivateTaskWindow(window);
             var close = new Button
@@ -62,18 +62,18 @@ public partial class MainWindow
                 Content = "×", Width = 27, Height = 35, Margin = new Thickness(2, 0, 0, 0),
                 Padding = new Thickness(0), Style = (Style)FindResource("TaskTabButtonStyle"),
                 ToolTip = "关闭标签并结束此任务",
-                Background = Color(darkTaskTabs ? "#2C2C2E" : "#FFFFFF"),
-                Foreground = Color(darkTaskTabs ? "#F5F5F7" : "#515158"),
-                BorderBrush = Color(darkTaskTabs ? "#48484A" : "#DEDEE3")
+                Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF"),
+                Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E"),
+                BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1")
             };
             close.Click += (_, _) => CloseTaskWindow(window);
             tab.Children.Add(open);
             tab.Children.Add(close);
             TaskTabsPanel.Children.Add(tab);
         }
-        NewTaskTabButton.Background = Color(darkTaskTabs ? "#2C2C2E" : "#FFFFFF");
-        NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F7" : "#515158");
-        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#48484A" : "#DEDEE3");
+        NewTaskTabButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
+        NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
+        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
     }
 
     private MainWindow CreateTaskWindow(string? module = null)

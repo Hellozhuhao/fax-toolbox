@@ -6,7 +6,9 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
   <title>Fax Toolbox</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme.css">
   <script defer src="app.js"></script>
+  <script defer src="button-glow.js"></script>
 </head>
 <body>
   <div class="app">
@@ -26,7 +28,7 @@
 
     <section id="view-home" class="view">
       <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
-      <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，各司其职。</h2><p>从这里启动模块、查看状态，或管理本地数据。每个网页模块拥有独立的会话。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true">F</div></div>
+      <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，<br><span class="hero-accent">各司其职。</span></h2><p>从这里启动模块、查看状态，或管理本地数据。每个网页模块拥有独立的会话。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true">F</div></div>
       <div class="section-head"><div><span class="eyebrow">QUICK ACCESS</span><h2>常用模块</h2></div><button class="text-button" type="button" data-view="modules">查看全部模块 →</button></div>
       <div class="module-grid"><button class="module-card" type="button" data-open="course"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo"><span class="module-icon demo-icon">◇</span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
       <div class="section-head"><div><span class="eyebrow">OVERVIEW</span><h2>运行概览</h2></div></div>
