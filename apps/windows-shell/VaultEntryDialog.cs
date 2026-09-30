@@ -14,6 +14,13 @@ internal sealed class VaultEntryDialog : Window
 
     public VaultEntryDialog(Window owner)
     {
+        var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
+        static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
+        var background = Brush(dark ? "#202126" : "#F5F5F3");
+        var surface = Brush(dark ? "#17181C" : "#FFFFFF");
+        var text = Brush(dark ? "#F5F5F8" : "#171716");
+        var border = Brush(dark ? "#35363E" : "#E6E4E1");
+        var accent = Brush(dark ? "#7858EB" : "#D66B49");
         Owner = owner;
         Title = "保存学习通账号";
         Width = 380;
@@ -21,14 +28,28 @@ internal sealed class VaultEntryDialog : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         ShowInTaskbar = false;
-        Background = new SolidColorBrush(Color.FromRgb(23, 32, 48));
-        Foreground = Brushes.White;
+        Background = background;
+        Foreground = text;
         var panel = new StackPanel { Margin = new Thickness(27) };
         panel.Children.Add(new TextBlock { Text = "学习通账号", FontWeight = FontWeights.SemiBold });
+        username.Background = surface; username.Foreground = text; username.BorderBrush = border;
+        username.Padding = new Thickness(8, 6, 8, 6);
         panel.Children.Add(username);
         panel.Children.Add(new TextBlock { Text = "密码", FontWeight = FontWeights.SemiBold });
+        password.Background = surface; password.Foreground = text; password.BorderBrush = border;
+        password.Padding = new Thickness(8, 6, 8, 6);
         panel.Children.Add(password);
-        var save = new Button { Content = "加密保存", Height = 37, IsDefault = true };
+        var buttonFrame = new FrameworkElementFactory(typeof(Border));
+        buttonFrame.SetValue(Border.CornerRadiusProperty, new CornerRadius(19));
+        buttonFrame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
+        var buttonContent = new FrameworkElementFactory(typeof(ContentPresenter));
+        buttonContent.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+        buttonContent.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+        buttonFrame.AppendChild(buttonContent);
+        var save = new Button { Content = "加密保存", Height = 37, IsDefault = true,
+            Background = accent, Foreground = Brushes.White,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Template = new ControlTemplate(typeof(Button)) { VisualTree = buttonFrame } };
         save.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(username.Text) || username.Text.Length > 128 || password.Password.Length == 0)

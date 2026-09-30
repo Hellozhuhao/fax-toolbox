@@ -382,11 +382,16 @@ public partial class MainWindow : Window
         darkTaskTabs = dark;
         UpdateTaskTabs();
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
-        BrowserToolbar.Background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
-        ToolbarTitle.Foreground = Brush(dark ? "#98989F" : "#6E6E73");
-        WorkspaceSplitter.Background = Brush(dark ? "#38383A" : "#D2D2D7");
-        ToggleControlsButton.Background = Brush(dark ? "#0A84FF" : "#007AFF");
+        Background = Brush(dark ? "#202126" : "#F5F5F3");
+        BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F5F5F3");
+        ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
+        WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
+        var accent = Brush(dark ? "#7858EB" : "#D66B49");
+        ToggleControlsButton.Background = accent;
+        CourseRetryButton.Background = accent;
+        CourseOverlay.Background = Brush(dark ? "#202126" : "#F5F5F3");
+        CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
+        CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
     }
 
     private async Task StartSessionAsync()

@@ -29,12 +29,12 @@ internal sealed class AiSettingsDialog : Window
         previous = previousSettings;
         selected = AiProviderPresets.Match(previous);
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
-        background = Brush(dark ? "#1C1C1E" : "#F5F5F7");
-        surface = Brush(dark ? "#2C2C2E" : "#FFFFFF");
-        text = Brush(dark ? "#F5F5F7" : "#1D1D1F");
-        subtle = Brush(dark ? "#A1A1A6" : "#6E6E73");
-        border = Brush(dark ? "#48484A" : "#DEDDE2");
-        accent = Brush(dark ? "#0A84FF" : "#007AFF");
+        background = Brush(dark ? "#202126" : "#F5F5F3");
+        surface = Brush(dark ? "#17181C" : "#FFFFFF");
+        text = Brush(dark ? "#F5F5F8" : "#171716");
+        subtle = Brush(dark ? "#A3A3AD" : "#74716E");
+        border = Brush(dark ? "#35363E" : "#E6E4E1");
+        accent = Brush(dark ? "#7858EB" : "#D66B49");
         Owner = owner; Title = "配置 AI 服务";
         Width = 620; Height = 625; MinWidth = 540; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -44,7 +44,7 @@ internal sealed class AiSettingsDialog : Window
         KeyDown += (_, args) => { if (args.Key == Key.Escape) Close(); };
 
         var frame = new Border { Background = background, BorderBrush = border, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(18), Margin = new Thickness(12),
+            CornerRadius = new CornerRadius(26), Margin = new Thickness(12),
             Effect = new DropShadowEffect { BlurRadius = 24, ShadowDepth = 7, Opacity = dark ? .45 : .18 } };
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -83,7 +83,7 @@ internal sealed class AiSettingsDialog : Window
         }
         body.Children.Add(providers);
         var summaryCard = new Border { Background = surface, BorderBrush = border, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(12), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 18) };
+            CornerRadius = new CornerRadius(18), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 18) };
         summary.TextWrapping = TextWrapping.Wrap; summary.FontSize = 12; summary.Foreground = subtle;
         summaryCard.Child = summary; body.Children.Add(summaryCard);
 
@@ -118,7 +118,7 @@ internal sealed class AiSettingsDialog : Window
     private Button PlainButton(string value)
     {
         var frame = new FrameworkElementFactory(typeof(Border));
-        frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
+        frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(20));
         frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
         frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
         frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
@@ -136,7 +136,7 @@ internal sealed class AiSettingsDialog : Window
     private Border InputFrame(Control field, Thickness margin) => new()
     {
         Child = field, Background = surface, BorderBrush = border,
-        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(9), Margin = margin
+        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Margin = margin
     };
     private void StyleInput(TextBox field)
     {
@@ -152,7 +152,7 @@ internal sealed class AiSettingsDialog : Window
             var active = id == preset.Id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? Brush(background.Color.R < 80 ? "#153754" : "#EAF3FF") : surface;
+            button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
         summary.Text = preset.Id == "custom" ? "填写兼容 Chat Completions 的 HTTPS 接口地址和模型名称。" :

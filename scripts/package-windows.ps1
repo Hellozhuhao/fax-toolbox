@@ -13,7 +13,8 @@ if (-not $source.StartsWith($distRoot + [IO.Path]::DirectorySeparatorChar,
     throw 'Package input must be an existing folder under dist'
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
-    'apps\windows-shell\ui\index.html', 'modules\chaoxing\page-adapter.js')) {
+    'apps\windows-shell\ui\index.html', 'apps\windows-shell\ui\theme.css',
+    'apps\windows-shell\ui\button-glow.js', 'modules\chaoxing\page-adapter.js')) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $relative) -PathType Leaf)) {
         throw "Published package is incomplete: $relative"
     }
