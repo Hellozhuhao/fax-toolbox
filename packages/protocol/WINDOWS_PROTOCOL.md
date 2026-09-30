@@ -81,7 +81,7 @@ C# 启动一个 Rust 子进程，使用重定向的标准输入/输出进行一�
 | `course.pause` / `course.stop` | 暂停决策或停止适配器 |
 | `answers.save` | 保存章节编号与逐题字母答案 |
 
-页面观察格式为 `{v:1,kind:"course.observe",sessionId,generation,seq,observation,chapter}`。C# 校验 HTTPS 学习通来源、当前会话、代数及 16 KiB 上限，再给 Rust 提交 `course.observe`。Rust 根据状态和观察返回 `PLAY_VIDEO`、`NEXT_UNIT`、`DOCUMENT_NEXT`、`SWITCH_VIDEO_TAB`、`DISMISS_PROMPT`、`FILL_QUIZ` 或 `NEEDS_ANSWERS`。C# 只把动作发回对应 WebView2 页面或 frame。Rust 还支持 `course.open`、`course.command`、`course.state`、`answers.put`、`answers.list`。未知测验或题目结构不匹配时，状态变为 `NEEDS_INPUT`，等待人工处理。
+页面观察格式为 `{v:1,kind:"course.observe",sessionId,generation,seq,observation,chapter}`。C# 校验 HTTPS 学习通来源、当前会话、代数及 16 KiB 上限，再给 Rust 提交 `course.observe`。Rust 根据状态和观察返回 `PLAY_VIDEO`、`ADVANCE_AFTER_VIDEO`、`NEXT_UNIT`、`DOCUMENT_NEXT`、`SWITCH_VIDEO_TAB`、`DISMISS_PROMPT`、`FILL_QUIZ` 或 `NEEDS_ANSWERS`。`ADVANCE_AFTER_VIDEO` 先检查同章测验页签，没有时才进入下一节。答题提交依次上报 `QUIZ_CONFIRM_PENDING` 和 `QUIZ_SUBMITTED`；十秒内无法确认时上报 `QUIZ_SUBMIT_UNCONFIRMED`，后端转为 `NEEDS_INPUT`。C# 只把动作发回对应 WebView2 页面或 frame。Rust 还支持 `course.open`、`course.command`、`course.state`、`answers.put`、`answers.list`。未知测验或题目结构不匹配时，状态变为 `NEEDS_INPUT`，等待人工处理。
 
 ## 密码箱边界
 

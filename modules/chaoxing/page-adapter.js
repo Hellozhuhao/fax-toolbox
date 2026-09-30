@@ -16,6 +16,9 @@
       let lastAt = 0;
       let video = null;
       let quizSubmitted = false;
+      let quizSubmitPhase = '';
+      let quizSubmitStartedAt = 0;
+      let quizSubmitButton = null;
       let pendingInspection = 0;
       let pendingAction = 0;
 
@@ -45,6 +48,49 @@
         }
         return null;
       }
+      function buttonLabel(element) {
+        return (element.innerText || element.value || element.getAttribute('aria-label') || '').trim();
+      }
+      function confirmationButton() {
+        const buttons = document.querySelectorAll('button,a,[role="button"],input[type="button"],input[type="submit"]');
+        for (const button of buttons) {
+          if (!visible(button) || !['提交', '确认提交'].includes(buttonLabel(button)) || button === quizSubmitButton) continue;
+          for (let dialog = button.parentElement, depth = 0;
+            dialog && depth < 7 && dialog !== document.body; dialog = dialog.parentElement, depth++) {
+            if (!visible(dialog)) continue;
+            const content = (dialog.innerText || dialog.textContent || '').replace(/\s+/g, ' ').trim();
+            if (content.length > 240 || !/确认提交[？?]?/.test(content) ||
+                /验证码|人机验证|安全验证|风险提示/.test(content) ||
+                dialog.querySelector('input:not([type="button"]):not([type="submit"]),textarea,select,[contenteditable="true"]')) continue;
+            const cancel = byText(['取消'], dialog);
+            if (cancel && cancel !== button && !button.disabled && button.getAttribute('aria-disabled') !== 'true')
+              return button;
+          }
+        }
+        return null;
+      }
+      function inspectQuizSubmission() {
+        if (!quizSubmitPhase) return false;
+        if (quizSubmitPhase === 'confirmed' || quizSubmitPhase === 'needs-review') return true;
+        const confirm = confirmationButton();
+        if (confirm) {
+          quizSubmitPhase = 'confirmed';
+          confirm.click();
+          report('QUIZ_SUBMITTED', true);
+          return true;
+        }
+        const label = quizSubmitButton ? buttonLabel(quizSubmitButton) : '';
+        if (/已提交|提交成功|已完成|查看成绩/.test(label)) {
+          quizSubmitPhase = 'confirmed';
+          report('QUIZ_SUBMITTED', true);
+          return true;
+        }
+        if (Date.now() - quizSubmitStartedAt > 10000) {
+          quizSubmitPhase = 'needs-review';
+          report('QUIZ_SUBMIT_UNCONFIRMED', true);
+        }
+        return true;
+      }
       function nextUnit() {
         if (window.top !== window) return;
         const button = document.querySelector('#next, .nextBtn, .next_btn, [class*="next_btn"]') ||
@@ -60,6 +106,20 @@
           const next = nodes.slice(active + 1).find(node => /^\s*[\d.]+/.test(node.textContent));
           next?.click();
         }
+      }
+      function advanceAfterVideo() {
+        if (window.top !== window) return;
+        const tab = Array.from(document.querySelectorAll('button,a,li,[role="tab"]')).find(element =>
+          visible(element) && /^(?:\d+\s*)?(?:测验|章节测验|检测|章节检测|作业)$/.test(
+            (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim()));
+        if (tab) {
+          const active = tab.getAttribute('aria-selected') === 'true' ||
+            /(^|\s)(active|current|on|selected)(\s|$)/i.test(String(tab.className));
+          if (!active) tab.click();
+          else inspect();
+          return;
+        }
+        nextUnit();
       }
       const questionSelector = '.StudentTimu, .timu, .TiMu, [class*="Timu"], [class*="timu"], .questionLi, .questionWrap, .ans-question, .q_body, .question-item, .question, [data-question-id]';
       function findQuiz() {
@@ -140,8 +200,12 @@
         const submit = byText(['提交', '提交答案', '确认提交']);
         if (!submit || submit.disabled) { report('QUIZ_UNMATCHED', true); return; }
         quizSubmitted = true;
+        quizSubmitPhase = 'requested';
+        quizSubmitStartedAt = Date.now();
+        quizSubmitButton = submit;
         submit.click();
-        report('QUIZ_SUBMITTED', true);
+        report('QUIZ_CONFIRM_PENDING', true);
+        setTimeout(() => { if (active && running) inspect(); }, 100);
       }
       function findDocumentNext() {
         return document.querySelector('.nextPage, .next-page, [aria-label="下一页"]') ||
@@ -163,6 +227,7 @@
       function inspect() {
         if (!active || !running) return;
         if (challengeVisible()) { report('CHALLENGE_FOUND'); return; }
+        if (inspectQuizSubmission()) return;
         if (benignPromptButton()) { report('PROMPT_FOUND'); return; }
         if (/\/knowledge\/cards/i.test(location.pathname)) {
           const tab = Array.from(document.querySelectorAll('[role="tab"],.tab,a,li')).find(element =>
@@ -196,6 +261,7 @@
           case 'PLAY_VIDEO': if (video && !video.ended) video.play().catch(error =>
             report(error?.name === 'NotAllowedError' ? 'PLAYBACK_BLOCKED' : 'PLAYBACK_FAILED', true)); break;
           case 'NEXT_UNIT': nextUnit(); break;
+          case 'ADVANCE_AFTER_VIDEO': advanceAfterVideo(); break;
           case 'DOCUMENT_NEXT': {
             const next = findDocumentNext();
             if (next && !next.disabled && !pendingAction) pendingAction = setTimeout(() => {

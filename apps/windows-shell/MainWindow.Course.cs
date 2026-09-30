@@ -12,6 +12,7 @@ public partial class MainWindow
     private const string CourseHome = "https://i.chaoxing.com/";
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
+    private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
     private const string LoginFixture = "https://mooc1.chaoxing.com/login.html";
@@ -19,6 +20,7 @@ public partial class MainWindow
     {
         "--course-smoke" => CourseFixture,
         "--course-video-smoke" => VideoFixture,
+        "--course-video-quiz-smoke" => VideoQuizFixture,
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
@@ -313,6 +315,11 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
+            if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                await backend.RequestAsync("answers.put", new
+                {
+                    chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
+                });
             await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('course-start').click()");
         }
     }
@@ -535,7 +542,8 @@ public partial class MainWindow
                 message.GetProperty("generation").GetInt64() != courseGeneration) return;
             var observation = message.GetProperty("observation").GetString();
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
-                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_SUBMITTED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
+                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
+                "QUIZ_SUBMIT_UNCONFIRMED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
             var chapter = ChapterFromUrl(args.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = catalogCurrentId;
             if (string.IsNullOrEmpty(chapter)) chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
@@ -551,9 +559,20 @@ public partial class MainWindow
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
             Trace("course observation: " + observation + " action=" + action + " state=" + nextState);
-            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] is "--course-smoke" or "--course-ai-smoke" &&
-                observation == "QUIZ_SUBMITTED")
+            if (courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
+                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke"))
             {
+                var confirmed = await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.body.dataset.quizSubmitted === 'true' && document.getElementById('confirm-mask').hidden");
+                if (confirmed != "true")
+                { FailSmoke("quiz submission confirmation was not completed"); return; }
+                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                {
+                    var quizTab = await CourseView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('quiz-tab').classList.contains('active')");
+                    if (quizTab != "true")
+                    { FailSmoke("video did not advance to the quiz in the same chapter"); return; }
+                }
                 Trace("course quiz submitted through Rust");
                 PassSmoke();
                 return;
@@ -562,16 +581,23 @@ public partial class MainWindow
             {
                 "PLAY_VIDEO" => "已发现视频，正在播放。",
                 "SWITCH_VIDEO_TAB" => "正在打开视频页签。",
+                "ADVANCE_AFTER_VIDEO" => "视频已结束，正在检查本章测验。",
                 "NEXT_UNIT" => "当前任务点已结束，正在切换下一节。",
                 "DOCUMENT_NEXT" => "正在阅读文档并翻页。",
                 "DISMISS_PROMPT" => "已处理普通继续播放提示。",
                 "FILL_QUIZ" => "已匹配本章答案，正在填写。",
                 "NEEDS_ANSWERS" => "本章没有答案，请先在左侧录入。",
                 "REVIEW_QUIZ" => "题目结构与答案不匹配，请人工检查。",
+                "REVIEW_SUBMISSION" => "未能确认提交结果。请检查右侧弹窗和页面，再决定是否继续。",
                 "WAIT_FOR_HUMAN" => "页面需要人工验证。请在右侧完成验证后点击继续。",
                 "MANUAL_PLAY" => "视频需要手动播放。请在右侧点击播放后继续。",
                 "CHECK_VIDEO" => "视频播放失败。请检查页面或网络，处理后再继续。",
-                _ => observation == "QUIZ_SUBMITTED" ? "已点击提交，请检查页面结果。" : courseDetail
+                _ => observation switch
+                {
+                    "QUIZ_CONFIRM_PENDING" => "已填写答案，正在确认提交。",
+                    "QUIZ_SUBMITTED" => "已确认提交，请检查页面结果。",
+                    _ => courseDetail
+                }
             }, true);
             if (nextState != "RUNNING")
             {
@@ -588,7 +614,8 @@ public partial class MainWindow
                 v = 1, kind = "course.action", sessionId = activeSession, generation = activeGeneration,
                 action, data = result.GetProperty("data")
             });
-            if (action == "NEXT_UNIT" || frame is null) CourseView.CoreWebView2.PostWebMessageAsJson(payload);
+            if (action is "NEXT_UNIT" or "ADVANCE_AFTER_VIDEO" || frame is null)
+                CourseView.CoreWebView2.PostWebMessageAsJson(payload);
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-pause-smoke" &&
                 action == "DOCUMENT_NEXT" && frame is not null && !pauseSmokeStarted)

@@ -170,7 +170,8 @@ impl CourseEngine {
             "VIDEO_FOUND" => ("PLAY_VIDEO", Value::Null),
             "VIDEO_TAB_FOUND" => ("SWITCH_VIDEO_TAB", Value::Null),
             "PROMPT_FOUND" => ("DISMISS_PROMPT", Value::Null),
-            "VIDEO_ENDED" | "DOCUMENT_DONE" | "UNIT_EMPTY" => ("NEXT_UNIT", Value::Null),
+            "VIDEO_ENDED" => ("ADVANCE_AFTER_VIDEO", Value::Null),
+            "DOCUMENT_DONE" | "UNIT_EMPTY" => ("NEXT_UNIT", Value::Null),
             "DOCUMENT_FOUND" => ("DOCUMENT_NEXT", Value::Null),
             "QUIZ_FOUND" => match answers {
                 Some(data) => ("FILL_QUIZ", data),
@@ -182,6 +183,10 @@ impl CourseEngine {
             "QUIZ_UNMATCHED" => {
                 session.state = CourseState::NeedsInput;
                 ("REVIEW_QUIZ", Value::Null)
+            }
+            "QUIZ_SUBMIT_UNCONFIRMED" => {
+                session.state = CourseState::NeedsInput;
+                ("REVIEW_SUBMISSION", Value::Null)
             }
             "CHALLENGE_FOUND" => {
                 session.state = CourseState::NeedsInput;
@@ -195,7 +200,7 @@ impl CourseEngine {
                 session.state = CourseState::NeedsInput;
                 ("CHECK_VIDEO", Value::Null)
             }
-            "QUIZ_SUBMITTED" => ("NONE", Value::Null),
+            "QUIZ_CONFIRM_PENDING" | "QUIZ_SUBMITTED" => ("NONE", Value::Null),
             _ => return Err(Fault("BAD_REQUEST", "unsupported course observation")),
         };
         session.last_action = action.to_owned();

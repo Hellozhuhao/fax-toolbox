@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>本地视频与同章测验夹具</title></head>
+<body>
+  <h1>同章视频与测验 2.5</h1>
+  <nav><button id="video-tab" class="active" type="button" onclick="showTab('video')">1 视频</button>
+    <button id="quiz-tab" type="button" onclick="showTab('quiz')">2 测验</button></nav>
+  <section id="video-panel"><video controls width="320" height="180"></video></section>
+  <section id="quiz-panel" hidden>
+    <div class="question"><p>1. 本章示例题</p>
+      <label><input type="radio" name="q1" value="A" onclick="ready()">A. 正确</label>
+      <label><input type="radio" name="q1" value="B" onclick="ready()">B. 错误</label></div>
+    <button id="submit" type="button" disabled onclick="showConfirmation()">提交</button>
+  </section>
+  <div id="confirm-mask" hidden style="position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center">
+    <div class="modal" role="dialog" style="background:white;padding:28px;min-width:260px">
+      <h2>提示</h2><p>确认提交?</p>
+      <button type="button" onclick="hideConfirmation()">取消</button>
+      <button id="confirm-submit" type="button" onclick="confirmSubmission()">提交</button>
+    </div>
+  </div>
+  <script>
+    function showTab(name) {
+      document.getElementById('video-tab').className = name === 'video' ? 'active' : '';
+      document.getElementById('quiz-tab').className = name === 'quiz' ? 'active' : '';
+      document.getElementById('video-panel').hidden = name !== 'video';
+      document.getElementById('quiz-panel').hidden = name !== 'quiz';
+    }
+    function ready() { document.getElementById('submit').disabled = !document.querySelector('input[value="A"]').checked; }
+    function showConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = false; mask.style.display = 'flex'; }
+    function hideConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = true; mask.style.display = 'none'; }
+    function confirmSubmission() { hideConfirmation(); document.getElementById('submit').textContent = '已提交'; document.body.dataset.quizSubmitted = 'true'; }
+    document.querySelector('video').play = () => Promise.resolve();
+    setTimeout(() => document.querySelector('video').dispatchEvent(new Event('ended')), 700);
+  </script>
+</body>
+</html>

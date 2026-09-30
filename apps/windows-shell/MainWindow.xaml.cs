@@ -38,7 +38,10 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         var args = Environment.GetCommandLineArgs();
-        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or "--course-ai-smoke" or "--course-controls-smoke" or "--module-switch-smoke";
+        courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
+            "--course-video-quiz-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
+            "--course-ai-smoke" or "--course-controls-smoke" or "--module-switch-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
