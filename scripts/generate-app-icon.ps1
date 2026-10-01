@@ -4,32 +4,49 @@ Add-Type -AssemblyName System.Drawing
 $assetDirectory = Join-Path $PSScriptRoot '..\apps\windows-shell\assets'
 New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
 $iconPath = Join-Path $assetDirectory 'fax-toolbox.ico'
+$pngPath = Join-Path $assetDirectory 'fax-toolbox.png'
 $bitmap = [System.Drawing.Bitmap]::new(256, 256, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
 $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+function New-RoundedPath([single]$x, [single]$y, [single]$width, [single]$height, [single]$radius) {
+    $path = [System.Drawing.Drawing2D.GraphicsPath]::new()
+    $diameter = $radius * 2
+    $path.AddArc($x, $y, $diameter, $diameter, 180, 90)
+    $path.AddArc($x + $width - $diameter, $y, $diameter, $diameter, 270, 90)
+    $path.AddArc($x + $width - $diameter, $y + $height - $diameter, $diameter, $diameter, 0, 90)
+    $path.AddArc($x, $y + $height - $diameter, $diameter, $diameter, 90, 90)
+    $path.CloseFigure()
+    return $path
+}
 try {
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $graphics.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
-    $bounds = [System.Drawing.Rectangle]::new(12, 12, 232, 232)
-    $shape = [System.Drawing.Drawing2D.GraphicsPath]::new()
+    $graphics.ScaleTransform(4, 4)
+    $shape = New-RoundedPath 0 0 64 64 15
     try {
-        $shape.AddArc(12, 12, 64, 64, 180, 90)
-        $shape.AddArc(180, 12, 64, 64, 270, 90)
-        $shape.AddArc(180, 180, 64, 64, 0, 90)
-        $shape.AddArc(12, 180, 64, 64, 90, 90)
-        $shape.CloseFigure()
-        $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new($bounds,
-            [System.Drawing.Color]::FromArgb(255, 239, 151, 109),
-            [System.Drawing.Color]::FromArgb(255, 193, 79, 52), 130.0)
+        $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
+            [System.Drawing.Rectangle]::new(0, 0, 64, 64),
+            [System.Drawing.Color]::FromArgb(255, 236, 154, 115),
+            [System.Drawing.Color]::FromArgb(255, 198, 91, 61), 130.0)
         try { $graphics.FillPath($gradient, $shape) } finally { $gradient.Dispose() }
-        $font = [System.Drawing.Font]::new('Segoe UI', 154,
-            [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 250, 246))
+        $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75))
+        $line = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 216, 137, 106), 2.3)
+        $slot = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75), 3.0)
         try {
-            $format = [System.Drawing.StringFormat]::new()
-            $format.Alignment = [System.Drawing.StringAlignment]::Center
-            $format.LineAlignment = [System.Drawing.StringAlignment]::Center
-            $graphics.DrawString('F', $font, [System.Drawing.Brushes]::White,
-                [System.Drawing.RectangleF]::new(16, 6, 224, 232), $format)
-        } finally { $font.Dispose() }
+            $line.StartCap = $line.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $slot.StartCap = $slot.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $paper = New-RoundedPath 18 9 28 27 3
+            $machine = New-RoundedPath 11 30 42 21 6
+            try {
+                $graphics.FillPath($white, $paper)
+                $graphics.DrawLine($line, 24, 17, 40, 17)
+                $graphics.DrawLine($line, 24, 22, 40, 22)
+                $graphics.DrawLine($line, 24, 27, 35, 27)
+                $graphics.FillPath($white, $machine)
+                $graphics.DrawLine($slot, 19, 45, 45, 45)
+                $graphics.FillEllipse($ink, 43, 35, 4, 4)
+                $graphics.FillRectangle($white, 21, 50, 22, 5)
+            } finally { $paper.Dispose(); $machine.Dispose() }
+        } finally { $white.Dispose(); $ink.Dispose(); $line.Dispose(); $slot.Dispose() }
     } finally { $shape.Dispose() }
 } finally { $graphics.Dispose() }
 
@@ -37,6 +54,7 @@ $png = [System.IO.MemoryStream]::new()
 try {
     $bitmap.Save($png, [System.Drawing.Imaging.ImageFormat]::Png)
     $bytes = $png.ToArray()
+    [System.IO.File]::WriteAllBytes($pngPath, $bytes)
     $output = [System.IO.File]::Create($iconPath)
     try {
         $writer = [System.IO.BinaryWriter]::new($output)
@@ -55,4 +73,4 @@ try {
         $writer.Flush()
     } finally { $output.Dispose() }
 } finally { $png.Dispose(); $bitmap.Dispose() }
-Write-Host "Created $iconPath"
+Write-Host "Created $iconPath and $pngPath"

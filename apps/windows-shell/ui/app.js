@@ -23,8 +23,9 @@
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
     currentView = view;
     for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
-    const navigation = view === 'demo' ? 'modules' : view === 'vault' ? 'settings' : view;
-    for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
+    const navigation = ['course', 'homework', 'demo', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
+    for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
+    for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
     send('ui.layout', {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
@@ -320,6 +321,10 @@
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);
-  show('home');
+  const initialModule = new URLSearchParams(location.search).get('module');
+  if (initialModule === 'course') openCourse();
+  else if (initialModule === 'homework') openHomework();
+  else if (initialModule === 'demo') openDemo();
+  else show('home');
   send('ai.get-config');
 })();

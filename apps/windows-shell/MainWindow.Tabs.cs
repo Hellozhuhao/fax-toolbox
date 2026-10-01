@@ -144,7 +144,7 @@ public partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
         var open = new Button { Height = 35, Style = (Style)FindResource("TaskTabInnerStyle") };
-        open.Click += (_, _) => _ = ActivateTaskWindowAsync(window);
+        open.Click += (_, _) => _ = ReferenceEquals(window, this) ? RestoreCurrentTabAsync() : ActivateTaskWindowAsync(window);
         Grid.SetColumn(open, 0);
         grid.Children.Add(open);
         var close = new Button
@@ -175,16 +175,32 @@ public partial class MainWindow
             WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2?.CanGoBack == true);
     }
 
-    private void BrowserBack_Click(object sender, RoutedEventArgs e)
+    private void BrowserBack_Click(object sender, RoutedEventArgs e) =>
+        NavigateBack((Keyboard.Modifiers & ModifierKeys.Shift) != 0);
+
+    private void NavigateBack(bool toolboxPage)
     {
+        if (toolboxPage)
+        {
+            if (shellCanGoBack && ShellView.CoreWebView2 is not null)
+                _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.goBack()");
+            return;
+        }
         if (WorkspaceColumn.Width.Value > 0 && activeModule is ("chaoxing" or "homework"))
         {
             if (CourseView.CoreWebView2?.CanGoBack == true) { CourseView.CoreWebView2.GoBack(); return; }
         }
         else if (WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2?.CanGoBack == true)
         { ModuleView.CoreWebView2.GoBack(); return; }
-        if (shellCanGoBack && ShellView.CoreWebView2 is not null)
+        if (WorkspaceColumn.Width.Value == 0 && shellCanGoBack && ShellView.CoreWebView2 is not null)
             _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.goBack()");
+    }
+
+    private Task RestoreCurrentTabAsync()
+    {
+        var expected = assignedModule switch { "course" => "course", "homework" => "homework",
+            "demo" => "demo", _ => "home" };
+        return expected != "home" && currentShellView != expected ? RestoreAssignedModuleUiAsync() : Task.CompletedTask;
     }
 
     private void BrowserReload_Click(object sender, RoutedEventArgs e)
@@ -199,7 +215,8 @@ public partial class MainWindow
 
     private MainWindow CreateTaskWindow(string? module = null)
     {
-        var window = new MainWindow(tabSmokeMode) { initialModule = module };
+        var window = new MainWindow(tabSmokeMode) { initialModule = module, assignedModule = module };
+        UpdateAllTaskTabs();
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         // Initialize WebView2 off screen while the current tab remains visible.
         window.Left = -32000;
@@ -225,7 +242,6 @@ public partial class MainWindow
     private async Task ActivateTaskWindowAsync(MainWindow target)
     {
         if (ReferenceEquals(target, this) || !TaskWindows.Contains(target)) return;
-        await Task.WhenAny(target.taskWindowReady.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         if (!TaskWindows.Contains(target) || target.closingTask) return;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         // Keep maximized tabs maximized throughout the handoff. Switching through

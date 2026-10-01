@@ -305,6 +305,44 @@ button[aria-disabled="true"] { background-image: none; }
   button, .sidebar .nav-item { transition: none; }
 }
 
+/* The rail names toolbox areas; tools appear in a second level on hover or keyboard focus. */
+.sidebar { z-index: 15; }
+.nav-group { position: relative; width: 100%; }
+.nav-flyout {
+  position: absolute; left: 100%; top: -10px; width: 214px; z-index: 30;
+  padding: 14px; border: 1px solid var(--border); border-radius: 18px;
+  background: var(--panel); box-shadow: 0 18px 45px #17171635;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateX(-6px); transition: opacity .16s ease, transform .16s ease, visibility .16s;
+}
+.nav-group:hover .nav-flyout, .nav-group:focus-within .nav-flyout {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0);
+}
+.nav-flyout p { color: var(--subtle); font-size: 10px; font-weight: 750; margin: 4px 8px 8px; }
+.nav-flyout p:not(:first-child) { margin-top: 15px; }
+.nav-flyout button {
+  width: 100%; min-height: 36px; padding: 0 10px; text-align: left;
+  color: var(--text); background: transparent; border-radius: 10px;
+}
+.nav-flyout button:hover, .nav-flyout button.active {
+  background: color-mix(in srgb, var(--accent) 11%, var(--panel)); color: var(--accent);
+}
+.brand-mark { overflow: hidden; background: transparent !important; box-shadow: none !important; }
+.brand-mark img, .hero-art img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.hero-art { border-radius: 0; background: transparent; box-shadow: none; transform: none; }
+.context-help {
+  display: inline-grid; place-items: center; vertical-align: middle;
+  width: 18px; height: 18px; border: 1px solid var(--border); border-radius: 50%;
+  color: var(--subtle); font-size: 11px; font-weight: 700; cursor: help;
+}
+.context-help:hover, .context-help:focus-visible { color: var(--accent); border-color: var(--accent); }
+.content .view:not([hidden]) { animation: view-enter .18s ease-out both; }
+@keyframes view-enter { from { opacity: .6; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .nav-flyout { transition: none; }
+  .content .view:not([hidden]) { animation: none; }
+}
+
 /* Homework results share the current theme and keep long answers readable. */
 .homework-results{margin-top:12px}
 #view-homework{max-width:1280px;margin-inline:auto}

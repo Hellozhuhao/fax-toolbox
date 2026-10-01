@@ -15,13 +15,11 @@
 <body>
   <div class="app">
     <aside class="sidebar">
-      <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
+      <header class="brand"><div class="brand-mark"><img src="fax-mark.svg" alt="Fax 工具箱"></div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
       <span class="nav-label">导航</span>
       <nav aria-label="工具箱导航">
         <button class="nav-item active" type="button" data-view="home" title="首页"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg></span><span>首页</span></button>
-        <button class="nav-item" type="button" data-view="course" title="学习通"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5h7a3 3 0 0 1 3 3V20a3 3 0 0 0-3-3H4z"/><path d="M20 4.5h-3a3 3 0 0 0-3 3V20a3 3 0 0 1 3-3h3z"/></svg></span><span>学习</span></button>
-        <button class="nav-item" type="button" data-view="homework" title="作业校对"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v14H5V3z"/><path d="M15 3v5h4M8 12h8M8 16h5"/></svg></span><span>作业</span></button>
-        <button class="nav-item" type="button" data-view="modules" title="全部模块"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span>模块</span></button>
+        <div class="nav-group"><button class="nav-item" type="button" data-view="modules" title="全部工具"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span>工具</span></button><div class="nav-flyout" aria-label="工具分类"><p>学习工具</p><button type="button" data-view="course">学习通</button><button type="button" data-view="homework">作业校对</button><p>开发与测试</p><button type="button" data-view="demo">页面事件演示</button></div></div>
         <button class="nav-item" type="button" data-view="activity" title="最近活动"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>活动</span></button>
       </nav>
       <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings" title="系统选项"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.5 2.4 2 .9 2.1-1.3 2.8 2.8-1.3 2.1.9 2L23 11v2l-2.4.5-.9 2 1.3 2.1-2.8 2.8-2.1-1.3-2 .9L14 22h-4l-.5-2.4-2-.9-2.1 1.3-2.8-2.8 1.3-2.1-.9-2L1 13v-2l2.4-.5.9-2L3 6.4l2.8-2.8 2.1 1.3 2-.9z"/></svg></span><span>设置</span></button><div class="connection" title="后端连接状态"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
@@ -31,7 +29,7 @@
 
     <section id="view-home" class="view">
       <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
-      <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，<br><span class="hero-accent">各司其职。</span></h2><p>从这里启动模块、查看状态，或管理本地数据。每个网页模块拥有独立的会话。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true">F</div></div>
+      <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，<br><span class="hero-accent">各司其职。</span></h2><p>从这里启动工具、查看状态和管理本地数据。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true"><img src="fax-mark.svg" alt=""></div></div>
       <div class="section-head"><div><span class="eyebrow">QUICK ACCESS</span><h2>常用模块</h2></div><button class="text-button" type="button" data-view="modules">查看全部模块 →</button></div>
       <div class="module-grid"><button class="module-card" type="button" data-open="course"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="homework"><span class="module-icon">校</span><span><strong>作业校对</strong><small>只读取题目 · 展示答案与解析</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo"><span class="module-icon demo-icon">◇</span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
       <div class="section-head"><div><span class="eyebrow">OVERVIEW</span><h2>运行概览</h2></div></div>
@@ -45,15 +43,14 @@
     <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。切换顶部标签不会结束其他模块的任务。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><details class="card status collapsible" open><summary>当前状态</summary><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></details></section>
 
     <section id="view-course" class="view" hidden>
-      <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通</h2>
-      <p class="muted">在右侧登录并选择课程。切换模块会保留此页面；工具箱不会读取登录密码。</p>
+      <div class="eyebrow">工具 / 学习</div><h2>学习通 <span class="context-help" tabindex="0" title="在右侧登录并选择课程。切换标签会保留当前页面；工具箱不会读取登录密码。">?</span></h2>
       <div class="course-actions"><button id="course-open" class="secondary" type="button">打开学习通首页</button><button id="course-save-vault" class="secondary" type="button">保存账号到密码箱</button></div>
       <details class="card course-current collapsible" open><summary>当前章节</summary><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p><p id="course-web-health" class="web-health" hidden aria-live="polite"></p></details>
       <details class="card course-catalog collapsible" open><summary>章节目录</summary>
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>
         <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></details>
-      <details class="card course-control collapsible" open><summary>自动完成</summary><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">任务会持续运行，切换模块或章节不会自动暂停。点击“暂停任务”可稍后继续；点击“结束任务”会退出本次任务。遇到验证码或无法处理的题目时会提示你处理。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></details>
+      <details class="card course-control collapsible" open><summary>自动完成 <span class="context-help" tabindex="0" title="任务会持续运行；暂停可继续，结束会退出本次任务。验证码及无法处理的题目需要你操作。">?</span></summary><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></details>
       <details class="card ai-card collapsible" open><summary>AI 自动答题</summary><p class="muted">没有可用的本章答案时，向模型发送当前可见题目。答案可能有误，请留意提交结果。</p>
         <p id="ai-config-summary" class="ai-config-summary">正在读取 AI 配置…</p>
           <div class="ai-balance-row"><span id="ai-balance" aria-live="polite">API 余额：正在读取…</span><button id="ai-balance-refresh" class="secondary" type="button" disabled>刷新</button></div>
@@ -69,8 +66,7 @@
     </section>
 
     <section id="view-homework" class="view" hidden>
-      <div class="eyebrow">WORKSPACE / HOMEWORK</div><h2>作业校对</h2>
-      <p class="muted">先浏览学习通并打开作业题目，再开始校对。校对结果会在这里展开显示；程序不会填写或提交网页。</p>
+      <div class="eyebrow">工具 / 学习</div><h2>作业校对 <span class="context-help" tabindex="0" title="先打开作业题目，再开始校对。结果显示在本页；程序不会填写或提交网页。">?</span></h2>
       <div class="course-actions"><button id="homework-open" class="secondary" type="button">浏览学习通作业</button><button id="homework-show-results" class="secondary" type="button" hidden>查看校对结果</button><button id="homework-start" type="button" disabled>开始作业校对</button></div>
       <details class="card course-current collapsible" open><summary>当前页面</summary><p id="homework-page" class="url">尚未打开</p><p id="homework-status" class="muted" aria-live="polite">请在右侧打开作业题目。</p></details>
       <details class="card collapsible homework-progress-card" open><summary>校对进度</summary><progress id="homework-progress" max="100" value="0" aria-label="作业校对进度"></progress><p id="homework-progress-label" class="muted" aria-live="polite">等待开始</p></details>

@@ -14,6 +14,7 @@ if (-not $source.StartsWith($distRoot + [IO.Path]::DirectorySeparatorChar,
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\index.html', 'apps\windows-shell\ui\theme.css',
+    'apps\windows-shell\ui\fax-mark.svg',
     'apps\windows-shell\ui\button-glow.js', 'apps\windows-shell\ui\vendor\katex\katex.min.js',
     'apps\windows-shell\ui\vendor\katex\katex.min.css', 'modules\chaoxing\page-adapter.js',
     'modules\chaoxing\homework-reader.js')) {

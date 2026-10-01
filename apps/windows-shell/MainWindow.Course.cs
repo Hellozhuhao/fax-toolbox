@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
@@ -486,18 +487,44 @@ public partial class MainWindow
         { FailSmoke("plus did not create an independent home tab"); return; }
         var first = TaskWindows[1];
         if (!await WaitForTabUiAsync(first)) { FailSmoke("first home tab did not load"); return; }
-        await first.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
+        await first.ShellView.CoreWebView2.ExecuteScriptAsync(
+            "document.querySelector('.nav-flyout [data-view=course]').click()");
         if (!await WaitForTabCourseAsync(first)) { FailSmoke("first course tab did not load"); return; }
         first.NewTaskTab_Click(first, new RoutedEventArgs());
         if (TaskWindows.Count != 3 || TaskWindows[2].assignedModule is not null)
         { FailSmoke("second plus did not open home"); return; }
         var second = TaskWindows[2];
+        await Task.Delay(150);
+        if (second.Visibility != Visibility.Visible)
+        { FailSmoke("new tab did not become clickable immediately"); return; }
         if (!await WaitForTabUiAsync(second)) { FailSmoke("second home tab did not load"); return; }
         await second.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
         if (!await WaitForTabCourseAsync(second) ||
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        second.NavigateBack(false);
+        await Task.Delay(100);
+        if (second.currentShellView != "course")
+        { FailSmoke("ordinary back left the current module"); return; }
+        second.NavigateBack(true);
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "home"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "home" || second.assignedModule != "course")
+        { FailSmoke("Shift back did not return to toolbox home"); return; }
+        second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "course")
+        { FailSmoke("clicking current tab did not restore its module"); return; }
+        second.OpenModuleInNewTab("homework");
+        if (TaskWindows.Count != 4) { FailSmoke("homework did not open in a new tab"); return; }
+        var homeworkTab = TaskWindows[3];
+        if (!await WaitForTabUiAsync(homeworkTab)) { FailSmoke("homework tab did not load"); return; }
+        for (var attempt = 0; attempt < 30 && homeworkTab.currentShellView != "homework"; attempt++) await Task.Delay(50);
+        if (homeworkTab.currentShellView != "homework" || homeworkTab.shellCanGoBack)
+        { FailSmoke("homework tab first rendered the home page"); return; }
+        homeworkTab.CloseTaskWindow(homeworkTab);
+        for (var attempt = 0; attempt < 30 && TaskWindows.Contains(homeworkTab); attempt++) await Task.Delay(100);
+        if (TaskWindows.Contains(homeworkTab)) { FailSmoke("homework tab did not close"); return; }
         second.Width = 1120;
         second.Height = 720;
         await second.ActivateTaskWindowAsync(first);

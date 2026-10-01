@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -16,6 +17,10 @@ public partial class MainWindow : Window
     private const string UiHost = "ui.toolbox.invalid";
     private const string ModuleHost = "module.toolbox.invalid";
     private const string UiUrl = "https://ui.toolbox.invalid/index.html";
+    private static bool IsUiUrl(string value) => value == UiUrl ||
+        value is "https://ui.toolbox.invalid/index.html?module=course" or
+            "https://ui.toolbox.invalid/index.html?module=homework" or
+            "https://ui.toolbox.invalid/index.html?module=demo";
     private const string ModuleUrl = "https://module.toolbox.invalid/smoke.html";
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
@@ -45,6 +50,11 @@ public partial class MainWindow : Window
     private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
     private bool controlsCollapsed;
+    private Task moduleWebViewsReady = Task.CompletedTask;
+    private string currentShellView = "home";
+    private string workspaceLayoutMode = "";
+    private DispatcherTimer? workspaceLayoutTimer;
+    private double preferredShellRatio = 1.0 / 3.8;
 
     public MainWindow() : this(false) { }
 
@@ -79,6 +89,7 @@ public partial class MainWindow : Window
         Trace("constructor");
         InitializeCatalog();
         RegisterTaskWindow();
+        SetWorkspaceLayout(false);
         if (smokeMode)
         {
             Left = -3000;
@@ -143,19 +154,17 @@ public partial class MainWindow : Window
             var uiEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "ui"));
             var moduleEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "smoke"));
             var courseEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "chaoxing"));
-            await Task.WhenAll(uiEnvironmentTask, moduleEnvironmentTask, courseEnvironmentTask);
+            moduleWebViewsReady = InitializeModuleWebViewsAsync(moduleEnvironmentTask, courseEnvironmentTask);
             var uiEnvironment = await uiEnvironmentTask;
-            var moduleEnvironment = await moduleEnvironmentTask;
-            var courseEnvironment = await courseEnvironmentTask;
-            var uiReady = ShellView.EnsureCoreWebView2Async(uiEnvironment);
-            var moduleReady = ModuleView.EnsureCoreWebView2Async(moduleEnvironment);
-            var courseReady = CourseView.EnsureCoreWebView2Async(courseEnvironment);
-            await Task.WhenAll(uiReady, moduleReady, courseReady);
-            Trace("UI, module and course WebViews ready");
-            ConfigureWebViews();
+            await ShellView.EnsureCoreWebView2Async(uiEnvironment);
+            ConfigureShellView();
+            Trace("UI WebView ready");
             Publish("READY", "后端已连接。点击“开始演示”创建会话。");
-            ShellView.CoreWebView2.Navigate(UiUrl);
+            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" ?
+                UiUrl + "?module=" + initialModule : UiUrl);
             Trace("UI navigation started");
+            await moduleWebViewsReady;
+            Trace("module and course WebViews ready");
         }
         catch (Exception error)
         {
@@ -167,10 +176,36 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ConfigureWebViews()
+    private async Task InitializeModuleWebViewsAsync(Task<CoreWebView2Environment> moduleEnvironmentTask,
+        Task<CoreWebView2Environment> courseEnvironmentTask)
+    {
+        var moduleEnvironment = await moduleEnvironmentTask;
+        var courseEnvironment = await courseEnvironmentTask;
+        await Task.WhenAll(ModuleView.EnsureCoreWebView2Async(moduleEnvironment),
+            CourseView.EnsureCoreWebView2Async(courseEnvironment));
+        ConfigureModuleWebViews();
+    }
+
+    private void ConfigureShellView()
     {
         ShellView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             UiHost, Path.Combine(root, "apps", "windows-shell", "ui"), CoreWebView2HostResourceAccessKind.DenyCors);
+#if DEBUG
+        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
+#else
+        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+#endif
+        ShellView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
+        ShellView.CoreWebView2.NavigationStarting += (_, args) =>
+        {
+            if (!IsUiUrl(args.Uri)) args.Cancel = true;
+        };
+        ShellView.CoreWebView2.WebMessageReceived += UiMessageReceived;
+        ShellView.CoreWebView2.NavigationCompleted += ShellNavigationCompleted;
+    }
+
+    private void ConfigureModuleWebViews()
+    {
         ModuleView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             ModuleHost, Path.Combine(root, "modules", "smoke"), CoreWebView2HostResourceAccessKind.DenyCors);
         if (courseSmokeMode)
@@ -178,21 +213,14 @@ public partial class MainWindow : Window
                 "mooc1.chaoxing.com", Path.Combine(root, "modules", "chaoxing", "fixture"),
                 CoreWebView2HostResourceAccessKind.DenyCors);
 #if DEBUG
-        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
         ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
         CourseView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #else
-        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = false;
         ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = false;
         CourseView.CoreWebView2.Settings.AreDevToolsEnabled = false;
 #endif
-        ShellView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
         ModuleView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
         CourseView.CoreWebView2.NewWindowRequested += (_, args) => HandleModuleNewWindow(args);
-        ShellView.CoreWebView2.NavigationStarting += (_, args) =>
-        {
-            if (!string.Equals(args.Uri, UiUrl, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
-        };
         ModuleView.CoreWebView2.NavigationStarting += (_, args) =>
         {
             if (!string.Equals(args.Uri, ModuleUrl, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
@@ -221,10 +249,13 @@ public partial class MainWindow : Window
             else PublishCourse("ERROR", reason, false);
         };
         CourseView.CoreWebView2.FrameCreated += CourseFrameCreated;
-        ShellView.CoreWebView2.WebMessageReceived += UiMessageReceived;
         ModuleView.CoreWebView2.WebMessageReceived += ModuleMessageReceived;
         CourseView.CoreWebView2.WebMessageReceived += async (_, args) => await HandleCourseMessageAsync(args, null);
-        ShellView.CoreWebView2.NavigationCompleted += async (_, args) =>
+    }
+
+    private async void ShellNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
+    {
+        try
         {
             if (!args.IsSuccess)
             {
@@ -240,15 +271,12 @@ public partial class MainWindow : Window
             PublishMessageWebHealth();
             if (activeModule == "homework") PublishHomeworkStatus(homeworkDetail);
             Trace("UI navigation completed");
+            if (initialModule is not null) await moduleWebViewsReady;
+            ShellView.Visibility = Visibility.Visible;
+            TaskLoadingSurface.Visibility = Visibility.Collapsed;
             if (tabSmokeChild) { taskWindowReady.TrySetResult(true); return; }
-            if (initialModule is not null)
-            {
-                var target = initialModule;
-                initialModule = null;
-                await ShellView.CoreWebView2.ExecuteScriptAsync(
-                    "window.FaxToolboxUi?." + (target switch { "course" => "openCourse", "homework" => "openHomework", _ => "openDemo" }) + "()");
-            }
             taskWindowReady.TrySetResult(true);
+            if (smokeMode) await moduleWebViewsReady;
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-home-preview.png");
@@ -299,7 +327,14 @@ public partial class MainWindow : Window
                     "document.getElementById('start').disabled=false;document.getElementById('start').click();true");
                 if (result != "true") FailSmoke("工具箱 UI 按钮未响应");
             }
-        };
+        }
+        catch (Exception error)
+        {
+            Trace("UI navigation setup failed: " + error);
+            taskWindowReady.TrySetResult(false);
+            if (smokeMode) FailSmoke(error.ToString());
+            else Publish("ERROR", error.Message);
+        }
     }
 
     private void Publish(string nextState, string nextDetail)
@@ -322,7 +357,7 @@ public partial class MainWindow : Window
 
     private async void UiMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
-        if (!string.Equals(args.Source, UiUrl, StringComparison.OrdinalIgnoreCase)) return;
+        if (!IsUiUrl(args.Source)) return;
         try
         {
             var raw = args.TryGetWebMessageAsString();
@@ -332,10 +367,17 @@ public partial class MainWindow : Window
             if (message.GetProperty("v").GetInt32() != 1) return;
             var id = message.GetProperty("id").GetString();
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
-            switch (message.GetProperty("command").GetString())
+            var command = message.GetProperty("command").GetString();
+            if (command is "session.start" or "session.cancel" or "course.open" or "course.activate" or
+                "course.start" or "course.pause" or "course.stop" or "course.jump" or
+                "homework.open" or "homework.results" or "homework.explain" or "homework.start" or
+                "homework.activate" or "demo.activate")
+                await moduleWebViewsReady;
+            switch (command)
             {
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
+                    currentShellView = message.GetProperty("view").GetString() ?? "home";
                     shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
                     UpdateBrowserBackButton();
                     UpdateTaskTabs();
@@ -422,15 +464,62 @@ public partial class MainWindow : Window
         ToolbarRow.Height = GridLength.Auto;
         ToggleControlsButton.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
         var split = showModule && !controlsCollapsed;
-        ShellColumn.MinWidth = split ? 330 : 0;
-        WorkspaceColumn.MinWidth = showModule ? 400 : 0;
-        ShellColumn.Width = !showModule ? new GridLength(1, GridUnitType.Star) :
-            split ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+        var mode = !showModule ? "home" : split ? "split" : "browser";
+        ToggleControlsButton.Content = controlsCollapsed ? "显示控制面板" : "展开学习页面";
+        if (mode == workspaceLayoutMode) return;
+        if (workspaceLayoutMode == "split" && ShellColumn.ActualWidth >= 330 &&
+            WorkspaceColumn.ActualWidth >= 400)
+            preferredShellRatio = Math.Clamp(ShellColumn.ActualWidth /
+                (ShellColumn.ActualWidth + WorkspaceColumn.ActualWidth), 0.2, 0.6);
+        workspaceLayoutTimer?.Stop();
+        var from = ShellColumn.ActualWidth;
+        var animate = !smokeMode && IsLoaded && TaskLoadingSurface.Visibility != Visibility.Visible &&
+            ActualWidth >= 780 && workspaceLayoutMode.Length > 0;
+        workspaceLayoutMode = mode;
         SplitterColumn.Width = split ? new GridLength(6) : new GridLength(0);
         WorkspaceSplitter.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
-        WorkspaceColumn.Width = showModule ? new GridLength(split ? 2.8 : 1, GridUnitType.Star) : new GridLength(0);
-        ToggleControlsButton.Content = controlsCollapsed ? "显示控制面板" : "展开学习页面";
+        if (!animate)
+        {
+            ApplyWorkspaceLayout(mode);
+            UpdateBrowserBackButton();
+            return;
+        }
+        var target = mode switch
+        {
+            "home" => ActualWidth,
+            "split" => Math.Clamp((ActualWidth - 6) * preferredShellRatio, 330,
+                Math.Max(330, ActualWidth - 406)),
+            _ => 0
+        };
+        ShellColumn.MinWidth = 0;
+        WorkspaceColumn.MinWidth = 0;
+        ShellColumn.Width = new GridLength(Math.Max(0, from));
+        WorkspaceColumn.Width = new GridLength(1, GridUnitType.Star);
+        var clock = Stopwatch.StartNew();
+        workspaceLayoutTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        workspaceLayoutTimer.Tick += (_, _) =>
+        {
+            var progress = Math.Clamp(clock.Elapsed.TotalMilliseconds / 190, 0, 1);
+            var eased = 1 - Math.Pow(1 - progress, 3);
+            ShellColumn.Width = new GridLength(Math.Max(0, from + (target - from) * eased));
+            if (progress < 1) return;
+            workspaceLayoutTimer?.Stop();
+            ApplyWorkspaceLayout(mode);
+            UpdateBrowserBackButton();
+        };
+        workspaceLayoutTimer.Start();
         UpdateBrowserBackButton();
+    }
+
+    private void ApplyWorkspaceLayout(string mode)
+    {
+        ShellColumn.MinWidth = mode == "split" ? 330 : 0;
+        WorkspaceColumn.MinWidth = mode == "home" ? 0 : 400;
+        ShellColumn.Width = mode == "home" ? new GridLength(1, GridUnitType.Star) :
+            mode == "split" ? new GridLength(preferredShellRatio, GridUnitType.Star) : new GridLength(0);
+        WorkspaceColumn.Width = mode == "home" ? new GridLength(0) :
+            mode == "split" ? new GridLength(1 - preferredShellRatio, GridUnitType.Star) :
+            new GridLength(1, GridUnitType.Star);
     }
 
     private void ToggleControls_Click(object sender, RoutedEventArgs e)
@@ -457,6 +546,7 @@ public partial class MainWindow : Window
         CourseOverlay.Background = Brush(dark ? "#202126" : "#F5F5F3");
         CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
         CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
+        TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F5F5F3");
     }
 
     private async Task StartSessionAsync()
