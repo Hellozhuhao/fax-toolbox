@@ -186,14 +186,21 @@ public partial class MainWindow
         await Task.WhenAny(target.taskWindowReady.Task, Task.Delay(TimeSpan.FromSeconds(10)));
         if (!TaskWindows.Contains(target) || target.closingTask) return;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
-        target.WindowState = WindowState.Normal;
-        target.Left = bounds.Left;
-        target.Top = bounds.Top;
-        target.Width = bounds.Width;
-        target.Height = bounds.Height;
+        // Keep maximized tabs maximized throughout the handoff. Switching through
+        // Normal made Windows animate two different window sizes on every click.
+        if (WindowState == WindowState.Normal && target.WindowState != WindowState.Normal)
+            target.WindowState = WindowState.Normal;
+        if (target.WindowState == WindowState.Normal)
+        {
+            target.Left = bounds.Left;
+            target.Top = bounds.Top;
+            target.Width = bounds.Width;
+            target.Height = bounds.Height;
+        }
+        if (target.WindowState != WindowState) target.WindowState = WindowState;
+        target.ShowActivated = true;
         if (target.Visibility != Visibility.Visible) target.Show();
         target.ShowInTaskbar = !smokeMode;
-        if (WindowState == WindowState.Maximized) target.WindowState = WindowState.Maximized;
         target.Activate();
         await target.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
         Hide();

@@ -23,7 +23,8 @@
     function showTab(name) {
       document.getElementById('video-tab').className = name === 'video' ? 'active' : '';
       document.getElementById('quiz-tab').className = name === 'quiz' ? 'active' : '';
-      document.getElementById('video-panel').hidden = name !== 'video';
+      document.getElementById('video-panel').hidden = name !== 'video' &&
+        new URLSearchParams(location.search).get('sticky') !== '1';
       document.getElementById('quiz-panel').hidden = name !== 'quiz';
       if (name === 'quiz' && !document.getElementById('quiz-frame').src)
         document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5';

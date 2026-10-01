@@ -18,6 +18,7 @@ public partial class MainWindow
     private bool homeworkBusy;
     private bool homeworkLoading;
     private bool homeworkClosed;
+    private bool homeworkBrowserVisible;
     private long homeworkGeneration;
     private string homeworkDetail = "请在右侧打开作业题目。";
     private CancellationTokenSource? homeworkCancellation;
@@ -67,7 +68,7 @@ public partial class MainWindow
             homeworkHasOpened = true;
             activeModule = "homework";
             catalogTimer.Stop();
-            SetWorkspaceLayout(true);
+            SetWorkspaceLayout(homeworkBrowserVisible);
             ModuleView.Visibility = Visibility.Collapsed;
             CourseView.Visibility = Visibility.Visible;
             CourseOverlay.Visibility = Visibility.Collapsed;
@@ -78,7 +79,7 @@ public partial class MainWindow
         }
         activeModule = "homework";
         catalogTimer.Stop();
-        SetWorkspaceLayout(true);
+        SetWorkspaceLayout(homeworkBrowserVisible);
         ModuleView.Visibility = Visibility.Collapsed;
         CourseView.Visibility = CourseOverlay.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         PublishHomeworkStatus(homeworkDetail);
@@ -87,10 +88,17 @@ public partial class MainWindow
 
     private async Task OpenHomeworkAsync()
     {
+        homeworkBrowserVisible = true;
         var opened = homeworkHasOpened;
         await ActivateHomeworkAsync();
         if (opened && !IsChaoxingUrl(CourseView.CoreWebView2?.Source))
             CourseView.CoreWebView2!.Navigate(CourseHome);
+    }
+
+    private void ShowHomeworkResults()
+    {
+        homeworkBrowserVisible = false;
+        if (activeModule == "homework") SetWorkspaceLayout(false);
     }
 
     private async Task HomeworkNavigationCompletedAsync(CoreWebView2NavigationCompletedEventArgs args)
@@ -117,6 +125,11 @@ public partial class MainWindow
                 if (ready == "true") break;
                 await Task.Delay(100);
             }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('homework-open').click()");
+            for (var attempt = 0; attempt < 20 && !homeworkBrowserVisible; attempt++)
+                await Task.Delay(100);
+            if (!homeworkBrowserVisible || WorkspaceColumn.Width.GridUnitType != GridUnitType.Star)
+            { FailSmoke("homework browser view did not open"); return; }
             await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('homework-start').click()");
         }
     }
@@ -303,6 +316,7 @@ public partial class MainWindow
             var imageNote = missedImages > 0 ? $"有 {missedImages} 张公式图未能读取，对应题目需人工核对。" : "解析可逐题展开。";
             PublishHomeworkStatus($"已完成 {results.Length} 道题的校对。{imageNote}");
             PublishHomeworkProgress(100, $"完成：{results.Length} 道题。{imageNote}");
+            ShowHomeworkResults();
             if (homeworkSmokeMode)
             {
                 for (var attempt = 0; attempt < 30; attempt++)
@@ -327,7 +341,8 @@ public partial class MainWindow
                     "document.querySelector('textarea').value === '' && !document.querySelector('input:checked')");
                 var frameUntouched = courseFrames.Count == 1 &&
                     await courseFrames[0].ExecuteScriptAsync("[...document.querySelectorAll('textarea')].every(node => node.value === '')") == "true";
-                if (ui == "true" && untouched == "true" && frameUntouched)
+                if (ui == "true" && untouched == "true" && frameUntouched &&
+                    !homeworkBrowserVisible && WorkspaceColumn.Width.Value == 0)
                 {
                     if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                     {

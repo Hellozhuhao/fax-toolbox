@@ -181,9 +181,12 @@
             return (label.innerText || label.textContent || option.value || '').trim().slice(0, 300);
           });
           const multi = inputs.some(option => option.matches('input[type="checkbox"],li[role="checkbox"]'));
+          const hasUncapturedMedia = Array.from(question.querySelectorAll('img,canvas')).some(media =>
+            visible(media) && media.getBoundingClientRect().width >= 48 &&
+            media.getBoundingClientRect().height >= 32);
           return {number: index + 1, type: inputs.length ? (multi ? 'multi' : 'single') : 'blank',
             text: (question.innerText || question.textContent || '').trim().slice(0, 1200),
-            options, blankCount: blanks.length};
+            options, blankCount: blanks.length, hasUncapturedMedia};
         })};
       }
       function fillQuiz(answers) {
@@ -279,6 +282,9 @@
             !/(^|\s)(on|active|current)(\s|$)/i.test(String(element.className)));
           if (tab) { report('VIDEO_TAB_FOUND'); return; }
         }
+        // A quiz can be shown over a video that remains mounted and visible in the DOM.
+        // In that state the questions, rather than the old video, own the current task.
+        if (findQuiz().length && !quizSubmitted) { report('QUIZ_FOUND'); return; }
         const foundVideo = document.querySelector('video');
         if (foundVideo && visible(foundVideo)) {
           if (video !== foundVideo) {
@@ -289,7 +295,6 @@
           else if (foundVideo.paused) report('VIDEO_FOUND');
           return;
         }
-        if (findQuiz().length && !quizSubmitted) { report('QUIZ_FOUND'); return; }
         if (/\/ppt\/|\/pdf\/|\/html\/|courseware/i.test(location.pathname)) {
           const next = findDocumentNext();
           if (next && !next.disabled && next.getAttribute('aria-disabled') !== 'true') report('DOCUMENT_FOUND');
@@ -338,7 +343,16 @@
         if (!active || !running || document.readyState === 'loading' || pendingInspection) return;
         pendingInspection = setTimeout(() => { pendingInspection = 0; inspect(); }, 150);
       });
-      const ready = () => { if (active) { observer.observe(document.documentElement, {childList: true, subtree: true}); inspect(); } };
+      const inspectAfterTaskTabClick = event => {
+        const tab = event.target?.closest?.('button,a,li,[role="tab"]');
+        if (!tab || !/(?:视频|测验|检测|作业)/.test(buttonLabel(tab))) return;
+        setTimeout(inspect, 180);
+        setTimeout(inspect, 850);
+      };
+      document.addEventListener('click', inspectAfterTaskTabClick, true);
+      const ready = () => { if (active) { observer.observe(document.documentElement,
+        {childList: true, subtree: true, attributes: true,
+          attributeFilter: ['class', 'style', 'hidden', 'aria-selected']}); inspect(); } };
       if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready, {once: true});
       else ready();
       const timer = setInterval(inspect, 2500);
@@ -358,6 +372,7 @@
         if (pendingInspection) clearTimeout(pendingInspection);
         if (pendingAction) clearTimeout(pendingAction);
         window.chrome.webview.removeEventListener('message', onMessage);
+        document.removeEventListener('click', inspectAfterTaskTabClick, true);
         window.__faxCourseAgentStarted = null;
         window.__faxCourseAdapterPause = null;
         window.__faxCourseAdapterResume = null;

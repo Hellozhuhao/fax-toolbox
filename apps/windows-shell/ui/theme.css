@@ -296,6 +296,10 @@ button[aria-disabled="true"] { background-image: none; }
 
 /* Homework results share the current theme and keep long answers readable. */
 .homework-results{margin-top:12px}
+#view-homework{max-width:1280px;margin-inline:auto}
+#view-homework .homework-results{padding:26px 32px}
+#view-homework .homework-item{padding:22px 0}
+#view-homework .homework-question,#view-homework .homework-answer{font-size:15px;line-height:1.75}
 .homework-results-head,.homework-item-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .homework-item{padding:16px 0;border-top:1px solid var(--border)}
 .homework-item:first-child{margin-top:12px}

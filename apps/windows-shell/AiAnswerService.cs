@@ -45,7 +45,8 @@ internal sealed record AiSettings(string Endpoint, string Model, string Encrypte
     }
 }
 
-internal sealed record AiQuizQuestion(int Number, string Type, string Text, string[] Options, int BlankCount);
+internal sealed record AiQuizQuestion(int Number, string Type, string Text, string[] Options, int BlankCount,
+    bool HasUncapturedMedia = false);
 internal sealed record AiQuizSnapshot(AiQuizQuestion[] Questions);
 internal sealed record AiQuizAnswer(int Number, string Answer);
 internal sealed record AiImageInput(int QuestionNumber, string Marker, string DataUrl);
@@ -78,6 +79,10 @@ internal static class AiAnswerService
                 (question.Type == "blank" && question.BlankCount is < 1 or > 8) ||
                 (question.Type != "blank" && question.Options.Length < 2))
                 throw new InvalidDataException("题目结构不完整，已暂停等待人工检查");
+            if (question.HasUncapturedMedia)
+                throw new InvalidDataException($"第 {question.Number} 题含未传给模型的图片或画布，请人工核对；本次不会自动提交。");
+            if (question.Type != "blank" && question.Options.Any(string.IsNullOrWhiteSpace))
+                throw new InvalidDataException($"第 {question.Number} 题的选项文字不完整，请人工核对；本次不会自动提交。");
         }
         if (Encoding.UTF8.GetByteCount(scriptResult) > 24 * 1024)
             throw new InvalidDataException("题目内容过长，已暂停等待人工检查");
@@ -183,7 +188,8 @@ internal static class AiAnswerService
             "只输出一个 JSON 对象，格式为 {\"answers\":[{\"number\":1,\"answer\":\"A\"}]}，不要 Markdown 或解释。" +
             "每道题必须有一条答案，题号从 1 连续排列。单选和判断题只返回一个页面选项字母（例如 A，不要写对或错）；" +
             "多选只返回按页面顺序排列的选项字母（例如 AC，不要写选项内容或标点）；" +
-            "填空按页面空格顺序用 | 分隔。无法确定时用空字符串，程序会交给用户检查。";
+            "填空按页面空格顺序用 | 分隔。先根据题干独立求解，再逐项核对页面选项并映射字母；" +
+            "注意否定问法、数量限制和多选条件。若题干或选项不完整、不能可靠确定答案，返回空字符串，程序会交给用户检查。";
         var userPrompt = "请按上述 JSON 格式回答以下题目：\n" + JsonSerializer.Serialize(snapshot);
         var content = await CompleteAsync(settings, systemPrompt, userPrompt, cancellationToken);
         return ParseAnswers(content, snapshot);

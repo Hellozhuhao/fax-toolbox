@@ -9,6 +9,7 @@
   let currentChapterName = '';
   let suggestedChapterId = '';
   let activeModule = null;
+  let homeworkBrowsing = false;
   let balanceAvailable = false;
   let balanceLoading = false;
   const activity = [];
@@ -21,7 +22,9 @@
     const navigation = ['course', 'homework', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     $('location-name').textContent = viewNames[view];
-    send('ui.layout', {mode: ['course', 'homework', 'demo'].includes(view) ? 'module' : 'home', view});
+    send('ui.layout', {mode: view === 'homework' ?
+      (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
+      ['course', 'demo'].includes(view) ? 'module' : 'home', view});
     if (view === 'vault') send('vault.list');
   }
   function showWorkspace() {
@@ -52,7 +55,13 @@
   function openHomework() {
     activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
     $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
+    setHomeworkBrowsing(false);
     show('homework'); send('homework.activate');
+  }
+  function setHomeworkBrowsing(browsing) {
+    homeworkBrowsing = browsing;
+    $('homework-show-results').hidden = !browsing;
+    $('homework-open').textContent = browsing ? '正在浏览学习通' : '浏览学习通作业';
   }
   function openDemo() {
     activeModule = 'demo'; $('workspace-module').textContent = '页面事件演示';
@@ -158,7 +167,6 @@
     $('homework-page').textContent = message.url || '尚未打开';
     $('homework-status').textContent = message.detail || '';
     $('homework-start').disabled = !message.ready || !!message.busy;
-    $('homework-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
     logActivity('作业校对', message.busy ? '校对中' : '页面状态', message.detail || '状态已更新');
   }
   function renderHomeworkProgress(message) {
@@ -198,6 +206,8 @@
     const items = Array.isArray(message.items) ? message.items : [];
     $('homework-count').textContent = items.length ? `${items.length} 道题` : '';
     if (!items.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '当前没有校对结果。'; list.append(empty); return; }
+    setHomeworkBrowsing(false);
+    send('homework.results');
     for (const item of items) {
       const card = document.createElement('article'); card.className = 'homework-item';
       const heading = document.createElement('div'); heading.className = 'homework-item-heading';
@@ -262,7 +272,8 @@
   $('start').addEventListener('click', () => { openDemo(); send('session.start'); });
   $('cancel').addEventListener('click', () => send('session.cancel'));
   $('course-open').addEventListener('click', () => send('course.open'));
-  $('homework-open').addEventListener('click', () => send('homework.open'));
+  $('homework-open').addEventListener('click', () => { setHomeworkBrowsing(true); show('homework'); send('homework.open'); });
+  $('homework-show-results').addEventListener('click', () => { setHomeworkBrowsing(false); show('homework'); send('homework.results'); });
   $('homework-start').addEventListener('click', () => send('homework.start'));
   $('homework-ai-configure').addEventListener('click', () => send('ai.configure'));
   $('homework-ai-test').addEventListener('click', () => send('ai.test'));

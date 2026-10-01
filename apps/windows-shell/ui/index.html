@@ -69,8 +69,8 @@
 
     <section id="view-homework" class="view" hidden>
       <div class="eyebrow">WORKSPACE / HOMEWORK</div><h2>作业校对</h2>
-      <p class="muted">在右侧登录学习通并打开作业。只读取本页各题的题干和题干图片，不读取选择题选项；选择题显示实际答案，不猜选项字母。不会填写或提交网页。</p>
-      <div class="course-actions"><button id="homework-open" class="secondary" type="button">打开学习通首页</button><button id="homework-start" type="button" disabled>开始作业校对</button></div>
+      <p class="muted">先浏览学习通并打开作业题目，再开始校对。校对结果会在这里展开显示；程序不会填写或提交网页。</p>
+      <div class="course-actions"><button id="homework-open" class="secondary" type="button">浏览学习通作业</button><button id="homework-show-results" class="secondary" type="button" hidden>查看校对结果</button><button id="homework-start" type="button" disabled>开始作业校对</button></div>
       <details class="card course-current collapsible" open><summary>当前页面</summary><p id="homework-page" class="url">尚未打开</p><p id="homework-status" class="muted" aria-live="polite">请在右侧打开作业题目。</p></details>
       <details class="card collapsible homework-progress-card" open><summary>校对进度</summary><progress id="homework-progress" max="100" value="0" aria-label="作业校对进度"></progress><p id="homework-progress-label" class="muted" aria-live="polite">等待开始</p></details>
       <details class="card ai-card collapsible" open><summary>大模型接入</summary><p id="homework-ai-summary" class="ai-config-summary">正在读取 AI 配置…</p>

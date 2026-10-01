@@ -15,6 +15,7 @@ public partial class MainWindow
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
+    private const string StickyQuizFixture = VideoQuizFixture + "&sticky=1";
     private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
     private const string ManualFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1&manual=1";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
@@ -25,6 +26,7 @@ public partial class MainWindow
         "--course-smoke" => CourseFixture,
         "--course-video-smoke" => VideoFixture,
         "--course-video-quiz-smoke" => VideoQuizFixture,
+        "--course-sticky-quiz-smoke" => StickyQuizFixture,
         "--course-result-smoke" => ResultFixture,
         "--course-manual-next-smoke" => ManualFixture,
         "--course-document-smoke" => DocumentFixture,
@@ -439,7 +441,7 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
-            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke")
+            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke")
                 await backend.RequestAsync("answers.put", new
                 {
                     chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
@@ -467,6 +469,20 @@ public partial class MainWindow
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        second.Width = 1120;
+        second.Height = 720;
+        await second.ActivateTaskWindowAsync(first);
+        if (first.WindowState != WindowState.Normal ||
+            Math.Abs(first.Width - second.Width) > 1 || Math.Abs(first.Height - second.Height) > 1)
+        { FailSmoke("switching tabs changed the normal window size"); return; }
+        await first.ActivateTaskWindowAsync(second);
+        second.WindowState = WindowState.Maximized;
+        await second.ActivateTaskWindowAsync(first);
+        if (first.WindowState != WindowState.Maximized)
+        { FailSmoke("switching tabs lost the maximized window state"); return; }
+        await first.ActivateTaskWindowAsync(second);
+        if (second.WindowState != WindowState.Maximized)
+        { FailSmoke("switching back animated through normal window size"); return; }
         if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
         {
             var preview = new RenderTargetBitmap((int)second.ActualWidth, (int)second.ActualHeight,
@@ -790,14 +806,14 @@ public partial class MainWindow
                 return;
             }
             var smokeSubmission = courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
-                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke");
+                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke");
             if (smokeSubmission)
             {
                 var confirmed = await CourseView.CoreWebView2.ExecuteScriptAsync(
                     "document.body.dataset.quizSubmitted === 'true' && document.getElementById('confirm-mask').hidden");
                 if (confirmed != "true")
                 { FailSmoke("quiz submission confirmation was not completed"); return; }
-                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke")
                 {
                     var quizTab = await CourseView.CoreWebView2.ExecuteScriptAsync(
                         "document.getElementById('quiz-tab').classList.contains('active')");
@@ -866,7 +882,7 @@ public partial class MainWindow
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
             if (smokeSubmission)
             {
-                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke")
                 {
                     await Task.Delay(11000);
                     if (courseState != "RUNNING")
