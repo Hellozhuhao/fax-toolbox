@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         tabSmokeChild = childForTabSmoke;
         homeworkSmokeMode = args.Length == 3 && args[1] == "--homework-smoke";
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
-            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";

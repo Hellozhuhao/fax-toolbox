@@ -171,7 +171,22 @@
         // A chapter wrapper often has the same class family as each question.
         // Prefer the smallest matching container so one quiz is not mistaken for one question.
         const leaves = candidates.filter(item => !candidates.some(other => other !== item && item.contains(other)));
-        return leaves.length ? leaves : candidates;
+        if (leaves.length) return leaves;
+        const inferred = new Set();
+        const marker = /\b\d{1,3}\s*[【\[]\s*(?:单选题|多选题|判断题|填空题)\s*[】\]]/g;
+        for (const control of document.querySelectorAll(controls)) {
+          for (let parent = control.parentElement, depth = 0;
+            parent && parent !== document.body && depth < 10; parent = parent.parentElement, depth++) {
+            if (!visible(parent)) continue;
+            const count = parent.querySelectorAll(controls).length;
+            if (count < 2 || count > 12) continue;
+            const label = (parent.innerText || parent.textContent || '').slice(0, 2600);
+            if (label.length > 2400 || [...label.matchAll(marker)].length !== 1) continue;
+            inferred.add(parent);
+            break;
+          }
+        }
+        return Array.from(inferred).filter(item => !Array.from(inferred).some(other => other !== item && item.contains(other)));
       }
       function snapshotQuiz() {
         const questions = findQuiz();

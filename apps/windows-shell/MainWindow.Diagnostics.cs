@@ -97,7 +97,7 @@ public partial class MainWindow
         courseWatchdogBusy = true;
         try
         {
-            var targets = new List<(string Name, Func<Task<string>> Read, Func<string, Task> Run)>
+            var targets = new List<(string Name, Func<Task<string>> Read, Func<string, Task<string>> Run)>
             {
                 ("主页面", () => CourseView.CoreWebView2.ExecuteScriptAsync(PageProbe),
                     script => CourseView.CoreWebView2.ExecuteScriptAsync(script))

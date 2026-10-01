@@ -27,7 +27,8 @@
         new URLSearchParams(location.search).get('sticky') !== '1';
       document.getElementById('quiz-panel').hidden = name !== 'quiz';
       if (name === 'quiz' && !document.getElementById('quiz-frame').src)
-        document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5';
+        document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5' +
+          (new URLSearchParams(location.search).has('generic') ? '&generic=1' : '');
     }
     function showConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = false; mask.style.display = 'flex'; }
     function hideConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = true; mask.style.display = 'none'; }
