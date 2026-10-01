@@ -19,6 +19,9 @@
       let quizSubmitPhase = '';
       let quizSubmitStartedAt = 0;
       let quizSubmitButton = null;
+      let contextKey = '';
+      let lastAdvanceKey = '';
+      let lastAdvanceAt = 0;
       const confirmationTargets = 'button,a,[role="button"],input[type="button"],input[type="submit"],div,span';
       let pendingInspection = 0;
       let pendingAction = 0;
@@ -27,9 +30,29 @@
         const query = new URLSearchParams(location.search);
         return query.get('chapterId') || query.get('knowledgeid') || query.get('chapterid') || '';
       }
+      function pageContext() {
+        const heading = document.querySelector('h1,h2,.chapterTitle,.chapter-title')?.textContent?.trim() || '';
+        const selected = document.querySelector('#coursetree .active,.coursetree .active,#catalog .active,.catalog .active,#chapterTree .active,.ztree .curSelectedNode,[aria-current="page"]')?.textContent?.trim() || '';
+        const taskTab = Array.from(document.querySelectorAll('[role="tab"],.tab,nav button,nav li'))
+          .find(item => /(^|\s)(active|current|selected|on)(\s|$)/i.test(String(item.className)) ||
+            item.getAttribute('aria-selected') === 'true')?.textContent?.trim() || '';
+        return [location.href, heading.slice(0, 100), selected.slice(0, 100), taskTab.slice(0, 40)].join('|');
+      }
+      function refreshContext() {
+        const current = pageContext();
+        if (current === contextKey) return;
+        contextKey = current;
+        video = null;
+        quizSubmitted = false;
+        quizSubmitPhase = '';
+        quizSubmitButton = null;
+        lastObservation = '';
+        lastAt = 0;
+        if (pendingAction) { clearTimeout(pendingAction); pendingAction = 0; }
+      }
       function report(kind, force = false) {
         if (!active || !running) return;
-        const key = kind + ':' + chapter();
+        const key = kind + ':' + contextKey;
         const now = Date.now();
         if (!force && key === lastObservation && now - lastAt < 3000) return;
         lastObservation = key; lastAt = now;
@@ -102,22 +125,29 @@
       }
       function nextUnit() {
         if (window.top !== window) return;
-        const button = document.querySelector('#next, .nextBtn, .next_btn, [class*="next_btn"]') ||
-          byText(['下一节', '下一章', '下一个任务点']) ||
-          Array.from(document.querySelectorAll('div,span')).find(element => visible(element) &&
-            /^(下一节|下一章|下一个任务点)$/.test((element.innerText || '').trim()));
-        if (button && visible(button) && !button.disabled && button.getAttribute('aria-disabled') !== 'true')
-        { button.click(); return; }
+        refreshContext();
+        if (lastAdvanceKey === contextKey && Date.now() - lastAdvanceAt < 8000) return;
+        const labels = /^(下一步|下一节|下一章|下一个任务点)$/;
+        const candidates = document.querySelectorAll('#next,.nextBtn,.next_btn,[class*="next_btn"],button,a,[role="button"],input[type="button"],input[type="submit"]');
+        const button = Array.from(candidates).find(element => visible(element) && !element.disabled &&
+          element.getAttribute('aria-disabled') !== 'true' &&
+          (labels.test(buttonLabel(element).replace(/\s+/g, ' ').trim()) ||
+            element.matches('#next,.nextBtn,.next_btn,[class*="next_btn"]')));
+        if (button) {
+          lastAdvanceKey = contextKey; lastAdvanceAt = Date.now();
+          button.click(); return;
+        }
         const tree = document.querySelector('#coursetree, .coursetree, #catalog, .catalog, #chapterTree, .ztree');
-        if (!tree) return;
+        if (!tree) { report('NEXT_UNAVAILABLE'); return; }
         const nodes = Array.from(tree.querySelectorAll('a, .unit, .ncells')).filter(node =>
           node.textContent.trim() && node.textContent.trim().length < 100);
         const active = nodes.findIndex(node => /(^|\s)(on|active|current|doing)(\s|$)/i.test(
           String(node.className) + ' ' + String(node.parentElement?.className || '')));
         if (active >= 0) {
-          const next = nodes.slice(active + 1).find(node => /^\s*[\d.]+/.test(node.textContent));
-          next?.click();
+          const next = nodes.slice(active + 1).find(node => visible(node) && /^\s*[\d.]+/.test(node.textContent));
+          if (next) { lastAdvanceKey = contextKey; lastAdvanceAt = Date.now(); next.click(); return; }
         }
+        report('NEXT_UNAVAILABLE');
       }
       function advanceAfterVideo() {
         if (window.top !== window) return;
@@ -224,7 +254,7 @@
           byText(['下一页']);
       }
       function benignPromptButton() {
-        const button = byText(['继续播放', '继续学习', '我知道了']);
+        const button = byText(['继续播放', '继续学习', '我知道了', '知道了']);
         if (!button) return null;
         const dialog = button.closest('[role="dialog"], .layui-layer, .modal, .dialog, .popup');
         if (!dialog || dialog.querySelector('input,textarea,select,[contenteditable="true"]')) return null;
@@ -238,6 +268,7 @@
       }
       function inspect() {
         if (!active || !running) return;
+        refreshContext();
         if (challengeVisible()) { report('CHALLENGE_FOUND'); return; }
         if (inspectQuizSubmission()) return;
         if (quizResultReady()) { report('QUIZ_RESULT_READY'); return; }

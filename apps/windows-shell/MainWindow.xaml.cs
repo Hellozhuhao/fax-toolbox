@@ -48,7 +48,7 @@ public partial class MainWindow : Window
         tabSmokeChild = childForTabSmoke;
         homeworkSmokeMode = args.Length == 3 && args[1] == "--homework-smoke";
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
-            "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
@@ -156,6 +156,7 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             Trace("startup error: " + error);
+            taskWindowReady.TrySetResult(false);
             Publish("ERROR", error.Message);
             if (smokeMode) FailSmoke(error.ToString());
             else MessageBox.Show(this, error.Message, "Toolbox 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -222,6 +223,7 @@ public partial class MainWindow : Window
         {
             if (!args.IsSuccess)
             {
+                taskWindowReady.TrySetResult(false);
                 if (smokeMode) FailSmoke("工具箱 UI 加载失败");
                 else Publish("ERROR", "工具箱 UI 加载失败");
                 return;
@@ -232,7 +234,7 @@ public partial class MainWindow : Window
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             if (activeModule == "homework") PublishHomeworkStatus(homeworkDetail);
             Trace("UI navigation completed");
-            if (tabSmokeChild) return;
+            if (tabSmokeChild) { taskWindowReady.TrySetResult(true); return; }
             if (initialModule is not null)
             {
                 var target = initialModule;
@@ -240,6 +242,7 @@ public partial class MainWindow : Window
                 await ShellView.CoreWebView2.ExecuteScriptAsync(
                     "window.FaxToolboxUi?." + (target switch { "course" => "openCourse", "homework" => "openHomework", _ => "openDemo" }) + "()");
             }
+            taskWindowReady.TrySetResult(true);
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-home-preview.png");

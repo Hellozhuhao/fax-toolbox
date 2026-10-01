@@ -139,8 +139,8 @@ public partial class MainWindow
                 }
             }
             if (source != CourseView.CoreWebView2.Source || best is null) return;
-            var currentId = frameCurrent.Length > 0 ? frameCurrent :
-                best.CurrentId.Length > 0 ? best.CurrentId : ChapterFromUrl(source);
+            var currentId = best.CurrentId.Length > 0 ? best.CurrentId :
+                frameCurrent.Length > 0 ? frameCurrent : ChapterFromUrl(source);
             var currentName = best.Entries.FirstOrDefault(item => item.Id == currentId)?.Name ?? best.CurrentName;
             if (currentName.Length > 80) currentName = "";
             var live = best.Entries.Count > 0;
@@ -160,12 +160,18 @@ public partial class MainWindow
                     catalogSignature = signature;
                 }
             }
+            var changedChapter = catalogLive && (currentId != catalogCurrentId || currentName != catalogCurrentName);
             if (currentId != catalogCurrentId || currentName != catalogCurrentName || live != catalogLive || live)
             {
                 catalogCurrentId = currentId;
                 catalogCurrentName = currentName;
                 catalogLive = live;
                 PublishCatalog();
+                if (changedChapter && courseState == "RUNNING")
+                {
+                    PublishCourse("RUNNING", "已切换到“" + currentName + "”，正在识别当前任务点。", true);
+                    await ExecuteCourseAdapterAsync("resume");
+                }
             }
         }
         catch (Exception error)

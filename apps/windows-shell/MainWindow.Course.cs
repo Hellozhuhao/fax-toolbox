@@ -16,6 +16,7 @@ public partial class MainWindow
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
     private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
+    private const string ManualFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1&manual=1";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
     private const string LoginFixture = "https://mooc1.chaoxing.com/login.html";
@@ -25,6 +26,7 @@ public partial class MainWindow
         "--course-video-smoke" => VideoFixture,
         "--course-video-quiz-smoke" => VideoQuizFixture,
         "--course-result-smoke" => ResultFixture,
+        "--course-manual-next-smoke" => ManualFixture,
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
@@ -48,6 +50,7 @@ public partial class MainWindow
     private bool pauseSmokeStarted;
     private bool retrySmokeStarted;
     private bool autoRetrySmokeStarted;
+    private bool manualTransitionSmokeStarted;
     private int courseAutoRetryCount;
     private ulong courseLatestNavigationId;
     private string courseLastAttemptedUrl = CourseHome;
@@ -436,7 +439,7 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
-            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-result-smoke")
+            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke")
                 await backend.RequestAsync("answers.put", new
                 {
                     chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
@@ -464,6 +467,16 @@ public partial class MainWindow
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+        {
+            var preview = new RenderTargetBitmap((int)second.ActualWidth, (int)second.ActualHeight,
+                96, 96, PixelFormats.Pbgra32);
+            preview.Render(second);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(preview));
+            await using var output = File.Create(Path.Combine(root, ".cache", "edge-tabs-preview.png"));
+            encoder.Save(output);
+        }
         second.CloseTaskWindow(first);
         for (var attempt = 0; attempt < 30 && TaskWindows.Contains(first); attempt++) await Task.Delay(100);
         if (TaskWindows.Count != 2 || !TaskWindows.Contains(second) || second.backend is null)
@@ -727,11 +740,26 @@ public partial class MainWindow
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
                 "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
                 "QUIZ_SUBMIT_UNCONFIRMED" or "QUIZ_RESULT_READY" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or
-                "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
+                "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED" or "NEXT_UNAVAILABLE")) return;
             var chapter = ChapterFromUrl(args.Source);
+            if (frame is null && catalogReaderScript is not null)
+            {
+                // The outer study URL can remain on the previous chapter after a catalog click.
+                var pageCatalog = await ReadCatalogAsync(null);
+                if (pageCatalog is { Entries.Count: > 0 } &&
+                    pageCatalog.Entries.Any(item => item.Id == pageCatalog.CurrentId))
+                    chapter = pageCatalog.CurrentId;
+            }
             if (string.IsNullOrEmpty(chapter)) chapter = catalogCurrentId;
             if (string.IsNullOrEmpty(chapter)) chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = message.GetProperty("chapter").GetString() ?? "";
+            if (observation == "QUIZ_RESULT_READY" && catalogLive &&
+                catalogEntries.Any(item => item.Id == chapter) &&
+                catalogEntries.Any(item => item.Id == catalogCurrentId) && chapter != catalogCurrentId)
+            {
+                Trace("ignored result from a previous chapter");
+                return;
+            }
             var activeSession = courseSessionId;
             var activeGeneration = courseGeneration;
             var result = await backend.RequestAsync("course.observe", new
@@ -742,7 +770,25 @@ public partial class MainWindow
             if (activeSession != courseSessionId || activeGeneration != courseGeneration || courseState != "RUNNING") return;
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
-            Trace("course observation: " + observation + " action=" + action + " state=" + nextState);
+            Trace("course observation: " + observation + " chapter=" + chapter + " action=" + action + " state=" + nextState);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
+                observation == "VIDEO_FOUND" &&
+                await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('h1')?.textContent === '下一章 2.6 视频任务'") == "true")
+            {
+                for (var attempt = 0; attempt < 20 && catalogCurrentId != "2.6"; attempt++)
+                {
+                    await RefreshCatalogAsync();
+                    await Task.Delay(100);
+                }
+                if (nextState == "RUNNING" && chapter == "2.6" && catalogCurrentId == "2.6") PassSmoke();
+                else
+                {
+                    var snapshot = await ReadCatalogAsync(null);
+                    FailSmoke($"manual navigation did not refresh the current chapter and video state (state={nextState}, catalog={catalogCurrentId}, live={catalogLive}, snapshot={snapshot?.CurrentId}, name={snapshot?.CurrentName}, entries={snapshot?.Entries.Count})");
+                }
+                return;
+            }
             var smokeSubmission = courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
                 Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke");
             if (smokeSubmission)
@@ -779,9 +825,16 @@ public partial class MainWindow
                 {
                     "QUIZ_CONFIRM_PENDING" => "已填写答案，正在确认提交。",
                     "QUIZ_SUBMITTED" => "已确认提交，请检查页面结果。",
+                    "NEXT_UNAVAILABLE" => "未找到可用的“下一步”。你可以在右侧手动跳转，任务会继续识别新页面。",
                     _ => courseDetail
                 }
             }, true);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
+                observation == "NEXT_UNAVAILABLE" && !manualTransitionSmokeStarted)
+            {
+                manualTransitionSmokeStarted = true;
+                await CourseView.CoreWebView2.ExecuteScriptAsync("document.getElementById('manual-chapter').click()");
+            }
             if (nextState != "RUNNING")
             {
                 await ExecuteCourseAdapterAsync("pause");
