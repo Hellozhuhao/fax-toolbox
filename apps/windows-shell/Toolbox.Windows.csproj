@@ -6,8 +6,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FaxToolbox.Windows</AssemblyName>
-    <Version>0.1.0-preview.1</Version>
-    <FileVersion>0.1.0.1</FileVersion>
+    <Version>0.1.0-preview.2</Version>
+    <FileVersion>0.1.0.2</FileVersion>
     <ApplicationIcon>assets\fax-toolbox.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>

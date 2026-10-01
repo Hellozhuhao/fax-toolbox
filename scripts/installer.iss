@@ -1,5 +1,5 @@
 #define AppName "Fax Toolbox"
-#define AppVersion "0.1.0-preview.1"
+#define AppVersion "0.1.0-preview.2"
 #define AppPublisher "Fax Toolbox"
 #define AppUrl "https://github.com/Hellozhuhao/fax-toolbox"
 
@@ -34,7 +34,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=0.1.0.1
+VersionInfoVersion=0.1.0.2
 VersionInfoDescription=Fax Toolbox 前瞻版安装程序
 
 [Languages]

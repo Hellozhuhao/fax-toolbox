@@ -68,7 +68,9 @@
         const heading = clean(document.querySelector('h1,h2,.chapterTitle,.chapter-title')?.textContent);
         const byHeading = heading && rows.find(row => row.name.replace(/^\d+(?:\.\d+)*\s+/, '') === heading);
         // The course often changes chapters without changing the outer page URL.
-        const active = byHeading || rows.find(row => row.active) || rows.find(row => row.id === urlId);
+        // The heading is briefly replaced while Chaoxing swaps task panes. The
+        // selected catalog row is a better source of chapter identity.
+        const active = rows.find(row => row.active) || rows.find(row => row.id === urlId) || byHeading;
         const currentId = active?.id || urlId;
         const currentName = active?.name ||
           (heading.length >= 4 && heading.length <= 80 && !/^(章节详情|课程详情|我的课程|学习通|目录)$/.test(heading) ? heading : '');

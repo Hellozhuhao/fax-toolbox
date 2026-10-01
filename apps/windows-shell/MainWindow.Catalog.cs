@@ -19,6 +19,8 @@ public partial class MainWindow
     private string catalogSignature = "";
     private string catalogCurrentId = "";
     private string catalogCurrentName = "";
+    private string pendingCatalogId = "";
+    private int pendingCatalogReads;
     private List<ChapterEntry> catalogEntries = [];
     private CoreWebView2Frame? catalogFrame;
     private bool catalogLive;
@@ -148,6 +150,8 @@ public partial class MainWindow
                 catalogEntries = [];
                 catalogCurrentId = "";
                 catalogCurrentName = "";
+                pendingCatalogId = "";
+                pendingCatalogReads = 0;
                 catalogFrame = null;
                 catalogLive = false;
                 PublishCatalog();
@@ -182,11 +186,12 @@ public partial class MainWindow
             if (currentName.Length > 80) currentName = "";
             var live = best.Entries.Count > 0;
             var signature = JsonSerializer.Serialize(best.Entries);
+            var entriesChanged = live && signature != catalogSignature;
             if (live)
             {
                 catalogEntries = best.Entries;
                 catalogFrame = bestFrame;
-                if (signature != catalogSignature && backend is not null && key.Length > 0)
+                if (entriesChanged && backend is not null && key.Length > 0)
                 {
                     // Keep each request and future get response under the 32 KiB bridge limit.
                     var persisted = best.Entries.Take(120).ToList();
@@ -197,8 +202,29 @@ public partial class MainWindow
                     catalogSignature = signature;
                 }
             }
-            var changedChapter = catalogLive && (currentId != catalogCurrentId || currentName != catalogCurrentName);
-            if (currentId != catalogCurrentId || currentName != catalogCurrentName || live != catalogLive || live)
+            // Ignore empty DOM reads during task-pane swaps. A different chapter
+            // must be observed twice before it replaces an established identity.
+            if (currentId.Length == 0 || (catalogEntries.Count > 0 &&
+                !catalogEntries.Any(item => item.Id == currentId)))
+            {
+                currentId = catalogCurrentId;
+                currentName = catalogCurrentName;
+            }
+            else if (catalogCurrentId.Length > 0 && currentId != catalogCurrentId)
+            {
+                pendingCatalogReads = pendingCatalogId == currentId ? pendingCatalogReads + 1 : 1;
+                pendingCatalogId = currentId;
+                if (pendingCatalogReads < 2)
+                {
+                    currentId = catalogCurrentId;
+                    currentName = catalogCurrentName;
+                }
+            }
+            else { pendingCatalogId = ""; pendingCatalogReads = 0; }
+            if (currentId == catalogCurrentId && currentName.Length == 0) currentName = catalogCurrentName;
+            if (!live && catalogLive) live = true;
+            var changedChapter = catalogLive && currentId.Length > 0 && currentId != catalogCurrentId;
+            if (currentId != catalogCurrentId || currentName != catalogCurrentName || live != catalogLive || entriesChanged)
             {
                 catalogCurrentId = currentId;
                 catalogCurrentName = currentName;

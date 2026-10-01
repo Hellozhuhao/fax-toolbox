@@ -184,6 +184,10 @@ impl CourseEngine {
                 session.state = CourseState::NeedsInput;
                 ("REVIEW_QUIZ", Value::Null)
             }
+            "QUIZ_RETRY_NEEDED" => {
+                session.state = CourseState::NeedsInput;
+                ("RETRY_QUIZ", Value::Null)
+            }
             "QUIZ_SUBMIT_UNCONFIRMED" => {
                 session.state = CourseState::NeedsInput;
                 ("REVIEW_SUBMISSION", Value::Null)
@@ -203,6 +207,7 @@ impl CourseEngine {
             "QUIZ_CONFIRM_PENDING" => ("CONFIRM_QUIZ_SUBMISSION", Value::Null),
             "QUIZ_SUBMITTED" => ("ACK_QUIZ_SUBMISSION", Value::Null),
             "QUIZ_RESULT_READY" => ("NEXT_UNIT", Value::Null),
+            "QUIZ_RESOLVED" => ("NONE", Value::Null),
             "NEXT_UNAVAILABLE" => ("NONE", Value::Null),
             _ => return Err(Fault("BAD_REQUEST", "unsupported course observation")),
         };

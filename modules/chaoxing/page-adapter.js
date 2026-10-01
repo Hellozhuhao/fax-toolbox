@@ -100,7 +100,30 @@
       function inspectQuizSubmission() {
         if (!quizSubmitPhase) return false;
         if (quizSubmitPhase === 'confirmed') {
-          if (quizResultReady()) report('QUIZ_RESULT_READY');
+          if (quizResultReady()) { report('QUIZ_RESULT_READY'); return true; }
+          const remaining = findQuiz();
+          const feedback = (document.body?.innerText || '').slice(-5000);
+          if (remaining.length && /答错|回答错误|答案错误|选择错误|请重试|再试一次/.test(feedback)) {
+            quizSubmitted = false; quizSubmitPhase = ''; quizSubmitButton = null;
+            report('QUIZ_RETRY_NEEDED', true);
+            return true;
+          }
+          if (remaining.length && /回答正确|答对了|选择正确/.test(feedback)) {
+            quizSubmitted = false; quizSubmitPhase = ''; quizSubmitButton = null;
+            report('QUIZ_RESOLVED', true);
+            byText(['继续播放', '继续学习', '继续'])?.click();
+            setTimeout(inspect, 250);
+            return true;
+          }
+          if (!remaining.length && !confirmationButton()) {
+            quizSubmitted = false; quizSubmitPhase = ''; quizSubmitButton = null;
+            report('QUIZ_RESOLVED', true);
+            setTimeout(inspect, 250);
+            return true;
+          }
+          if (Date.now() - quizSubmitStartedAt > 15000) {
+            quizSubmitPhase = 'needs-review'; report('QUIZ_SUBMIT_UNCONFIRMED', true);
+          }
           return true;
         }
         if (quizSubmitPhase === 'needs-review') return true;
@@ -112,7 +135,9 @@
           return true;
         }
         const label = quizSubmitButton ? buttonLabel(quizSubmitButton) : '';
-        if (/已提交|提交成功|已完成|查看成绩/.test(label)) {
+        const feedback = (document.body?.innerText || '').slice(-5000);
+        if (/已提交|提交成功|已完成|查看成绩/.test(label) ||
+            /答错|回答错误|答案错误|回答正确|答对了/.test(feedback)) {
           quizSubmitPhase = 'confirmed';
           report('QUIZ_SUBMITTED', true);
           return true;
@@ -151,6 +176,7 @@
       }
       function advanceAfterVideo() {
         if (window.top !== window) return;
+        if (findQuiz().length) { report('QUIZ_FOUND', true); return; }
         const tab = Array.from(document.querySelectorAll('button,a,li,[role="tab"]')).find(element =>
           visible(element) && /^(?:\d+\s*)?(?:测验|章节测验|检测|章节检测|作业)$/.test(
             (element.innerText || element.textContent || '').replace(/\s+/g, ' ').trim()));
@@ -181,7 +207,9 @@
             const count = parent.querySelectorAll(controls).length;
             if (count < 2 || count > 12) continue;
             const label = (parent.innerText || parent.textContent || '').slice(0, 2600);
-            if (label.length > 2400 || [...label.matchAll(marker)].length !== 1) continue;
+            const numbered = [...label.matchAll(marker)].length;
+            const unnumbered = [...label.matchAll(/(?:^|\s)(?:单选题|多选题|判断题|填空题)(?=\s|$)/g)].length;
+            if (label.length > 2400 || numbered + unnumbered !== 1) continue;
             inferred.add(parent);
             break;
           }
@@ -314,7 +342,9 @@
           foundVideo.muted = true;
           if (video !== foundVideo) {
             video = foundVideo;
-            video.addEventListener('ended', () => report('VIDEO_ENDED', true), {once: true});
+            video.addEventListener('ended', () => setTimeout(() => {
+              if (findQuiz().length) inspect(); else report('VIDEO_ENDED', true);
+            }, 350), {once: true});
           }
           if (foundVideo.ended) report('VIDEO_ENDED');
           else if (foundVideo.paused) report('VIDEO_FOUND');
@@ -370,7 +400,11 @@
       window.__faxCourseAdapterSnapshotQuiz = snapshotQuiz;
       window.__faxCourseAdapterDiagnose = () => ({questions: findQuiz().length,
         answerControls: document.querySelectorAll('input[type="radio"],input[type="checkbox"],li[role="radio"],li[role="checkbox"]').length,
-        running, lastObservation: lastObservation.split(':')[0] || ''});
+        running, chapter: chapter(), lastObservation: lastObservation.split(':')[0] || '',
+        submitPhase: quizSubmitPhase || 'idle', submitAgeMs: quizSubmitPhase ? Date.now() - quizSubmitStartedAt : 0,
+        submitted: quizSubmitted, pendingInspection: !!pendingInspection, pendingAction: !!pendingAction,
+        video: video ? {paused: video.paused, ended: video.ended, muted: video.muted,
+          currentTime: Math.round(video.currentTime || 0)} : null});
       window.__faxCourseAdapterInspect = inspect;
       const observer = new MutationObserver(() => {
         if (!active || !running || document.readyState === 'loading' || pendingInspection) return;

@@ -17,6 +17,7 @@ public partial class MainWindow
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
     private const string StickyQuizFixture = VideoQuizFixture + "&sticky=1";
+    private const string OverlayQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-overlay.html?chapterId=2.5";
     private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
     private const string CatalogAdvanceFixture = ResultFixture + "&catalogadvance=1";
     private const string ManualFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1&manual=1";
@@ -30,6 +31,9 @@ public partial class MainWindow
         "--course-video-quiz-smoke" => VideoQuizFixture,
         "--course-sticky-quiz-smoke" => StickyQuizFixture,
         "--course-generic-quiz-smoke" => VideoQuizFixture + "&generic=1",
+        "--course-overlay-quiz-smoke" => OverlayQuizFixture,
+        "--course-diagnostics-smoke" => CourseFixture,
+        "--course-session-smoke" => CourseFixture,
         "--course-result-smoke" => ResultFixture,
         "--course-catalog-result-smoke" => CatalogAdvanceFixture,
         "--course-manual-next-smoke" => ManualFixture,
@@ -464,6 +468,68 @@ public partial class MainWindow
             await CourseView.CoreWebView2.ExecuteScriptAsync("document.getElementById('next').click()");
             return;
         }
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-session-smoke")
+        {
+            var manager = CourseView.CoreWebView2.CookieManager;
+            var cookie = manager.CreateCookie("fax_smoke_session", "current-login-state", "mooc1.chaoxing.com", "/");
+            manager.AddOrUpdateCookie(cookie);
+            await SaveCourseSessionAsync();
+            if (!File.Exists(CourseSessionPath) || File.ReadAllText(CourseSessionPath).Contains("current-login-state"))
+            { FailSmoke("course login state was not encrypted on disk"); return; }
+            manager.DeleteCookie(cookie);
+            await RestoreCourseSessionAsync();
+            var restored = await manager.GetCookiesAsync(url);
+            if (restored.Any(item => item.Name == "fax_smoke_session" && item.Value == "current-login-state")) PassSmoke();
+            else FailSmoke("saved current login state was not restored");
+            return;
+        }
+        if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-diagnostics-smoke")
+        {
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.getElementById('course-analyze').hidden && document.getElementById('module-demo').closest('[data-developer-tool]').hidden") != "true")
+            { FailSmoke("developer features were visible by default"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('developer-mode').click()");
+            for (var attempt = 0; attempt < 20 && !developerMode; attempt++) await Task.Delay(50);
+            if (!developerMode || !File.Exists(EndpointFile))
+            { FailSmoke("developer mode did not open the live endpoint"); return; }
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "!document.getElementById('course-analyze').hidden && !document.getElementById('module-demo').closest('[data-developer-tool]').hidden") != "true")
+            { FailSmoke("developer features were not revealed"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.querySelector('.nav-group').dispatchEvent(new PointerEvent('pointerenter'))");
+            await Task.Delay(150);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.querySelector('.nav-group').classList.contains('flyout-open')") != "false")
+            { FailSmoke("tool submenu appeared before hover delay"); return; }
+            await Task.Delay(320);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.querySelector('.nav-group').classList.contains('flyout-open')") != "true")
+            { FailSmoke("tool submenu did not appear after hover delay"); return; }
+            var page = await BuildPageAnalysisAsync();
+            using var analysis = JsonDocument.Parse(page);
+            var pageData = analysis.RootElement.GetProperty("pages")[0];
+            if (!pageData.TryGetProperty("data", out var data) ||
+                !(data.GetProperty("bodyText").GetString() ?? "").Contains("课程介绍", StringComparison.Ordinal))
+            { FailSmoke("page analysis omitted visible course content: " + pageData); return; }
+            var live = await Task.Run(async () =>
+            {
+                using var pipe = new System.IO.Pipes.NamedPipeClientStream(".", diagnosticPipeName,
+                    System.IO.Pipes.PipeDirection.InOut);
+                await pipe.ConnectAsync(5000);
+                var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
+                using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
+                await writer.WriteLineAsync("snapshot");
+                return await reader.ReadToEndAsync();
+            });
+            using var snapshot = JsonDocument.Parse(live);
+            if (snapshot.RootElement.GetProperty("course").GetProperty("chapterId").GetString() is null ||
+                !snapshot.RootElement.GetProperty("probes").EnumerateArray().Any())
+            { FailSmoke("live diagnostics returned incomplete state"); return; }
+            SetDeveloperMode(false);
+            if (File.Exists(EndpointFile)) FailSmoke("developer endpoint remained after shutdown");
+            else PassSmoke();
+            return;
+        }
         if (courseSmokeMode && IsCoursePage(url) && backend is not null)
         {
             if (Environment.GetCommandLineArgs()[1] == "--course-smoke")
@@ -601,10 +667,12 @@ public partial class MainWindow
         RefreshTaskTabs();
         if (ShellView.CoreWebView2 is null) return;
         var url = CourseView.CoreWebView2?.Source;
+        var chapter = catalogCurrentId.Length > 0 && CourseKeyFromUrl(url) == catalogKey ?
+            catalogCurrentId : ChapterFromUrl(url);
         var json = JsonSerializer.Serialize(new
         {
             v = 1, kind = "course.status", state = courseState, detail = courseDetail,
-            ready = ready ?? IsCoursePage(url), url = DisplayUrl(url), chapter = ChapterFromUrl(url)
+            ready = ready ?? IsCoursePage(url), url = DisplayUrl(url), chapter
         });
         ShellView.CoreWebView2.PostWebMessageAsJson(json);
     }
@@ -820,8 +888,8 @@ public partial class MainWindow
                 message.GetProperty("generation").GetInt64() != courseGeneration) return;
             var observation = message.GetProperty("observation").GetString();
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
-                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
-                "QUIZ_SUBMIT_UNCONFIRMED" or "QUIZ_RESULT_READY" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or
+                "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_RETRY_NEEDED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
+                "QUIZ_SUBMIT_UNCONFIRMED" or "QUIZ_RESULT_READY" or "QUIZ_RESOLVED" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or
                 "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED" or "NEXT_UNAVAILABLE")) return;
             var chapter = ChapterFromUrl(args.Source);
             if (frame is null && catalogReaderScript is not null)
@@ -864,7 +932,24 @@ public partial class MainWindow
                 observation == "VIDEO_FOUND" && chapter == "2.6" && lastAutomaticAdvanceChapter == "2.5")
             { PassSmoke(); return; }
             Trace("course observation: " + observation + " chapter=" + chapter + " action=" + action + " state=" + nextState);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-overlay-quiz-smoke" &&
+                observation == "QUIZ_RESOLVED")
+            {
+                var solved = await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.body.dataset.overlaySolved === 'true' && document.body.dataset.attempts === '2'");
+                if (solved == "true" && aiRetryCount == 1) { PassSmoke(); return; }
+            }
             PublishDiagnostic("学习通", observation, "页面动作：" + action + " · 任务状态：" + nextState);
+            if (observation == "QUIZ_RETRY_NEEDED")
+            {
+                if (lastAiAnswers is not null) rejectedAiAnswers.Add(lastAiAnswers);
+                aiRetryCount++;
+                PublishAiStatus($"页面提示答案错误，正在重新分析（第 {aiRetryCount + 1} 次）。");
+            }
+            else if (observation == "QUIZ_RESULT_READY") PublishAiStatus("已识别测验结果。");
+            else if (observation == "QUIZ_RESOLVED") PublishAiStatus("视频题已通过，继续学习。");
+            else if (observation == "QUIZ_SUBMITTED") PublishAiStatus("答案已提交，等待页面确认结果。");
+            else if (observation == "QUIZ_SUBMIT_UNCONFIRMED") PublishAiStatus("页面未确认提交结果，请人工检查当前题目。");
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
                 observation == "VIDEO_FOUND" &&
                 await CourseView.CoreWebView2.ExecuteScriptAsync(
@@ -875,11 +960,14 @@ public partial class MainWindow
                     await RefreshCatalogAsync();
                     await Task.Delay(100);
                 }
-                if (nextState == "RUNNING" && chapter == "2.6" && catalogCurrentId == "2.6") PassSmoke();
+                var shown = JsonSerializer.Deserialize<string>(await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('course-chapter').textContent")) ?? "";
+                if (nextState == "RUNNING" && chapter == "2.6" && catalogCurrentId == "2.6" &&
+                    shown.Contains("2.6", StringComparison.Ordinal)) PassSmoke();
                 else
                 {
                     var snapshot = await ReadCatalogAsync(null);
-                    FailSmoke($"manual navigation did not refresh the current chapter and video state (state={nextState}, catalog={catalogCurrentId}, live={catalogLive}, snapshot={snapshot?.CurrentId}, name={snapshot?.CurrentName}, entries={snapshot?.Entries.Count})");
+                    FailSmoke($"manual navigation did not refresh the current chapter and video state (state={nextState}, catalog={catalogCurrentId}, shown={shown}, live={catalogLive}, snapshot={snapshot?.CurrentId}, name={snapshot?.CurrentName}, entries={snapshot?.Entries.Count})");
                 }
                 return;
             }
@@ -911,6 +999,7 @@ public partial class MainWindow
                 "FILL_QUIZ" => "已匹配本章答案，正在填写。",
                 "NEEDS_ANSWERS" => "本章没有答案，请先在左侧录入。",
                 "REVIEW_QUIZ" => "题目结构与答案不匹配，请人工检查。",
+                "RETRY_QUIZ" => "页面提示答案错误，正在重新分析题目。",
                 "REVIEW_SUBMISSION" => "未能确认提交结果。请检查右侧弹窗和页面，再决定是否继续。",
                 "WAIT_FOR_HUMAN" => "页面需要人工验证。请在右侧完成验证后点击继续。",
                 "MANUAL_PLAY" => "视频需要手动播放。请在右侧点击播放后继续。",
@@ -919,6 +1008,7 @@ public partial class MainWindow
                 {
                     "QUIZ_CONFIRM_PENDING" => "已填写答案，正在确认提交。",
                     "QUIZ_SUBMITTED" => "已确认提交，请检查页面结果。",
+                    "QUIZ_RESOLVED" => "视频题已通过，继续检查本章任务。",
                     "NEXT_UNAVAILABLE" => "未找到可用的“下一步”。你可以在右侧手动跳转，任务会继续识别新页面。",
                     _ => courseDetail
                 }
@@ -934,8 +1024,15 @@ public partial class MainWindow
                 await ExecuteCourseAdapterAsync("pause");
                 if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-challenge-smoke" &&
                     observation == "CHALLENGE_FOUND" && nextState == "NEEDS_INPUT") PassSmoke();
-                if (action is "NEEDS_ANSWERS" or "REVIEW_QUIZ")
-                    await TryAiAnswerAsync(frame, activeSession, activeGeneration);
+                if (action is "NEEDS_ANSWERS" or "REVIEW_QUIZ" or "RETRY_QUIZ")
+                {
+                    if (action == "RETRY_QUIZ" && aiRetryCount >= 5)
+                    {
+                        PublishCourse("NEEDS_INPUT", "连续五次未通过视频题，请人工核对后继续。", true);
+                        PublishAiStatus("已停止自动重试，等待人工核对。");
+                    }
+                    else await TryAiAnswerAsync(frame, activeSession, activeGeneration);
+                }
                 return;
             }
             if (action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;

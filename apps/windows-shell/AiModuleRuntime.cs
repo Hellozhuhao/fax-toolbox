@@ -22,8 +22,8 @@ internal sealed class AiModuleRuntime(BackendClient backend)
         AiAnswerService.TestConnectionAsync(settings, cancellation);
 
     public Task<AiQuizAnswer[]> AnswerCourseAsync(AiSettings settings, AiQuizSnapshot snapshot,
-        CancellationToken cancellation) => RunAsync("course", "answer", cancellation,
-            () => AiAnswerService.AnswerAsync(settings, snapshot, cancellation));
+        CancellationToken cancellation, IReadOnlyList<AiQuizAnswer[]>? previousWrongAnswers = null) => RunAsync("course", "answer", cancellation,
+            () => AiAnswerService.AnswerAsync(settings, snapshot, cancellation, previousWrongAnswers));
 
     public Task<HomeworkReviewItem[]> ReviewHomeworkAsync(AiSettings settings, AiQuizSnapshot snapshot,
         IReadOnlyList<AiImageInput> images, CancellationToken cancellation) =>

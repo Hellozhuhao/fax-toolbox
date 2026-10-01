@@ -315,7 +315,7 @@ button[aria-disabled="true"] { background-image: none; }
   opacity: 0; visibility: hidden; pointer-events: none;
   transform: translateX(-6px); transition: opacity .16s ease, transform .16s ease, visibility .16s;
 }
-.nav-group:hover .nav-flyout, .nav-group:focus-within .nav-flyout {
+.nav-group.flyout-open .nav-flyout {
   opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0);
 }
 .nav-flyout p { color: var(--subtle); font-size: 10px; font-weight: 750; margin: 4px 8px 8px; }
@@ -336,8 +336,7 @@ button[aria-disabled="true"] { background-image: none; }
   color: var(--subtle); font-size: 11px; font-weight: 700; cursor: help;
 }
 .context-help:hover, .context-help:focus-visible { color: var(--accent); border-color: var(--accent); }
-.content .view:not([hidden]) { animation: view-enter .18s ease-out both; }
-@keyframes view-enter { from { opacity: .6; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.content .view:not([hidden]) { contain: layout style; }
 @media (prefers-reduced-motion: reduce) {
   .nav-flyout { transition: none; }
   .content .view:not([hidden]) { animation: none; }
@@ -412,5 +411,9 @@ button[aria-disabled="true"] { background-image: none; }
 .settings-detail{border:1px solid var(--border);border-radius:17px;background:var(--panel);padding:27px;min-height:270px}
 .settings-detail section[hidden]{display:none}.settings-detail h3{margin:8px 0}.settings-detail p{line-height:1.65}.settings-detail button:not([data-theme]){margin-top:18px}
 .settings-note{padding:13px 15px;border-radius:12px;background:var(--surface);color:var(--subtle);font-size:12px}
+.developer-switch{display:inline-flex;align-items:center;gap:9px;margin-top:18px;font-size:13px;font-weight:700}
+.developer-switch input{width:18px;height:18px;accent-color:var(--accent)}
+.developer-only[hidden]{display:none!important}
+[data-developer-tool][hidden],.nav-flyout [hidden],.palette [hidden]{display:none!important}
 @media(max-width:930px){.ai-service-grid{grid-template-columns:1fr}.ai-consumers{grid-template-columns:repeat(2,minmax(0,1fr))}.diagnostics-tools{align-items:flex-start;flex-direction:column}}
 @media(max-width:620px){.activity-overview{grid-template-columns:1fr}.ai-consumers,.settings-layout{grid-template-columns:1fr}.settings-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.command-meta{display:none}}

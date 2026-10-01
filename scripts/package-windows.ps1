@@ -17,7 +17,7 @@ foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\fax-mark.svg',
     'apps\windows-shell\ui\button-glow.js', 'apps\windows-shell\ui\vendor\katex\katex.min.js',
     'apps\windows-shell\ui\vendor\katex\katex.min.css', 'modules\chaoxing\page-adapter.js',
-    'modules\chaoxing\homework-reader.js')) {
+    'modules\chaoxing\homework-reader.js', 'scripts\read-live-diagnostics.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $relative) -PathType Leaf)) {
         throw "Published package is incomplete: $relative"
     }

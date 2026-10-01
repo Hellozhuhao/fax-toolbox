@@ -170,6 +170,7 @@ public partial class MainWindow
 
     private void PublishHomeworkStatus(string detail)
     {
+        if (homeworkDetail != detail) PublishDiagnostic("作业校对", "任务状态", detail);
         homeworkDetail = detail;
         RefreshTaskTabs();
         if (homeworkClosed || ShellView.CoreWebView2 is null) return;

@@ -9,12 +9,17 @@ namespace FaxToolbox.Windows;
 
 public partial class MainWindow
 {
+    private int aiRetryCount;
+    private string lastAiQuizKey = "";
+    private AiQuizAnswer[]? lastAiAnswers;
+    private readonly List<AiQuizAnswer[]> rejectedAiAnswers = [];
     private CancellationTokenSource? aiAnswerCancellation;
     private CancellationTokenSource? aiBalanceCancellation;
     private bool aiTestInProgress;
 
     private void PublishAiStatus(string detail)
     {
+        PublishDiagnostic("AI 服务", "学习通答题", detail);
         if (ShellView.CoreWebView2 is null) return;
         ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
         {
@@ -169,7 +174,7 @@ public partial class MainWindow
 
     private async Task TryAiAnswerAsync(CoreWebView2Frame? frame, string? sessionId, long generation)
     {
-        var smokeAi = courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-ai-smoke";
+        var smokeAi = courseSmokeMode && Environment.GetCommandLineArgs()[1] is "--course-ai-smoke" or "--course-overlay-quiz-smoke";
         aiAnswerCancellation?.Cancel();
         var cancellation = new CancellationTokenSource();
         aiAnswerCancellation = cancellation;
@@ -188,25 +193,43 @@ public partial class MainWindow
             var raw = frame is null ? await CourseView.CoreWebView2.ExecuteScriptAsync(script) :
                 frame.IsDestroyed() == 0 ? await frame.ExecuteScriptAsync(script) : "null";
             var snapshot = AiAnswerService.ParseSnapshot(raw);
+            var quizKey = JsonSerializer.Serialize(snapshot.Questions.Select(question =>
+                new { question.Type, question.Options, question.BlankCount }));
+            if (quizKey != lastAiQuizKey)
+            {
+                aiRetryCount = 0;
+                lastAiAnswers = null;
+                rejectedAiAnswers.Clear();
+                lastAiQuizKey = quizKey;
+            }
             Trace("AI quiz snapshot: " + snapshot.Questions.Length + " questions");
             PublishCourse("NEEDS_INPUT", $"AI 正在分析 {snapshot.Questions.Length} 道题…", true);
             PublishAiStatus(smokeAi ? "正在验证本地 AI 答题流程。" :
                 $"正在向 {settings!.Model} 发送当前可见题目。请勿切换章节。");
             var answers = smokeAi ? await aiRuntime!.RunAsync("course", "answer", cancellation.Token,
                 () => Task.FromResult(AiAnswerService.ParseAnswers(
+                    Environment.GetCommandLineArgs()[1] == "--course-overlay-quiz-smoke" ?
+                    "{\"answers\":[{\"number\":1,\"answer\":\"" + (aiRetryCount == 0 ? "A" : "B") + "\"}]}" :
                     "{\"answers\":[{\"number\":1,\"answer\":\"A\"},{\"number\":2,\"answer\":\"B\"}," +
                     "{\"number\":3,\"answer\":\"测试答案\"},{\"number\":4,\"answer\":\"A\"}]}", snapshot))) :
-                await aiRuntime!.AnswerCourseAsync(settings!, snapshot, cancellation.Token);
+                await aiRuntime!.AnswerCourseAsync(settings!, snapshot, cancellation.Token,
+                    aiRetryCount > 0 ? rejectedAiAnswers : null);
             Trace("AI answer response validated: " + answers.Length + " answers");
             if (cancellation.IsCancellationRequested || sessionId != courseSessionId ||
                 generation != courseGeneration || courseState != "NEEDS_INPUT" ||
                 source != CourseView.CoreWebView2.Source || catalogId != catalogCurrentId ||
-                (frame is not null && frame.IsDestroyed() != 0)) return;
+                (frame is not null && frame.IsDestroyed() != 0))
+            {
+                if (!cancellation.IsCancellationRequested && ReferenceEquals(aiAnswerCancellation, cancellation))
+                    PublishAiStatus("页面或任务已变化，本次模型回复已丢弃。");
+                return;
+            }
             var current = frame is null ? await CourseView.CoreWebView2.ExecuteScriptAsync(script) :
                 await frame.ExecuteScriptAsync(script);
             if (current != raw)
             {
                 PublishAiStatus("答题期间页面题目发生变化，请重新启动当前任务。");
+                PublishCourse("NEEDS_INPUT", "题目已变化，请重新识别后继续。", true);
                 return;
             }
             await courseCommandGate.WaitAsync(cancellation.Token);
@@ -215,7 +238,12 @@ public partial class MainWindow
                 if (backend is null || cancellation.IsCancellationRequested || sessionId != courseSessionId ||
                     generation != courseGeneration || courseState != "NEEDS_INPUT" ||
                     source != CourseView.CoreWebView2.Source || catalogId != catalogCurrentId ||
-                    (frame is not null && frame.IsDestroyed() != 0)) return;
+                    (frame is not null && frame.IsDestroyed() != 0))
+                {
+                    if (!cancellation.IsCancellationRequested && ReferenceEquals(aiAnswerCancellation, cancellation))
+                        PublishAiStatus("页面或任务已变化，本次答案未提交。");
+                    return;
+                }
                 await backend.RequestAsync("course.command", CourseParams("start"));
                 PublishCourse("RUNNING", $"AI 已校验 {answers.Length} 道题，正在填写。", true);
                 await ExecuteCourseAdapterAsync("resume", inspectNow: false);
@@ -231,6 +259,7 @@ public partial class MainWindow
                 if (frame is null) CourseView.CoreWebView2.PostWebMessageAsJson(payload);
                 else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
                 Trace("AI fill action dispatched");
+                lastAiAnswers = answers;
                 PublishAiStatus($"已生成 {answers.Length} 道答案，正在页面填写并提交。");
             }
             finally { courseCommandGate.Release(); }

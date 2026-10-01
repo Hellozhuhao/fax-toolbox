@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>视频内弹题验证</title></head>
+<body>
+  <h1>2.5 视频内弹题</h1>
+  <aside id="catalog"><div class="active" data-chapter-id="2.5">2.5 视频内弹题</div><div data-chapter-id="2.6">2.6 下一节</div></aside>
+  <video controls width="400" height="250"></video>
+  <div id="checkpoint" hidden style="position:fixed;inset:80px 50px;background:#111e;color:white;padding:25px">
+    <div class="checkpoint-question">
+      <p>多选题</p><p>一度冻伤包含哪些表现？</p>
+      <label><input type="checkbox" value="A">A. 充血</label>
+      <label><input type="checkbox" value="B">B. 水肿</label>
+      <label><input type="checkbox" value="C">C. 水疱</label>
+      <button type="button" id="submit" onclick="submitAnswer()">提交</button>
+      <p id="feedback"></p>
+    </div>
+  </div>
+  <script>
+    const video = document.querySelector('video');
+    video.play = () => Promise.resolve();
+    setTimeout(() => { document.getElementById('checkpoint').hidden = false; video.dispatchEvent(new Event('ended')); }, 700);
+    function submitAnswer() {
+      document.body.dataset.attempts = String(Number(document.body.dataset.attempts || 0) + 1);
+      const selected = Array.from(document.querySelectorAll('input:checked')).map(input => input.value).join('');
+      const feedback = document.getElementById('feedback');
+      if (selected === 'B') {
+        feedback.textContent = '回答正确'; document.body.dataset.overlaySolved = 'true';
+        setTimeout(() => { document.getElementById('checkpoint').hidden = true; }, 250);
+      } else feedback.textContent = '回答错误，请重试';
+    }
+  </script>
+</body>
+</html>

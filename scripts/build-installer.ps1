@@ -11,7 +11,7 @@ $published = Join-Path $dist 'windows'
 $cache = Join-Path $root '.cache\installer-tools'
 $script = Join-Path $PSScriptRoot 'installer.iss'
 $bootstrapper = Join-Path $cache 'MicrosoftEdgeWebView2Setup.exe'
-$release = Join-Path $dist 'FaxToolbox-Setup-v0.1.0-preview.1-win-x64.exe'
+$release = Join-Path $dist 'FaxToolbox-Setup-v0.1.0-preview.2-win-x64.exe'
 
 if (-not $SkipPublish) {
     & (Join-Path $PSScriptRoot 'publish-windows.ps1') -Test:$Test
@@ -22,7 +22,7 @@ if (-not (Test-Path -LiteralPath $published -PathType Container)) {
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\index.html', 'modules\chaoxing\page-adapter.js',
-    'packages\page-agent\page-agent.js')) {
+    'packages\page-agent\page-agent.js', 'scripts\read-live-diagnostics.ps1')) {
     if (-not (Test-Path -LiteralPath (Join-Path $published $relative) -PathType Leaf)) {
         throw "Published Windows files are incomplete: $relative"
     }

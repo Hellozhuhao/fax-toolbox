@@ -16,6 +16,7 @@
   let currentView = '';
   const activity = [];
   let activityFilter = 'all';
+  let developerMode = false;
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
   const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'AI 服务', activity: '状态', settings: '设置', vault: '密码箱'};
   const stateName = state => stateNames[state] || state || '未知';
@@ -32,6 +33,7 @@
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
       ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
     if (view === 'vault') send('vault.list');
+    if (view === 'activity') renderActivity();
   }
   function showWorkspace() {
     if (activeModule === 'course') openCourse();
@@ -44,7 +46,7 @@
     const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     if (activity[0]?.title === title && activity[0]?.detail === detail) return;
     activity.unshift({source, title, detail, time}); activity.length = Math.min(activity.length, 200);
-    renderActivity();
+    if (currentView === 'activity') renderActivity();
   }
   function activityCategory(source) {
     if (/学习|课程/.test(source)) return 'course';
@@ -119,8 +121,8 @@
     logActivity('学习通刷课', stateName(courseState), message.detail || '状态已更新');
     if (message.url) $('course-url').textContent = message.url;
     $('course-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
-    if (message.chapter !== undefined && message.chapter !== currentChapterId) {
-      currentChapterId = message.chapter || ''; currentChapterName = '';
+    if (message.chapter && message.chapter !== currentChapterId) {
+      currentChapterId = message.chapter; currentChapterName = '';
       updateChapter();
     }
     $('course-start').disabled = !courseReady || !['READY', 'PAUSED', 'NEEDS_INPUT', 'STOPPED', 'ERROR'].includes(courseState);
@@ -143,8 +145,8 @@
     catalogEntries = Array.isArray(message.entries) ? message.entries : [];
     catalogLive = !!message.live;
     const previousChapterId = currentChapterId;
-    currentChapterId = message.currentId || '';
-    currentChapterName = message.currentName || '';
+    if (message.currentId) currentChapterId = message.currentId;
+    if (message.currentName) currentChapterName = message.currentName;
     const selected = $('course-chapters').value;
     const menu = $('course-chapters'); menu.replaceChildren();
     const prompt = document.createElement('option'); prompt.value = '';
@@ -277,11 +279,13 @@
     if (message.kind === 'homework.progress') renderHomeworkProgress(message);
     if (message.kind === 'homework.result') renderHomeworkResults(message);
     if (message.kind === 'course.catalog') renderCatalog(message);
+    if (message.kind === 'course.session') { $('course-save-session').textContent = message.detail?.startsWith('已') ? '登录状态已保存' : '保存当前登录状态'; logActivity('学习通', '登录状态', message.detail || ''); }
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
     if (message.kind === 'ai.status') { $('ai-result').textContent = message.detail || ''; $('course-ai-result').textContent = message.detail || ''; $('ai-course-state').textContent = message.detail || '等待请求'; logActivity('AI 服务', '学习通答题', message.detail || '状态已更新'); }
     if (message.kind === 'diagnostics.event') logActivity(message.source || '系统', message.title || '日志', message.detail || '');
     if (message.kind === 'diagnostics.snapshot') { activity.length = 0; for (const entry of (message.entries || []).slice().reverse()) logActivity(entry.source, entry.title, entry.detail); }
+    if (message.kind === 'diagnostics.endpoint') $('diagnostics-endpoint').textContent = message.enabled ? `本机诊断端点：${message.pipeName}` : '';
     if (message.kind === 'ai.config') renderAiConfig(message);
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
@@ -326,7 +330,8 @@
   $('homework-start').addEventListener('click', () => send('homework.start'));
   $('homework-ai-open').addEventListener('click', openAi);
   $('course-ai-open').addEventListener('click', openAi);
-  $('course-save-vault').addEventListener('click', () => send('vault.save'));
+  $('course-save-session').addEventListener('click', () => send('course.session.save'));
+  $('course-analyze').addEventListener('click', () => send('course.analyze'));
   $('course-start').addEventListener('click', () => send('course.start'));
   $('course-chapters').addEventListener('change', () => { $('course-jump').disabled = !catalogLive || !$('course-chapters').value; });
   $('course-jump').addEventListener('click', () => send('course.jump', {chapterId: $('course-chapters').value}));
@@ -350,6 +355,35 @@
   });
   $('diagnostics-inspect').addEventListener('click', () => send('diagnostics.inspect'));
   $('diagnostics-devtools').addEventListener('click', () => send('diagnostics.devtools'));
+  $('diagnostics-export').addEventListener('click', () => send('diagnostics.export'));
+  function setDeveloperMode(enabled) {
+    developerMode = !!enabled;
+    $('developer-mode').checked = developerMode;
+    for (const item of document.querySelectorAll('.developer-only')) item.hidden = !developerMode;
+    for (const item of document.querySelectorAll('[data-developer-tool]')) item.hidden = !developerMode;
+    document.querySelector('.nav-flyout [data-view="demo"]').hidden = !developerMode;
+    document.querySelector('.nav-flyout p:last-of-type').hidden = !developerMode;
+    document.querySelector('#command-palette [data-action="demo"]').hidden = !developerMode;
+    try { localStorage.setItem('fax-toolbox-developer-mode', developerMode ? 'on' : 'off'); } catch (_) {}
+    send('developer.mode', {enabled: developerMode});
+  }
+  $('developer-mode').addEventListener('change', event => setDeveloperMode(event.target.checked));
+  let savedDeveloperMode = false;
+  try { savedDeveloperMode = localStorage.getItem('fax-toolbox-developer-mode') === 'on'; } catch (_) {}
+  setDeveloperMode(savedDeveloperMode);
+  const toolGroup = document.querySelector('.nav-group');
+  let flyoutOpenTimer, flyoutCloseTimer;
+  const openFlyout = () => { clearTimeout(flyoutCloseTimer); clearTimeout(flyoutOpenTimer);
+    flyoutOpenTimer = setTimeout(() => toolGroup.classList.add('flyout-open'), 380); };
+  const closeFlyout = () => { clearTimeout(flyoutOpenTimer); clearTimeout(flyoutCloseTimer);
+    flyoutCloseTimer = setTimeout(() => toolGroup.classList.remove('flyout-open'), 180); };
+  toolGroup.addEventListener('pointerenter', openFlyout);
+  toolGroup.addEventListener('pointerleave', closeFlyout);
+  toolGroup.addEventListener('focusin', () => { clearTimeout(flyoutCloseTimer); toolGroup.classList.add('flyout-open'); });
+  toolGroup.addEventListener('focusout', () => setTimeout(() => {
+    if (!toolGroup.contains(document.activeElement)) toolGroup.classList.remove('flyout-open');
+  }, 0));
+  toolGroup.querySelectorAll('.nav-flyout button').forEach(button => button.addEventListener('click', () => toolGroup.classList.remove('flyout-open')));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);

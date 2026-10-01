@@ -33,6 +33,7 @@ public partial class MainWindow : Window
                 options: new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = "--no-proxy-server" }))).Value;
 
     private readonly bool smokeMode;
+    private readonly ConcurrentQueue<(DateTime Time, string Message)> runtimeTrace = new();
     private readonly bool courseSmokeMode;
     private readonly bool homeworkSmokeMode;
     private readonly bool courseLiveSmokeMode;
@@ -55,7 +56,6 @@ public partial class MainWindow : Window
     private AiModuleRuntime? aiRuntime;
     private string currentShellView = "home";
     private string workspaceLayoutMode = "";
-    private DispatcherTimer? workspaceLayoutTimer;
     private double preferredShellRatio = 1.0 / 3.8;
 
     public MainWindow() : this(false) { }
@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         tabSmokeChild = childForTabSmoke;
         homeworkSmokeMode = args.Length == 3 && args[1] == "--homework-smoke";
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
-            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke" or "--course-overlay-quiz-smoke" or "--course-diagnostics-smoke" or "--course-session-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
@@ -187,6 +187,7 @@ public partial class MainWindow : Window
         await Task.WhenAll(ModuleView.EnsureCoreWebView2Async(moduleEnvironment),
             CourseView.EnsureCoreWebView2Async(courseEnvironment));
         ConfigureModuleWebViews();
+        await RestoreCourseSessionAsync();
     }
 
     private void ConfigureShellView()
@@ -271,6 +272,7 @@ public partial class MainWindow : Window
             }
             Publish(state, detail);
             PublishDiagnosticSnapshot();
+            PublishDiagnosticEndpoint();
             PublishAiConfiguration();
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
@@ -468,7 +470,11 @@ public partial class MainWindow : Window
                 case "ai.test": await TestAiConnectionAsync(); break;
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
                 case "diagnostics.inspect": await InspectCurrentPageAsync(); break;
-                case "diagnostics.devtools": OpenPageDevTools(); break;
+                case "diagnostics.devtools": if (developerMode) OpenPageDevTools(); break;
+                case "diagnostics.export": await ExportDiagnosticsAsync(); break;
+                case "developer.mode": SetDeveloperMode(message.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True); break;
+                case "course.analyze": if (developerMode) await AnalyzeCoursePageAsync(); break;
+                case "course.session.save": await SaveCourseSessionAsync(); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;
@@ -498,43 +504,12 @@ public partial class MainWindow : Window
             WorkspaceColumn.ActualWidth >= 400)
             preferredShellRatio = Math.Clamp(ShellColumn.ActualWidth /
                 (ShellColumn.ActualWidth + WorkspaceColumn.ActualWidth), 0.2, 0.6);
-        workspaceLayoutTimer?.Stop();
-        var from = ShellColumn.ActualWidth;
-        var animate = !smokeMode && IsLoaded && TaskLoadingSurface.Visibility != Visibility.Visible &&
-            ActualWidth >= 780 && workspaceLayoutMode.Length > 0;
         workspaceLayoutMode = mode;
         SplitterColumn.Width = split ? new GridLength(6) : new GridLength(0);
         WorkspaceSplitter.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
-        if (!animate)
-        {
-            ApplyWorkspaceLayout(mode);
-            UpdateBrowserBackButton();
-            return;
-        }
-        var target = mode switch
-        {
-            "home" => ActualWidth,
-            "split" => Math.Clamp((ActualWidth - 6) * preferredShellRatio, 330,
-                Math.Max(330, ActualWidth - 406)),
-            _ => 0
-        };
-        ShellColumn.MinWidth = 0;
-        WorkspaceColumn.MinWidth = 0;
-        ShellColumn.Width = new GridLength(Math.Max(0, from));
-        WorkspaceColumn.Width = new GridLength(1, GridUnitType.Star);
-        var clock = Stopwatch.StartNew();
-        workspaceLayoutTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
-        workspaceLayoutTimer.Tick += (_, _) =>
-        {
-            var progress = Math.Clamp(clock.Elapsed.TotalMilliseconds / 190, 0, 1);
-            var eased = 1 - Math.Pow(1 - progress, 3);
-            ShellColumn.Width = new GridLength(Math.Max(0, from + (target - from) * eased));
-            if (progress < 1) return;
-            workspaceLayoutTimer?.Stop();
-            ApplyWorkspaceLayout(mode);
-            UpdateBrowserBackButton();
-        };
-        workspaceLayoutTimer.Start();
+        // Resizing two WebView2 surfaces on every 16 ms tick forces repeated
+        // browser rasterization. One layout pass is much smoother in practice.
+        ApplyWorkspaceLayout(mode);
         UpdateBrowserBackButton();
     }
 
@@ -702,6 +677,7 @@ public partial class MainWindow : Window
         smokeTimer.Stop();
         catalogTimer.Stop();
         courseWatchdog.Stop();
+        StopLiveDiagnostics();
         ShellView.Dispose();
         ModuleView.Dispose();
         CourseView.Dispose();
@@ -722,6 +698,8 @@ public partial class MainWindow : Window
 
     private void Trace(string message)
     {
+        runtimeTrace.Enqueue((DateTime.UtcNow, message));
+        while (runtimeTrace.Count > 500) runtimeTrace.TryDequeue(out _);
         if (smokeOutput is not null) File.AppendAllText(smokeOutput + ".trace", message + Environment.NewLine);
     }
 }
