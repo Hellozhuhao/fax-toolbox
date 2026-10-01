@@ -43,11 +43,17 @@ if ($LASTEXITCODE -ne 0) { throw '.NET self-contained publish failed' }
 Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Extension -in @('.pdb', '.xml') } |
     Remove-Item -Force
 
-foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'modules\chaoxing', 'packages\page-agent')) {
+foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'packages\page-agent')) {
     $source = Join-Path $root $relative
     $destination = Join-Path $dist $relative
     New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null
     Copy-Item -LiteralPath $source -Destination $destination -Recurse -Force
+}
+$chaoxingDestination = Join-Path $dist 'modules\chaoxing'
+New-Item -ItemType Directory -Path $chaoxingDestination -Force | Out-Null
+foreach ($name in @('module.json', 'catalog-reader.js', 'homework-reader.js', 'page-adapter.js')) {
+    Copy-Item -LiteralPath (Join-Path $root "modules\chaoxing\$name") `
+        -Destination (Join-Path $chaoxingDestination $name) -Force
 }
 $backendDestination = Join-Path $dist 'backend'
 New-Item -ItemType Directory -Path $backendDestination -Force | Out-Null
