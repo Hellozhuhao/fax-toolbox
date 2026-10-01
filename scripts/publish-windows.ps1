@@ -1,4 +1,4 @@
-param([switch]$Test)
+param([switch]$Test, [string]$OutputDirectory)
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -23,9 +23,10 @@ Set-Content -LiteralPath $publishConfig -Encoding UTF8 -Value "<?xml version=`"1
 & dotnet restore $project -r win-x64 --configfile $publishConfig --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET win-x64 restore failed' }
 
-$dist = Join-Path $root 'dist\windows'
+$distRoot = [System.IO.Path]::GetFullPath((Join-Path $root 'dist'))
+$dist = if ($OutputDirectory) { [System.IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $distRoot 'windows' }
 $resolvedDist = [System.IO.Path]::GetFullPath($dist)
-if (-not $resolvedDist.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
+if (-not $resolvedDist.StartsWith($distRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Unsafe publish directory'
 }
 $runningDistProcess = Get-CimInstance Win32_Process | Where-Object {

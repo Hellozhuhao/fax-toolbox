@@ -26,6 +26,34 @@ public partial class MainWindow : Window
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
     private static readonly ConcurrentDictionary<string, Lazy<Task<CoreWebView2Environment>>> SharedWebViewEnvironments = new();
+    private static bool? sharedDarkTheme;
+    private string ShellThemePath => Path.Combine(smokeDataDirectory ?? Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox"), "shell-theme.txt");
+
+    private bool ReadStoredHostTheme()
+    {
+        if (sharedDarkTheme is { } current) return current;
+        try
+        {
+            var dark = File.ReadAllText(ShellThemePath).Trim() == "dark";
+            sharedDarkTheme = dark;
+            return dark;
+        }
+        catch (IOException) { sharedDarkTheme = false; return false; }
+        catch (UnauthorizedAccessException) { sharedDarkTheme = false; return false; }
+    }
+
+    private void SaveHostTheme(bool dark)
+    {
+        sharedDarkTheme = dark;
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(ShellThemePath)!);
+            File.WriteAllText(ShellThemePath, dark ? "dark" : "light");
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+    }
 
     private static Task<CoreWebView2Environment> GetSharedWebViewEnvironmentAsync(string folder) =>
         SharedWebViewEnvironments.GetOrAdd(folder, path => new Lazy<Task<CoreWebView2Environment>>(() =>
@@ -83,6 +111,7 @@ public partial class MainWindow : Window
             if (smokeOutput is not null) File.WriteAllText(smokeOutput, "FAIL XAML: " + error);
             throw;
         }
+        ApplyHostTheme(ReadStoredHostTheme());
         NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
         NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
         NativeButtonGlow.Attach(BrowserBackButton, () => darkTaskTabs);
@@ -391,7 +420,10 @@ public partial class MainWindow : Window
                     UpdateTaskTabs();
                     break;
                 case "ui.theme":
-                    ApplyHostTheme(message.GetProperty("theme").GetString() == "dark");
+                    var darkTheme = message.GetProperty("theme").GetString() == "dark";
+                    ApplyHostTheme(darkTheme);
+                    SaveHostTheme(darkTheme);
+                    await SyncTaskThemesAsync(darkTheme);
                     break;
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
@@ -472,7 +504,11 @@ public partial class MainWindow : Window
                 case "diagnostics.inspect": await InspectCurrentPageAsync(); break;
                 case "diagnostics.devtools": if (developerMode) OpenPageDevTools(); break;
                 case "diagnostics.export": await ExportDiagnosticsAsync(); break;
-                case "developer.mode": SetDeveloperMode(message.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True); break;
+                case "developer.mode":
+                    var developerEnabled = message.TryGetProperty("enabled", out var enabled) && enabled.ValueKind == JsonValueKind.True;
+                    SetDeveloperMode(developerEnabled);
+                    await SyncTaskDeveloperModesAsync(developerEnabled);
+                    break;
                 case "course.analyze": if (developerMode) await AnalyzeCoursePageAsync(); break;
                 case "course.session.save": await SaveCourseSessionAsync(); break;
                 case "vault.list": await PublishVaultAsync(); break;
@@ -550,6 +586,9 @@ public partial class MainWindow : Window
         CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
         CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F5F5F3");
+        TaskLoadingTitle.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
+        TaskLoadingDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
+        UpdateDeveloperChrome();
     }
 
     private async Task StartSessionAsync()

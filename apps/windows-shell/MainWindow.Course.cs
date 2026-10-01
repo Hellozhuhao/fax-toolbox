@@ -474,13 +474,34 @@ public partial class MainWindow
             var cookie = manager.CreateCookie("fax_smoke_session", "current-login-state", "mooc1.chaoxing.com", "/");
             manager.AddOrUpdateCookie(cookie);
             await SaveCourseSessionAsync();
-            if (!File.Exists(CourseSessionPath) || File.ReadAllText(CourseSessionPath).Contains("current-login-state"))
-            { FailSmoke("course login state was not encrypted on disk"); return; }
+            var vaultFile = File.ReadAllText(Path.Combine(smokeDataDirectory!, "vault.json"));
+            var stored = await backend!.RequestAsync("vault.get", new { id = CourseSessionVaultId });
+            if (File.Exists(CourseSessionPath) || vaultFile.Contains("current-login-state") ||
+                !VaultCrypto.Unprotect(stored.GetProperty("ciphertext").GetString()!).Contains("current-login-state"))
+            { FailSmoke("course login state was not encrypted in the vault"); return; }
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('settings-vault').click()");
+            await Task.Delay(150);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                "document.getElementById('vault-session-list').textContent.includes('学习通登录状态')") != "true")
+            { FailSmoke("saved course login state was not listed in the vault UI"); return; }
             manager.DeleteCookie(cookie);
             await RestoreCourseSessionAsync();
             var restored = await manager.GetCookiesAsync(url);
-            if (restored.Any(item => item.Name == "fax_smoke_session" && item.Value == "current-login-state")) PassSmoke();
-            else FailSmoke("saved current login state was not restored");
+            if (!restored.Any(item => item.Name == "fax_smoke_session" && item.Value == "current-login-state"))
+            { FailSmoke("vault login state was not restored"); return; }
+            await backend.RequestAsync("vault.delete", new { id = CourseSessionVaultId });
+            await File.WriteAllTextAsync(CourseSessionPath, VaultCrypto.Protect(JsonSerializer.Serialize(new[]
+            {
+                new SavedCourseCookie("fax_smoke_session", "current-login-state", "mooc1.chaoxing.com", "/",
+                    null, false, false, (int)cookie.SameSite)
+            })));
+            manager.DeleteCookie(cookie);
+            await RestoreCourseSessionAsync();
+            var migrated = await manager.GetCookiesAsync(url);
+            if (File.Exists(CourseSessionPath) ||
+                !migrated.Any(item => item.Name == "fax_smoke_session" && item.Value == "current-login-state"))
+            { FailSmoke("legacy login state was not migrated to the vault"); return; }
+            PassSmoke();
             return;
         }
         if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-diagnostics-smoke")

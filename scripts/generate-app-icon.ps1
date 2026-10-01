@@ -24,28 +24,40 @@ try {
     try {
         $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
             [System.Drawing.Rectangle]::new(0, 0, 64, 64),
-            [System.Drawing.Color]::FromArgb(255, 236, 154, 115),
-            [System.Drawing.Color]::FromArgb(255, 198, 91, 61), 130.0)
+            [System.Drawing.Color]::FromArgb(255, 238, 154, 116),
+            [System.Drawing.Color]::FromArgb(255, 198, 93, 64), 130.0)
         try { $graphics.FillPath($gradient, $shape) } finally { $gradient.Dispose() }
         $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 250, 246))
-        $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75))
-        $slot = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75), 3.0)
+        $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 203, 97, 68))
+        $fold = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 244, 196, 178))
+        $handlePen = [System.Drawing.Pen]::new($white.Color, 5.0)
+        $detailPen = [System.Drawing.Pen]::new($ink.Color, 1.7)
+        $seamPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(209, 203, 97, 68), 2.0)
         try {
-            $slot.StartCap = $slot.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-            $paper = New-RoundedPath 18 8 28 28 3
-            $machine = New-RoundedPath 11 30 42 21 6
+            $handlePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
+            $detailPen.StartCap = $detailPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
+            $handle = [System.Drawing.Drawing2D.GraphicsPath]::new()
+            $handle.AddLine(19, 29, 19, 20)
+            $handle.AddBezier(19, 20, 19, 17, 21, 15, 24, 15)
+            $handle.AddLine(24, 15, 30, 15)
+            $handle.AddBezier(30, 15, 33, 15, 35, 17, 35, 20)
+            $handle.AddLine(35, 20, 35, 29)
+            $paper = New-RoundedPath 37 10 14 20 2
+            $case = New-RoundedPath 8 28 48 27 7
+            $clasp = New-RoundedPath 29 35 6 9 2
             try {
+                $graphics.DrawPath($handlePen, $handle)
                 $graphics.FillPath($white, $paper)
-                foreach ($tile in @(@(23,14), @(34,14), @(23,24), @(34,24))) {
-                    $module = New-RoundedPath $tile[0] $tile[1] 7 7 2
-                    try { $graphics.FillPath($ink, $module) } finally { $module.Dispose() }
-                }
-                $graphics.FillPath($white, $machine)
-                $graphics.DrawLine($slot, 19, 45, 45, 45)
-                $graphics.FillEllipse($ink, 43, 35, 4, 4)
-                $graphics.FillRectangle($white, 21, 50, 22, 5)
-            } finally { $paper.Dispose(); $machine.Dispose() }
-        } finally { $white.Dispose(); $ink.Dispose(); $slot.Dispose() }
+                $graphics.FillPolygon($fold, [System.Drawing.Point[]]@(
+                    [System.Drawing.Point]::new(46, 10), [System.Drawing.Point]::new(46, 15),
+                    [System.Drawing.Point]::new(51, 15)))
+                $graphics.DrawLine($detailPen, 40, 20, 48, 20)
+                $graphics.DrawLine($detailPen, 40, 24, 46, 24)
+                $graphics.FillPath($white, $case)
+                $graphics.DrawLine($seamPen, 9, 39, 55, 39)
+                $graphics.FillPath($ink, $clasp)
+            } finally { $handle.Dispose(); $paper.Dispose(); $case.Dispose(); $clasp.Dispose() }
+        } finally { $white.Dispose(); $ink.Dispose(); $fold.Dispose(); $handlePen.Dispose(); $detailPen.Dispose(); $seamPen.Dispose() }
     } finally { $shape.Dispose() }
 } finally { $graphics.Dispose() }
 

@@ -107,12 +107,12 @@
     show('demo');
     send('demo.activate');
   }
-  function setTheme(theme) {
+  function setTheme(theme, notifyHost = true) {
     const value = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = value;
     for (const item of document.querySelectorAll('[data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
     try { localStorage.setItem('fax-toolbox-theme', value); } catch (_) { /* UI remains usable without storage. */ }
-    send('ui.theme', {theme: value});
+    if (notifyHost) send('ui.theme', {theme: value});
   }
   function renderCourse(message) {
     courseState = message.state || courseState; courseReady = !!message.ready;
@@ -167,15 +167,25 @@
     updateChapter();
   }
   function renderVault(entries) {
-    const list = $('vault-list'); list.replaceChildren();
-    if (!entries.length) { list.textContent = '暂无保存的账号'; return; }
-    for (const entry of entries) {
+    const sessions = $('vault-session-list'); sessions.replaceChildren();
+    const accounts = $('vault-list'); accounts.replaceChildren();
+    for (const entry of entries.filter(item => item.kind === 'session')) {
+      const row = document.createElement('div'); row.className = 'vault-row';
+      const label = document.createElement('span'); label.textContent = entry.username;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary';
+      remove.textContent = '删除保存副本'; remove.title = '删除密码箱中的登录状态；当前网页仍保持登录';
+      remove.addEventListener('click', () => { if (confirm('删除密码箱中的学习通登录状态？当前网页仍保持登录。')) send('vault.delete', {entryId: entry.id}); });
+      row.append(label, remove); sessions.append(row);
+    }
+    if (!sessions.childElementCount) sessions.textContent = '暂无保存的登录状态';
+    for (const entry of entries.filter(item => item.kind !== 'session')) {
       const row = document.createElement('div'); row.className = 'vault-row';
       const label = document.createElement('span'); label.textContent = entry.username;
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '删除';
       remove.addEventListener('click', () => { if (confirm('删除这个账号？')) send('vault.delete', {entryId: entry.id}); });
-      row.append(label, remove); list.append(row);
+      row.append(label, remove); accounts.append(row);
     }
+    if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
     const detail = message.error || (!message.configured ? '尚未配置 AI 服务。请选择服务商并保存 API Key。' :
@@ -304,7 +314,9 @@
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
   window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, showHome: () => show('home'),
-    goBack, refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
+    goBack, applyThemeFromHost: theme => setTheme(theme, false),
+    applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
+    refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
   palette.addEventListener('click', event => { if (event.target === palette) togglePalette(false); });
@@ -356,7 +368,8 @@
   $('diagnostics-inspect').addEventListener('click', () => send('diagnostics.inspect'));
   $('diagnostics-devtools').addEventListener('click', () => send('diagnostics.devtools'));
   $('diagnostics-export').addEventListener('click', () => send('diagnostics.export'));
-  function setDeveloperMode(enabled) {
+  let developerToastTimer;
+  function setDeveloperMode(enabled, notify = false, notifyHost = true) {
     developerMode = !!enabled;
     $('developer-mode').checked = developerMode;
     for (const item of document.querySelectorAll('.developer-only')) item.hidden = !developerMode;
@@ -365,9 +378,19 @@
     document.querySelector('.nav-flyout p:last-of-type').hidden = !developerMode;
     document.querySelector('#command-palette [data-action="demo"]').hidden = !developerMode;
     try { localStorage.setItem('fax-toolbox-developer-mode', developerMode ? 'on' : 'off'); } catch (_) {}
-    send('developer.mode', {enabled: developerMode});
+    if (notifyHost) send('developer.mode', {enabled: developerMode});
+    if (notify) {
+      const toast = $('developer-toast');
+      $('developer-toast-text').textContent = developerMode ? '开发者模式已开启 · 调试工具现在可用' : '开发者模式已关闭';
+      toast.hidden = false;
+      toast.style.animation = 'none';
+      void toast.offsetWidth;
+      toast.style.animation = '';
+      clearTimeout(developerToastTimer);
+      developerToastTimer = setTimeout(() => { toast.hidden = true; }, 2600);
+    }
   }
-  $('developer-mode').addEventListener('change', event => setDeveloperMode(event.target.checked));
+  $('developer-mode').addEventListener('change', event => setDeveloperMode(event.target.checked, true));
   let savedDeveloperMode = false;
   try { savedDeveloperMode = localStorage.getItem('fax-toolbox-developer-mode') === 'on'; } catch (_) {}
   setDeveloperMode(savedDeveloperMode);

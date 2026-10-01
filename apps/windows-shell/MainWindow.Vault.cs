@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 
@@ -11,10 +12,13 @@ public partial class MainWindow
         var result = await backend.RequestAsync("vault.list", new { });
         var entries = result.GetProperty("entries").EnumerateArray().Select(entry =>
         {
+            var id = entry.GetProperty("id").GetString() ?? string.Empty;
+            if (id == CourseSessionVaultId)
+                return new { id, username = "学习通登录状态", kind = "session" };
             string name;
             try { name = VaultCrypto.Unprotect(entry.GetProperty("encryptedUsername").GetString()!); }
             catch (Exception) { name = "[无法解密的账号]"; }
-            return new { id = entry.GetProperty("id").GetString(), username = name };
+            return new { id, username = name, kind = "account" };
         }).ToArray();
         ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
         {
@@ -39,8 +43,13 @@ public partial class MainWindow
     {
         if (backend is null || smokeMode) return;
         var id = message.GetProperty("entryId").GetString();
-        if (id is null || !Guid.TryParseExact(id, "N", out _)) return;
+        if (id is null || (id != CourseSessionVaultId && !Guid.TryParseExact(id, "N", out _))) return;
+        if (id == CourseSessionVaultId && File.Exists(CourseSessionPath)) File.Delete(CourseSessionPath);
         await backend.RequestAsync("vault.delete", new { id });
+        if (id == CourseSessionVaultId)
+        {
+            PublishCourseSessionStatus("已从密码箱删除保存的登录状态。当前网页登录状态不受影响。");
+        }
         await PublishVaultAsync();
     }
 }

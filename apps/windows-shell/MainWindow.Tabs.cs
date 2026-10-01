@@ -67,6 +67,38 @@ public partial class MainWindow
         foreach (var window in TaskWindows.ToArray()) window.UpdateTaskTabs();
     }
 
+    private async Task SyncTaskThemesAsync(bool dark)
+    {
+        foreach (var window in TaskWindows.ToArray())
+        {
+            if (ReferenceEquals(window, this)) continue;
+            window.ApplyHostTheme(dark);
+            if (window.ShellView.CoreWebView2 is null) continue;
+            try
+            {
+                await window.ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "window.FaxToolboxUi?.applyThemeFromHost('" + (dark ? "dark" : "light") + "')");
+            }
+            catch (InvalidOperationException) { /* The other tab may still be navigating. */ }
+        }
+    }
+
+    private async Task SyncTaskDeveloperModesAsync(bool enabled)
+    {
+        foreach (var window in TaskWindows.ToArray())
+        {
+            if (ReferenceEquals(window, this)) continue;
+            window.SetDeveloperMode(enabled);
+            if (window.ShellView.CoreWebView2 is null) continue;
+            try
+            {
+                await window.ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "window.FaxToolboxUi?.applyDeveloperModeFromHost(" + (enabled ? "true" : "false") + ")");
+            }
+            catch (InvalidOperationException) { /* The other tab may still be navigating. */ }
+        }
+    }
+
     private void RefreshTaskTabs()
     {
         if (TaskWindows.Count == 0) UpdateTaskTabs();
@@ -151,10 +183,9 @@ public partial class MainWindow
         var close = new Button
         {
             Content = "×", Height = 27, Width = 27, FontSize = 18,
-            ToolTip = "关闭标签并结束此任务", Style = (Style)FindResource("TaskTabInnerStyle")
+            ToolTip = "关闭标签并结束此任务", Style = (Style)FindResource("TaskTabCloseStyle")
         };
         close.Click += (_, _) => CloseTaskWindow(window);
-        NativeButtonGlow.Attach(close, () => darkTaskTabs);
         Grid.SetColumn(close, 1);
         grid.Children.Add(close);
         var shell = new Border

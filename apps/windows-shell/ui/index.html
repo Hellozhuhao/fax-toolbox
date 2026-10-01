@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'none'">
   <title>Fax Toolbox</title>
+  <script src="theme-bootstrap.js"></script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="theme.css">
@@ -13,6 +14,7 @@
   <script defer src="button-glow.js"></script>
 </head>
 <body>
+  <div id="developer-toast" class="developer-toast" role="status" aria-live="polite" hidden><span class="developer-toast-dot"></span><span id="developer-toast-text"></span></div>
   <div class="app">
     <aside class="sidebar">
       <header class="brand"><div class="brand-mark"><img src="fax-mark.svg" alt="Fax 工具箱"></div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
@@ -83,9 +85,9 @@
 
     <section id="view-vault" class="view" hidden>
       <div class="eyebrow">系统选项</div><h2>密码箱</h2>
-      <p class="muted">账号密码由 Windows 当前用户加密保护。输入密码使用原生窗口，不经过网页消息桥。</p>
-      <button id="vault-add" type="button">保存学习通账号</button>
-      <div class="card"><h3>已保存账号</h3><div id="vault-list" class="vault-list">尚未加载</div></div>
+      <p class="muted">登录状态和账号由当前 Windows 用户加密保护。</p>
+      <div class="card vault-section"><h3>登录状态</h3><div id="vault-session-list" class="vault-list">尚未加载</div></div>
+      <div class="card vault-section"><div class="vault-section-heading"><h3>账号密码</h3><button id="vault-add" class="secondary" type="button">添加账号</button></div><div id="vault-list" class="vault-list">尚未加载</div></div>
     </section>
 
     <section id="view-activity" class="view" hidden><div class="eyebrow">STATUS / SESSION</div><h2>状态</h2><p class="lead">查看工具运行记录和当前任务状态。</p><div class="activity-overview"><article class="card"><span>日志条数</span><strong id="activity-total">0</strong><small>本次运行</small></article><article class="card"><span>最近来源</span><strong id="activity-source">—</strong><small id="activity-updated">暂无记录</small></article><article class="card"><span>活跃任务</span><strong id="activity-running">0</strong><small>当前运行</small></article></div><div class="card diagnostics-tools developer-only" hidden><div><h3>在线调试</h3><p class="muted">开发者模式下可读取运行中应用的诊断快照，无需关闭软件。</p><small id="diagnostics-endpoint" class="muted"></small></div><div class="diagnostics-actions"><button id="diagnostics-inspect" type="button">检查当前网页</button><button id="diagnostics-devtools" class="secondary" type="button">打开网页调试器</button></div></div><div class="activity-panel card"><div class="activity-toolbar"><h3>运行日志</h3><div class="activity-filters" role="group" aria-label="筛选日志"><button class="selected" type="button" data-activity-filter="all">全部</button><button type="button" data-activity-filter="course">学习</button><button type="button" data-activity-filter="homework">作业</button><button type="button" data-activity-filter="ai">AI</button><button type="button" data-activity-filter="system">系统</button></div><button id="diagnostics-export" class="secondary" type="button">导出日志</button></div><div id="activity-list" class="activity-list" aria-live="polite"><p class="activity-empty">开始使用工具后，日志会出现在这里。</p></div></div></section>
