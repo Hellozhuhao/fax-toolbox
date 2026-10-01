@@ -14,6 +14,7 @@ if (-not $source.StartsWith($distRoot + [IO.Path]::DirectorySeparatorChar,
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\index.html', 'apps\windows-shell\ui\theme.css',
+    'apps\windows-shell\ui\fax-mark.svg',
     'apps\windows-shell\ui\button-glow.js', 'apps\windows-shell\ui\vendor\katex\katex.min.js',
     'apps\windows-shell\ui\vendor\katex\katex.min.css', 'modules\chaoxing\page-adapter.js',
     'modules\chaoxing\homework-reader.js')) {
@@ -38,8 +39,9 @@ if ($Test) {
     try {
         [IO.Compression.ZipFile]::ExtractToDirectory($archive, $extract)
         $output = Join-Path $cacheRoot 'portable-smoke.txt'
+        Remove-Item -LiteralPath $output, "$output.trace" -ErrorAction SilentlyContinue
         $process = Start-Process -FilePath (Join-Path $extract 'FaxToolbox.Windows.exe') `
-            -ArgumentList @('--tabs-smoke', $output) -WindowStyle Hidden -PassThru
+            -ArgumentList @('--smoke', $output) -WindowStyle Hidden -PassThru
         if (-not $process.WaitForExit(45000)) {
             Stop-Process -Id $process.Id -Force
             throw 'Relocated package smoke timed out'

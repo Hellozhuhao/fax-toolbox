@@ -3,11 +3,15 @@
 <head><meta charset="utf-8"><title>本地视频与同章测验夹具</title></head>
 <body>
   <h1>同章视频与测验 2.5</h1>
+  <aside id="catalog"><div id="chapter-25" class="active" data-chapter-id="2.5">2.5 同章视频与测验</div>
+    <div id="chapter-26" data-chapter-id="2.6">2.6 视频任务</div></aside>
   <nav><button id="video-tab" class="active" type="button" onclick="showTab('video')">1 视频</button>
     <button id="quiz-tab" type="button" onclick="showTab('quiz')">2 测验</button></nav>
   <section id="video-panel"><video controls width="320" height="180"></video></section>
   <section id="quiz-panel" hidden><iframe id="quiz-frame" width="540" height="300" title="章节测验"></iframe></section>
-  <button id="next" type="button" hidden onclick="location.href='studentstudy-video-quiz-done.html?chapterId=2.6'">下一节</button>
+  <button id="next" type="button" hidden>旧的隐藏按钮</button>
+  <button id="step-forward" type="button" hidden onclick="advancePage()">下一步</button>
+  <button id="manual-chapter" type="button" hidden onclick="showNextChapter()">2.6 视频任务</button>
   <div id="confirm-mask" hidden style="position:fixed;inset:0;background:#0008;display:none;align-items:center;justify-content:center">
     <div class="modal" role="dialog" style="background:white;padding:28px;min-width:260px">
       <h2>提示</h2><p>确认提交?</p>
@@ -19,10 +23,12 @@
     function showTab(name) {
       document.getElementById('video-tab').className = name === 'video' ? 'active' : '';
       document.getElementById('quiz-tab').className = name === 'quiz' ? 'active' : '';
-      document.getElementById('video-panel').hidden = name !== 'video';
+      document.getElementById('video-panel').hidden = name !== 'video' &&
+        new URLSearchParams(location.search).get('sticky') !== '1';
       document.getElementById('quiz-panel').hidden = name !== 'quiz';
       if (name === 'quiz' && !document.getElementById('quiz-frame').src)
-        document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5';
+        document.getElementById('quiz-frame').src = 'studentstudy-quiz-frame.html?chapterId=2.5' +
+          (new URLSearchParams(location.search).has('generic') ? '&generic=1' : '');
     }
     function showConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = false; mask.style.display = 'flex'; }
     function hideConfirmation() { const mask = document.getElementById('confirm-mask'); mask.hidden = true; mask.style.display = 'none'; }
@@ -30,9 +36,22 @@
       hideConfirmation(); document.body.dataset.quizSubmitted = 'true';
       if (new URLSearchParams(location.search).get('result') === '1') {
         document.getElementById('quiz-frame').contentWindow.showResult();
-        document.getElementById('next').hidden = false;
+        if (!new URLSearchParams(location.search).has('catalogadvance'))
+          document.getElementById(new URLSearchParams(location.search).has('manual') ?
+            'manual-chapter' : 'step-forward').hidden = false;
       }
     }
+    function advancePage() { location.href = 'studentstudy-video-quiz-done.html?chapterId=2.6'; }
+    function showNextChapter() {
+      document.querySelector('h1').textContent = '下一章 2.6 视频任务';
+      document.getElementById('quiz-panel').hidden = true;
+      document.getElementById('video-panel').hidden = false;
+      document.getElementById('manual-chapter').hidden = true;
+      document.getElementById('chapter-25').className = '';
+      document.getElementById('chapter-26').className = 'active';
+    }
+    if (new URLSearchParams(location.search).has('catalogadvance'))
+      document.getElementById('chapter-26').addEventListener('click', showNextChapter);
     document.querySelector('video').play = () => Promise.resolve();
     setTimeout(() => document.querySelector('video').dispatchEvent(new Event('ended')), 700);
   </script>

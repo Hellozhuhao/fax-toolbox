@@ -22,6 +22,43 @@ public partial class MainWindow
     private List<ChapterEntry> catalogEntries = [];
     private CoreWebView2Frame? catalogFrame;
     private bool catalogLive;
+    private string lastAutomaticAdvanceChapter = "";
+    private bool automaticAdvanceBusy;
+
+    private async Task<bool> TryAdvanceCatalogAfterQuizAsync(string chapter)
+    {
+        if (!catalogLive || catalogEntries.Count < 2 || activeModule != "chaoxing" || automaticAdvanceBusy) return false;
+        var index = catalogEntries.FindIndex(item => item.Id == chapter);
+        if (index < 0) index = catalogEntries.FindIndex(item => item.Id == catalogCurrentId);
+        if (index < 0) index = catalogEntries.FindIndex(item => item.Name == catalogCurrentName);
+        if (index < 0 || index + 1 >= catalogEntries.Count ||
+            lastAutomaticAdvanceChapter == catalogEntries[index].Id) return false;
+        var next = catalogEntries[index + 1];
+        var script = "window.FaxCatalogReader?.jump(" + JsonSerializer.Serialize(next.Id) + ") === true";
+        automaticAdvanceBusy = true;
+        var previousUrl = CourseView.CoreWebView2.Source;
+        try
+        {
+            var result = catalogFrame is { } frame && frame.IsDestroyed() == 0 ?
+                await frame.ExecuteScriptAsync(script) : await CourseView.CoreWebView2.ExecuteScriptAsync(script);
+            if (result != "true") return false;
+            var switched = false;
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                await Task.Delay(300);
+                var current = await ReadCatalogAsync(catalogFrame);
+                if (current?.CurrentId == next.Id || CourseView.CoreWebView2.Source != previousUrl)
+                { switched = true; break; }
+            }
+            if (!switched) return false;
+            lastAutomaticAdvanceChapter = catalogEntries[index].Id;
+            PublishCourse("RUNNING", "测验已完成，正在进入“" + next.Name + "”。", true);
+            await RefreshCatalogAsync();
+            return true;
+        }
+        catch (Exception error) { Trace("catalog advance failed: " + error.Message); return false; }
+        finally { automaticAdvanceBusy = false; }
+    }
 
     private static string CourseKeyFromUrl(string? value)
     {
@@ -139,8 +176,8 @@ public partial class MainWindow
                 }
             }
             if (source != CourseView.CoreWebView2.Source || best is null) return;
-            var currentId = frameCurrent.Length > 0 ? frameCurrent :
-                best.CurrentId.Length > 0 ? best.CurrentId : ChapterFromUrl(source);
+            var currentId = best.CurrentId.Length > 0 ? best.CurrentId :
+                frameCurrent.Length > 0 ? frameCurrent : ChapterFromUrl(source);
             var currentName = best.Entries.FirstOrDefault(item => item.Id == currentId)?.Name ?? best.CurrentName;
             if (currentName.Length > 80) currentName = "";
             var live = best.Entries.Count > 0;
@@ -160,12 +197,18 @@ public partial class MainWindow
                     catalogSignature = signature;
                 }
             }
+            var changedChapter = catalogLive && (currentId != catalogCurrentId || currentName != catalogCurrentName);
             if (currentId != catalogCurrentId || currentName != catalogCurrentName || live != catalogLive || live)
             {
                 catalogCurrentId = currentId;
                 catalogCurrentName = currentName;
                 catalogLive = live;
                 PublishCatalog();
+                if (changedChapter && courseState == "RUNNING")
+                {
+                    PublishCourse("RUNNING", "已切换到“" + currentName + "”，正在识别当前任务点。", true);
+                    await ExecuteCourseAdapterAsync("resume");
+                }
             }
         }
         catch (Exception error)

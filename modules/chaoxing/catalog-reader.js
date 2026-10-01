@@ -4,6 +4,7 @@
   if (!location.hostname.toLowerCase().endsWith('.chaoxing.com')) return 'null';
   if (!window.FaxCatalogReader) {
     const idFromUrl = value => {
+      if (!value) return '';
       try {
         const query = new URL(value, location.href).searchParams;
         return query.get('chapterId') || query.get('chapterid') ||
@@ -63,10 +64,12 @@
     window.FaxCatalogReader = {
       read() {
         const rows = collect();
-        const currentId = idFromUrl(location.href);
+        const urlId = idFromUrl(location.href);
         const heading = clean(document.querySelector('h1,h2,.chapterTitle,.chapter-title')?.textContent);
         const byHeading = heading && rows.find(row => row.name.replace(/^\d+(?:\.\d+)*\s+/, '') === heading);
-        const active = rows.find(row => row.id === currentId) || byHeading || rows.find(row => row.active);
+        // The course often changes chapters without changing the outer page URL.
+        const active = byHeading || rows.find(row => row.active) || rows.find(row => row.id === urlId);
+        const currentId = active?.id || urlId;
         const currentName = active?.name ||
           (heading.length >= 4 && heading.length <= 80 && !/^(章节详情|课程详情|我的课程|学习通|目录)$/.test(heading) ? heading : '');
         return {currentId, currentName, entries: rows.map(({id, name}) => ({id, name}))};

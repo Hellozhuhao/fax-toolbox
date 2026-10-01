@@ -31,9 +31,16 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 `-Test` 同时运行 Rust 单元测试及演示、课程、章节目录、AI 设置、多标签与加载失败重试等隐藏窗口端到端测试。首次构建会下载并校验 WebView2 SDK NuGet 包。需要已安装的 .NET 10 SDK、Rust、Visual Studio Build Tools 和 WebView2 Runtime。浏览器界面、模块页面和 Rust 后端之间的协议见 [WINDOWS_PROTOCOL.md](packages/protocol/WINDOWS_PROTOCOL.md)；代码边界与新模块开发步骤见 [Rust 后端架构](apps/rust-backend/ARCHITECTURE.md)。学习通模块的操作与验证边界见 [模块说明](modules/chaoxing/README.md)。
 
-## Windows EXE 发布
+## Windows 安装包与便携版
 
-开发完成后运行 `powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -Test`。脚本生成 `dist/FaxToolbox-Windows-win-x64.zip`，并在临时目录解压后验证启动。将整个 ZIP 上传到 GitHub Releases；用户解压到任意目录，运行其中的 `FaxToolbox.Windows.exe`。EXE 与同目录下的 Rust 后端、页面资源必须一起保留，不需要单独安装 .NET 10 运行时。Windows 仍需安装 WebView2 Runtime。开发工具链由 `scripts/Enter-ToolboxDev.ps1` 在本机发现，不依赖仓库所在路径。
+安装器由 Inno Setup 7 编译。开发机安装官方 `JRSoftware.InnoSetup.7` 后运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1 -Test
+powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -SkipPublish -Test
+```
+
+第一条命令先发布 x64 自包含程序，再生成 `dist/FaxToolbox-Setup-v0.1.0-preview.1-win-x64.exe`，并用独立的测试安装标识完成安装、启动和卸载验证。第二条命令生成 `dist/FaxToolbox-Windows-win-x64.zip`，作为免安装便携版。两种产物都包含 Windows 前端、Rust 后端和运行所需页面资源；不需要另装 .NET 运行时。安装器面向当前用户，无需管理员权限，创建开始菜单入口并提供卸载，桌面快捷方式可选。缺少 WebView2 Runtime 时，安装器使用内置的微软签名引导程序联网补装；便携版需要用户自行安装 WebView2 Runtime。构建脚本在打包前检查发布目录，拒绝加入账号密码、答案缓存、浏览器配置、数据库和调试符号。编译器可用 `-InnoCompiler` 指定，WebView2 引导程序从微软官方下载并验签后缓存到 `.cache/installer-tools/`。
 
 当前 UI 采用紧凑活动栏、模块工作台与顶部快速入口，包含首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。按 `Ctrl+K` 可打开快速操作，直接切换模块或打开设置。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
 

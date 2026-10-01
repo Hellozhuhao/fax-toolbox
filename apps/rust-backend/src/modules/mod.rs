@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod chaoxing;
 pub mod smoke;
 pub mod vault;

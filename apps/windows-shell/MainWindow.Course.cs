@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Web.WebView2.Core;
@@ -15,7 +16,10 @@ public partial class MainWindow
     private const string CourseFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy.html?chapterId=2.1";
     private const string VideoFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video.html?chapterId=2.2";
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
+    private const string StickyQuizFixture = VideoQuizFixture + "&sticky=1";
     private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
+    private const string CatalogAdvanceFixture = ResultFixture + "&catalogadvance=1";
+    private const string ManualFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1&manual=1";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
     private const string LoginFixture = "https://mooc1.chaoxing.com/login.html";
@@ -24,7 +28,11 @@ public partial class MainWindow
         "--course-smoke" => CourseFixture,
         "--course-video-smoke" => VideoFixture,
         "--course-video-quiz-smoke" => VideoQuizFixture,
+        "--course-sticky-quiz-smoke" => StickyQuizFixture,
+        "--course-generic-quiz-smoke" => VideoQuizFixture + "&generic=1",
         "--course-result-smoke" => ResultFixture,
+        "--course-catalog-result-smoke" => CatalogAdvanceFixture,
+        "--course-manual-next-smoke" => ManualFixture,
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
         "--course-challenge-smoke" => ChallengeFixture,
@@ -48,9 +56,11 @@ public partial class MainWindow
     private bool pauseSmokeStarted;
     private bool retrySmokeStarted;
     private bool autoRetrySmokeStarted;
+    private bool manualTransitionSmokeStarted;
     private int courseAutoRetryCount;
     private ulong courseLatestNavigationId;
     private string courseLastAttemptedUrl = CourseHome;
+    private string messageResourceIssue = "";
     private readonly List<CoreWebView2Frame> courseFrames = [];
 
     private static bool IsChaoxingUrl(string? value)
@@ -115,6 +125,11 @@ public partial class MainWindow
 
     private void CourseNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs args)
     {
+        if (messageResourceIssue.Length > 0)
+        {
+            messageResourceIssue = "";
+            PublishMessageWebHealth();
+        }
         if (!IsChaoxingUrl(args.Uri))
         {
             args.Cancel = true;
@@ -133,6 +148,28 @@ public partial class MainWindow
             PublishHomeworkProgress(0, "页面已切换，请打开作业后重新开始。");
             PublishHomeworkStatus("学习通页面正在加载…");
         }
+    }
+
+    private void PublishMessageWebHealth()
+    {
+        ShellView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        { v = 1, kind = "course.web-health", detail = messageResourceIssue }));
+    }
+
+    private void CourseWebResourceResponseReceived(object? sender, CoreWebView2WebResourceResponseReceivedEventArgs args)
+    {
+        if (!Uri.TryCreate(CourseView.CoreWebView2.Source, UriKind.Absolute, out var page) ||
+            !page.Host.Equals("i.chaoxing.com", StringComparison.OrdinalIgnoreCase) ||
+            !page.AbsolutePath.StartsWith("/base", StringComparison.OrdinalIgnoreCase) ||
+            !Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out var request) ||
+            request.Scheme != Uri.UriSchemeHttps) return;
+        var status = args.Response.StatusCode;
+        if (status is not (401 or 403 or 429) && status < 500) return;
+        PublishDiagnostic("学习通", "消息资源失败", $"HTTP {status} · {request.Host}");
+        var detail = $"学习通消息资源返回 HTTP {status}（{request.Host}）。可点击顶部刷新重试；若仍空白，请在 Edge 对照查看。";
+        if (detail == messageResourceIssue) return;
+        messageResourceIssue = detail;
+        PublishMessageWebHealth();
     }
 
     private void ShowCourseLoading()
@@ -436,7 +473,7 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
-            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-result-smoke")
+            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke")
                 await backend.RequestAsync("answers.put", new
                 {
                     chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
@@ -452,18 +489,74 @@ public partial class MainWindow
         { FailSmoke("plus did not create an independent home tab"); return; }
         var first = TaskWindows[1];
         if (!await WaitForTabUiAsync(first)) { FailSmoke("first home tab did not load"); return; }
-        await first.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
+        await first.ShellView.CoreWebView2.ExecuteScriptAsync(
+            "document.querySelector('.nav-flyout [data-view=course]').click()");
         if (!await WaitForTabCourseAsync(first)) { FailSmoke("first course tab did not load"); return; }
         first.NewTaskTab_Click(first, new RoutedEventArgs());
         if (TaskWindows.Count != 3 || TaskWindows[2].assignedModule is not null)
         { FailSmoke("second plus did not open home"); return; }
         var second = TaskWindows[2];
+        await Task.Delay(150);
+        if (second.Visibility != Visibility.Visible)
+        { FailSmoke("new tab did not become clickable immediately"); return; }
         if (!await WaitForTabUiAsync(second)) { FailSmoke("second home tab did not load"); return; }
         await second.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
         if (!await WaitForTabCourseAsync(second) ||
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        second.NavigateBack(false);
+        await Task.Delay(100);
+        if (second.currentShellView != "course")
+        { FailSmoke("ordinary back left the current module"); return; }
+        second.NavigateBack(true);
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "home"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "home" || second.assignedModule != "course")
+        { FailSmoke("Shift back did not return to toolbox home"); return; }
+        second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "course")
+        { FailSmoke("clicking current tab did not restore its module"); return; }
+        await second.ShellView.CoreWebView2.ExecuteScriptAsync(
+            "document.querySelector('.sidebar [data-view=home]').click()");
+        second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "course")
+        { FailSmoke("clicking Home then the course tab did not restore learning"); return; }
+        second.OpenModuleInNewTab("homework");
+        if (TaskWindows.Count != 4) { FailSmoke("homework did not open in a new tab"); return; }
+        var homeworkTab = TaskWindows[3];
+        if (!await WaitForTabUiAsync(homeworkTab)) { FailSmoke("homework tab did not load"); return; }
+        for (var attempt = 0; attempt < 30 && homeworkTab.currentShellView != "homework"; attempt++) await Task.Delay(50);
+        if (homeworkTab.currentShellView != "homework" || homeworkTab.shellCanGoBack)
+        { FailSmoke("homework tab first rendered the home page"); return; }
+        homeworkTab.CloseTaskWindow(homeworkTab);
+        for (var attempt = 0; attempt < 30 && TaskWindows.Contains(homeworkTab); attempt++) await Task.Delay(100);
+        if (TaskWindows.Contains(homeworkTab)) { FailSmoke("homework tab did not close"); return; }
+        second.Width = 1120;
+        second.Height = 720;
+        await second.ActivateTaskWindowAsync(first);
+        if (first.WindowState != WindowState.Normal ||
+            Math.Abs(first.Width - second.Width) > 1 || Math.Abs(first.Height - second.Height) > 1)
+        { FailSmoke("switching tabs changed the normal window size"); return; }
+        await first.ActivateTaskWindowAsync(second);
+        second.WindowState = WindowState.Maximized;
+        await second.ActivateTaskWindowAsync(first);
+        if (first.WindowState != WindowState.Maximized)
+        { FailSmoke("switching tabs lost the maximized window state"); return; }
+        await first.ActivateTaskWindowAsync(second);
+        if (second.WindowState != WindowState.Maximized)
+        { FailSmoke("switching back animated through normal window size"); return; }
+        if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+        {
+            var preview = new RenderTargetBitmap((int)second.ActualWidth, (int)second.ActualHeight,
+                96, 96, PixelFormats.Pbgra32);
+            preview.Render(second);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(preview));
+            await using var output = File.Create(Path.Combine(root, ".cache", "edge-tabs-preview.png"));
+            encoder.Save(output);
+        }
         second.CloseTaskWindow(first);
         for (var attempt = 0; attempt < 30 && TaskWindows.Contains(first); attempt++) await Task.Delay(100);
         if (TaskWindows.Count != 2 || !TaskWindows.Contains(second) || second.backend is null)
@@ -501,6 +594,8 @@ public partial class MainWindow
 
     private void PublishCourse(string nextState, string nextDetail, bool? ready = null)
     {
+        if (courseState != nextState || courseDetail != nextDetail)
+            PublishDiagnostic("学习通", nextState, nextDetail);
         courseState = nextState;
         courseDetail = nextDetail;
         RefreshTaskTabs();
@@ -727,11 +822,26 @@ public partial class MainWindow
             if (observation is not ("VIDEO_FOUND" or "VIDEO_TAB_FOUND" or "VIDEO_ENDED" or "PROMPT_FOUND" or "DOCUMENT_FOUND" or "DOCUMENT_DONE" or
                 "QUIZ_FOUND" or "QUIZ_UNMATCHED" or "QUIZ_CONFIRM_PENDING" or "QUIZ_SUBMITTED" or
                 "QUIZ_SUBMIT_UNCONFIRMED" or "QUIZ_RESULT_READY" or "UNIT_EMPTY" or "CHALLENGE_FOUND" or
-                "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED")) return;
+                "PLAYBACK_BLOCKED" or "PLAYBACK_FAILED" or "NEXT_UNAVAILABLE")) return;
             var chapter = ChapterFromUrl(args.Source);
+            if (frame is null && catalogReaderScript is not null)
+            {
+                // The outer study URL can remain on the previous chapter after a catalog click.
+                var pageCatalog = await ReadCatalogAsync(null);
+                if (pageCatalog is { Entries.Count: > 0 } &&
+                    pageCatalog.Entries.Any(item => item.Id == pageCatalog.CurrentId))
+                    chapter = pageCatalog.CurrentId;
+            }
             if (string.IsNullOrEmpty(chapter)) chapter = catalogCurrentId;
             if (string.IsNullOrEmpty(chapter)) chapter = ChapterFromUrl(CourseView.CoreWebView2.Source);
             if (string.IsNullOrEmpty(chapter)) chapter = message.GetProperty("chapter").GetString() ?? "";
+            if (observation == "QUIZ_RESULT_READY" && catalogLive &&
+                catalogEntries.Any(item => item.Id == chapter) &&
+                catalogEntries.Any(item => item.Id == catalogCurrentId) && chapter != catalogCurrentId)
+            {
+                Trace("ignored result from a previous chapter");
+                return;
+            }
             var activeSession = courseSessionId;
             var activeGeneration = courseGeneration;
             var result = await backend.RequestAsync("course.observe", new
@@ -742,16 +852,46 @@ public partial class MainWindow
             if (activeSession != courseSessionId || activeGeneration != courseGeneration || courseState != "RUNNING") return;
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
-            Trace("course observation: " + observation + " action=" + action + " state=" + nextState);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-video-smoke" &&
+                observation == "VIDEO_FOUND")
+            {
+                var muted = frame is null ? await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('video')?.muted === true") :
+                    await frame.ExecuteScriptAsync("document.querySelector('video')?.muted === true");
+                if (muted != "true") { FailSmoke("course video did not start muted"); return; }
+            }
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-result-smoke" &&
+                observation == "VIDEO_FOUND" && chapter == "2.6" && lastAutomaticAdvanceChapter == "2.5")
+            { PassSmoke(); return; }
+            Trace("course observation: " + observation + " chapter=" + chapter + " action=" + action + " state=" + nextState);
+            PublishDiagnostic("学习通", observation, "页面动作：" + action + " · 任务状态：" + nextState);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
+                observation == "VIDEO_FOUND" &&
+                await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('h1')?.textContent === '下一章 2.6 视频任务'") == "true")
+            {
+                for (var attempt = 0; attempt < 20 && catalogCurrentId != "2.6"; attempt++)
+                {
+                    await RefreshCatalogAsync();
+                    await Task.Delay(100);
+                }
+                if (nextState == "RUNNING" && chapter == "2.6" && catalogCurrentId == "2.6") PassSmoke();
+                else
+                {
+                    var snapshot = await ReadCatalogAsync(null);
+                    FailSmoke($"manual navigation did not refresh the current chapter and video state (state={nextState}, catalog={catalogCurrentId}, live={catalogLive}, snapshot={snapshot?.CurrentId}, name={snapshot?.CurrentName}, entries={snapshot?.Entries.Count})");
+                }
+                return;
+            }
             var smokeSubmission = courseSmokeMode && observation == "QUIZ_SUBMITTED" &&
-                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke");
+                Environment.GetCommandLineArgs()[1] is ("--course-smoke" or "--course-ai-smoke" or "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke");
             if (smokeSubmission)
             {
                 var confirmed = await CourseView.CoreWebView2.ExecuteScriptAsync(
                     "document.body.dataset.quizSubmitted === 'true' && document.getElementById('confirm-mask').hidden");
                 if (confirmed != "true")
                 { FailSmoke("quiz submission confirmation was not completed"); return; }
-                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke")
                 {
                     var quizTab = await CourseView.CoreWebView2.ExecuteScriptAsync(
                         "document.getElementById('quiz-tab').classList.contains('active')");
@@ -779,9 +919,16 @@ public partial class MainWindow
                 {
                     "QUIZ_CONFIRM_PENDING" => "已填写答案，正在确认提交。",
                     "QUIZ_SUBMITTED" => "已确认提交，请检查页面结果。",
+                    "NEXT_UNAVAILABLE" => "未找到可用的“下一步”。你可以在右侧手动跳转，任务会继续识别新页面。",
                     _ => courseDetail
                 }
             }, true);
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
+                observation == "NEXT_UNAVAILABLE" && !manualTransitionSmokeStarted)
+            {
+                manualTransitionSmokeStarted = true;
+                await CourseView.CoreWebView2.ExecuteScriptAsync("document.getElementById('manual-chapter').click()");
+            }
             if (nextState != "RUNNING")
             {
                 await ExecuteCourseAdapterAsync("pause");
@@ -792,6 +939,8 @@ public partial class MainWindow
                 return;
             }
             if (action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;
+            if (action == "NEXT_UNIT" && observation == "QUIZ_RESULT_READY" &&
+                await TryAdvanceCatalogAfterQuizAsync(chapter)) return;
             var payload = JsonSerializer.Serialize(new
             {
                 v = 1, kind = "course.action", sessionId = activeSession, generation = activeGeneration,
@@ -813,7 +962,7 @@ public partial class MainWindow
             else if (frame.IsDestroyed() == 0) frame.PostWebMessageAsJson(payload);
             if (smokeSubmission)
             {
-                if (Environment.GetCommandLineArgs()[1] == "--course-video-quiz-smoke")
+                if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-generic-quiz-smoke")
                 {
                     await Task.Delay(11000);
                     if (courseState != "RUNNING")

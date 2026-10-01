@@ -27,7 +27,7 @@ public partial class MainWindow
         if (smokeMode) return;
         try
         {
-            var dialog = new AiSettingsDialog(this, AiSettings.Load());
+            var dialog = new AiSettingsDialog(this, aiRuntime?.LoadSettings());
             if (dialog.ShowDialog() == true && dialog.Settings is not null)
             {
                 aiAnswerCancellation?.Cancel();
@@ -49,14 +49,14 @@ public partial class MainWindow
         if (ShellView.CoreWebView2 is null) return;
         try
         {
-            var settings = AiSettings.Load();
+            var settings = aiRuntime?.LoadSettings();
             var preset = AiProviderPresets.Match(settings);
             ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
             {
                 v = 1, kind = "ai.config", configured = settings is not null,
                 provider = preset.Name, model = settings?.Model ?? "",
                 endpoint = settings?.Endpoint ?? "", hasKey = !string.IsNullOrEmpty(settings?.EncryptedKey),
-                balanceSupported = AiBalanceService.Supports(settings)
+                balanceSupported = aiRuntime?.SupportsBalance(settings) == true
             }));
         }
         catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
@@ -98,19 +98,19 @@ public partial class MainWindow
         aiBalanceCancellation = cancellation;
         try
         {
-            var settings = AiSettings.Load();
+            var settings = aiRuntime?.LoadSettings();
             if (settings is null)
             {
                 PublishAiBalance("unavailable", "保存 AI 配置后可查看余额。");
                 return;
             }
-            if (!AiBalanceService.Supports(settings))
+            if (aiRuntime?.SupportsBalance(settings) != true)
             {
                 PublishAiBalance("unavailable", "当前服务商尚无已适配的余额查询接口。");
                 return;
             }
             PublishAiBalance("loading", "正在查询 API 余额…");
-            var balance = await AiBalanceService.QueryAsync(settings, cancellation.Token);
+            var balance = await aiRuntime.QueryBalanceAsync(settings, cancellation.Token);
             if (!ReferenceEquals(aiBalanceCancellation, cancellation)) return;
             var totals = string.Join(" · ", balance.Entries.Select(entry =>
                 (entry.Currency == "CNY" ? "¥" : "$") +
@@ -144,8 +144,8 @@ public partial class MainWindow
         var watch = Stopwatch.StartNew();
         try
         {
-            var settings = AiSettings.Load() ?? throw new InvalidDataException("尚未配置 AI 服务。请先选择服务商并保存 API Key。");
-            await AiAnswerService.TestConnectionAsync(settings, timeout.Token);
+            var settings = aiRuntime?.LoadSettings() ?? throw new InvalidDataException("尚未配置 AI 服务。请先选择服务商并保存 API Key。");
+            await aiRuntime!.TestConnectionAsync(settings, timeout.Token);
             PublishAiTestStatus("success", $"连接成功，模型响应格式有效（{watch.Elapsed.TotalSeconds:F1} 秒）。");
         }
         catch (OperationCanceledException)
@@ -176,7 +176,7 @@ public partial class MainWindow
         try
         {
             Trace("AI answer attempt started");
-            var settings = smokeAi ? null : AiSettings.Load();
+            var settings = smokeAi ? null : aiRuntime?.LoadSettings();
             if (!smokeAi && settings is null)
             {
                 PublishAiStatus("尚未配置 AI 服务；请在左侧设置接口、模型和 API Key。");
@@ -192,10 +192,11 @@ public partial class MainWindow
             PublishCourse("NEEDS_INPUT", $"AI 正在分析 {snapshot.Questions.Length} 道题…", true);
             PublishAiStatus(smokeAi ? "正在验证本地 AI 答题流程。" :
                 $"正在向 {settings!.Model} 发送当前可见题目。请勿切换章节。");
-            var answers = smokeAi ? AiAnswerService.ParseAnswers(
-                "{\"answers\":[{\"number\":1,\"answer\":\"A\"},{\"number\":2,\"answer\":\"B\"}," +
-                "{\"number\":3,\"answer\":\"测试答案\"},{\"number\":4,\"answer\":\"A\"}]}", snapshot) :
-                await AiAnswerService.AnswerAsync(settings!, snapshot, cancellation.Token);
+            var answers = smokeAi ? await aiRuntime!.RunAsync("course", "answer", cancellation.Token,
+                () => Task.FromResult(AiAnswerService.ParseAnswers(
+                    "{\"answers\":[{\"number\":1,\"answer\":\"A\"},{\"number\":2,\"answer\":\"B\"}," +
+                    "{\"number\":3,\"answer\":\"测试答案\"},{\"number\":4,\"answer\":\"A\"}]}", snapshot))) :
+                await aiRuntime!.AnswerCourseAsync(settings!, snapshot, cancellation.Token);
             Trace("AI answer response validated: " + answers.Length + " answers");
             if (cancellation.IsCancellationRequested || sessionId != courseSessionId ||
                 generation != courseGeneration || courseState != "NEEDS_INPUT" ||

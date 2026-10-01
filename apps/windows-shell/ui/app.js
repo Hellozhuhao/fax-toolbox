@@ -9,33 +9,58 @@
   let currentChapterName = '';
   let suggestedChapterId = '';
   let activeModule = null;
+  let homeworkBrowsing = false;
   let balanceAvailable = false;
   let balanceLoading = false;
+  const viewHistory = [];
+  let currentView = '';
   const activity = [];
+  let activityFilter = 'all';
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
-  const viewNames = {home: '首页', modules: '模块', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', activity: '活动', settings: '系统选项', vault: '密码箱'};
+  const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'AI 服务', activity: '状态', settings: '设置', vault: '密码箱'};
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
-  function show(view) {
-    for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
-    const navigation = ['course', 'homework', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
-    for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
+  function show(view, record = true) {
+    if (record && currentView && currentView !== view) viewHistory.push(currentView);
+    currentView = view;
+    for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'ai', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
+    const navigation = ['course', 'homework', 'demo', 'ai', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
+    for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
+    for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
-    send('ui.layout', {mode: ['course', 'homework', 'demo'].includes(view) ? 'module' : 'home', view});
+    send('ui.layout', {mode: view === 'homework' ?
+      (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
+      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
     if (view === 'vault') send('vault.list');
   }
   function showWorkspace() {
     if (activeModule === 'course') openCourse();
     else if (activeModule === 'homework') openHomework();
     else if (activeModule === 'demo') openDemo();
+    else if (activeModule === 'ai') openAi();
     else show('workspace');
   }
   function logActivity(source, title, detail) {
-    const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
+    const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     if (activity[0]?.title === title && activity[0]?.detail === detail) return;
-    activity.unshift({source, title, detail, time}); activity.length = Math.min(activity.length, 20);
+    activity.unshift({source, title, detail, time}); activity.length = Math.min(activity.length, 200);
+    renderActivity();
+  }
+  function activityCategory(source) {
+    if (/学习|课程/.test(source)) return 'course';
+    if (/作业/.test(source)) return 'homework';
+    if (/AI|模型/.test(source)) return 'ai';
+    return 'system';
+  }
+  function renderActivity() {
+    $('activity-total').textContent = String(activity.length);
+    $('activity-source').textContent = activity[0]?.source || '—';
+    $('activity-updated').textContent = activity[0]?.time || '暂无记录';
+    $('activity-running').textContent = String((courseState === 'RUNNING' ? 1 : 0) + (homeworkBrowsing ? 1 : 0));
     const list = $('activity-list'); list.replaceChildren();
-    for (const item of activity) {
+    const entries = activity.filter(item => activityFilter === 'all' || activityCategory(item.source) === activityFilter);
+    if (!entries.length) { const empty = document.createElement('p'); empty.className = 'activity-empty'; empty.textContent = '当前筛选条件下没有日志。'; list.append(empty); return; }
+    for (const item of entries) {
       const row = document.createElement('div'); row.className = 'activity-row';
       const heading = document.createElement('strong'); heading.textContent = item.title;
       const meta = document.createElement('span'); meta.textContent = item.source + ' · ' + item.time;
@@ -53,6 +78,26 @@
     activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
     $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
     show('homework'); send('homework.activate');
+  }
+  function openAi() {
+    activeModule = 'ai'; $('workspace-module').textContent = 'AI 服务';
+    $('workspace-detail').textContent = '模型连接和请求状态由 AI 服务统一管理。';
+    show('ai'); send('ai.activate'); send('ai.get-config');
+  }
+  function goBack() {
+    if (!viewHistory.length) return false;
+    const previous = viewHistory.pop();
+    show(previous, false);
+    if (previous === 'course') send('course.activate');
+    else if (previous === 'homework') send('homework.activate');
+    else if (previous === 'demo') send('demo.activate');
+    else if (previous === 'ai') send('ai.activate');
+    return true;
+  }
+  function setHomeworkBrowsing(browsing) {
+    homeworkBrowsing = browsing;
+    $('homework-show-results').hidden = !browsing;
+    $('homework-open').textContent = browsing ? '正在浏览学习通' : '浏览学习通作业';
   }
   function openDemo() {
     activeModule = 'demo'; $('workspace-module').textContent = '页面事件演示';
@@ -134,31 +179,27 @@
     const detail = message.error || (!message.configured ? '尚未配置 AI 服务。请选择服务商并保存 API Key。' :
       `服务商：${message.provider}  ·  模型：${message.model}\n接口：${message.endpoint}\nAPI Key：${message.hasKey ? '已加密保存' : '未填写'}`);
     $('ai-config-summary').textContent = detail;
-    $('settings-ai-summary').textContent = detail;
     balanceAvailable = !!(message.configured && message.hasKey && message.balanceSupported);
-    $('homework-ai-summary').textContent = detail;
-    for (const id of ['ai-balance-refresh', 'homework-ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
+    $('course-ai-summary').textContent = message.configured ? `${message.provider} · ${message.model}` : detail;
+    $('homework-ai-summary').textContent = message.configured ? `${message.provider} · ${message.model}` : detail;
+    $('ai-balance-refresh').disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiBalance(message) {
     const detail = message.detail || 'API 余额暂不可用。';
     $('ai-balance').textContent = detail;
-    $('settings-ai-balance').textContent = detail;
-    $('homework-ai-balance').textContent = detail;
     balanceLoading = message.state === 'loading';
-    for (const id of ['ai-balance-refresh', 'homework-ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
+    $('ai-balance-refresh').disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiTest(message) {
     const detail = message.detail || '';
     $('ai-test-result').textContent = detail;
-    $('settings-ai-test-result').textContent = detail;
-    $('homework-ai-test-result').textContent = detail;
-    for (const id of ['ai-test', 'homework-ai-test', 'settings-ai-test']) $(id).disabled = message.state === 'testing';
+    $('ai-test').disabled = message.state === 'testing';
   }
   function renderHomeworkStatus(message) {
     $('homework-page').textContent = message.url || '尚未打开';
     $('homework-status').textContent = message.detail || '';
     $('homework-start').disabled = !message.ready || !!message.busy;
-    $('homework-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
+    $('ai-homework-state').textContent = message.busy ? '正在处理作业请求' : (message.detail || '等待请求');
     logActivity('作业校对', message.busy ? '校对中' : '页面状态', message.detail || '状态已更新');
   }
   function renderHomeworkProgress(message) {
@@ -166,6 +207,7 @@
     if (Number.isFinite(message.percent)) bar.value = Math.max(0, Math.min(100, message.percent));
     else bar.removeAttribute('value');
     $('homework-progress-label').textContent = message.detail || '正在处理…';
+    if (message.detail) $('ai-homework-state').textContent = message.detail;
   }
   function appendHomeworkMath(target, value) {
     const source = String(value || '');
@@ -198,6 +240,8 @@
     const items = Array.isArray(message.items) ? message.items : [];
     $('homework-count').textContent = items.length ? `${items.length} 道题` : '';
     if (!items.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '当前没有校对结果。'; list.append(empty); return; }
+    setHomeworkBrowsing(false);
+    send('homework.results');
     for (const item of items) {
       const card = document.createElement('article'); card.className = 'homework-item';
       const heading = document.createElement('div'); heading.className = 'homework-item-heading';
@@ -207,7 +251,9 @@
       const question = document.createElement('p'); question.className = 'homework-question'; appendHomeworkMath(question, item.question || '');
       const answer = document.createElement('p'); answer.className = 'homework-answer'; appendHomeworkMath(answer, `答案：${item.answer || '需要人工核对'}`);
       const explanation = document.createElement('details'); explanation.className = 'homework-explanation';
-      const toggle = document.createElement('summary'); toggle.textContent = '查看解析';
+      const toggle = document.createElement('summary'); toggle.textContent = '查看详细解答 ↗';
+      toggle.title = '在右侧画板中阅读详解；双击画板标题可移到独立窗口';
+      toggle.addEventListener('click', event => { event.preventDefault(); send('homework.explain', {number: item.number}); });
       const body = document.createElement('p'); appendHomeworkMath(body, item.explanation || '模型未提供解析。');
       explanation.append(toggle, body); card.append(heading, question, answer, explanation); list.append(card);
     }
@@ -215,7 +261,7 @@
   window.chrome?.webview?.addEventListener('message', event => {
     const message = event.data; if (!message || message.v !== 1) return;
     if (message.kind === 'status') {
-      $('state').textContent = message.state || ''; $('detail').textContent = message.detail || '';
+      $('state').textContent = message.state || '';
       $('home-backend').textContent = stateName(message.state);
       $('home-detail').textContent = message.detail || '';
       $('demo-state').textContent = stateName(message.state);
@@ -223,27 +269,40 @@
       logActivity('工具箱', stateName(message.state), message.detail || '');
     }
     if (message.kind === 'course.status') renderCourse(message);
+    if (message.kind === 'course.web-health') {
+      const note = $('course-web-health'); note.textContent = message.detail || '';
+      note.hidden = !message.detail;
+    }
     if (message.kind === 'homework.status') renderHomeworkStatus(message);
     if (message.kind === 'homework.progress') renderHomeworkProgress(message);
     if (message.kind === 'homework.result') renderHomeworkResults(message);
     if (message.kind === 'course.catalog') renderCatalog(message);
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
-    if (message.kind === 'ai.status') $('ai-result').textContent = message.detail || '';
+    if (message.kind === 'ai.status') { $('ai-result').textContent = message.detail || ''; $('course-ai-result').textContent = message.detail || ''; $('ai-course-state').textContent = message.detail || '等待请求'; logActivity('AI 服务', '学习通答题', message.detail || '状态已更新'); }
+    if (message.kind === 'diagnostics.event') logActivity(message.source || '系统', message.title || '日志', message.detail || '');
+    if (message.kind === 'diagnostics.snapshot') { activity.length = 0; for (const entry of (message.entries || []).slice().reverse()) logActivity(entry.source, entry.title, entry.detail); }
     if (message.kind === 'ai.config') renderAiConfig(message);
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
   });
-  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
+  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => {
+    if (item.dataset.view === 'workspace') showWorkspace();
+    else if (item.dataset.view === 'course') openCourse();
+    else if (item.dataset.view === 'homework') openHomework();
+    else if (item.dataset.view === 'ai') openAi();
+    else show(item.dataset.view);
+  });
   $('open-course-card').addEventListener('click', openCourse);
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : openDemo());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : openDemo());
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
+  $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
-  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, showHome: () => show('home')});
+  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, showHome: () => show('home'),
+    goBack, refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
-  $('quick-actions').addEventListener('click', () => togglePalette(true));
   palette.addEventListener('click', event => { if (event.target === palette) togglePalette(false); });
   for (const item of palette.querySelectorAll('[data-action]')) item.addEventListener('click', () => {
     togglePalette(false);
@@ -251,7 +310,7 @@
     if (action === 'course') openCourse();
     else if (action === 'homework') openHomework();
     else if (action === 'demo') openDemo();
-    else if (action === 'ai') { openCourse(); send('ai.configure'); }
+    else if (action === 'ai') openAi();
     else show(action);
   });
   document.addEventListener('keydown', event => {
@@ -262,11 +321,11 @@
   $('start').addEventListener('click', () => { openDemo(); send('session.start'); });
   $('cancel').addEventListener('click', () => send('session.cancel'));
   $('course-open').addEventListener('click', () => send('course.open'));
-  $('homework-open').addEventListener('click', () => send('homework.open'));
+  $('homework-open').addEventListener('click', () => { setHomeworkBrowsing(true); show('homework'); send('homework.open'); });
+  $('homework-show-results').addEventListener('click', () => { setHomeworkBrowsing(false); show('homework'); send('homework.results'); });
   $('homework-start').addEventListener('click', () => send('homework.start'));
-  $('homework-ai-configure').addEventListener('click', () => send('ai.configure'));
-  $('homework-ai-test').addEventListener('click', () => send('ai.test'));
-  $('homework-ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
+  $('homework-ai-open').addEventListener('click', openAi);
+  $('course-ai-open').addEventListener('click', openAi);
   $('course-save-vault').addEventListener('click', () => send('vault.save'));
   $('course-start').addEventListener('click', () => send('course.start'));
   $('course-chapters').addEventListener('change', () => { $('course-jump').disabled = !catalogLive || !$('course-chapters').value; });
@@ -279,12 +338,26 @@
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
   $('vault-add').addEventListener('click', () => send('vault.save'));
   $('settings-vault').addEventListener('click', () => show('vault'));
-  $('settings-ai').addEventListener('click', () => send('ai.configure'));
-  $('settings-ai-test').addEventListener('click', () => send('ai.test'));
-  $('settings-ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
+  $('settings-open-ai').addEventListener('click', openAi);
+  for (const item of document.querySelectorAll('[data-settings-panel]')) item.addEventListener('click', () => {
+    for (const button of document.querySelectorAll('[data-settings-panel]')) button.classList.toggle('selected', button === item);
+    for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== item.dataset.settingsPanel;
+  });
+  for (const item of document.querySelectorAll('[data-activity-filter]')) item.addEventListener('click', () => {
+    activityFilter = item.dataset.activityFilter;
+    for (const button of document.querySelectorAll('[data-activity-filter]')) button.classList.toggle('selected', button === item);
+    renderActivity();
+  });
+  $('diagnostics-inspect').addEventListener('click', () => send('diagnostics.inspect'));
+  $('diagnostics-devtools').addEventListener('click', () => send('diagnostics.devtools'));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);
-  show('home');
+  const initialModule = new URLSearchParams(location.search).get('module');
+  if (initialModule === 'course') openCourse();
+  else if (initialModule === 'homework') openHomework();
+  else if (initialModule === 'demo') openDemo();
+  else if (initialModule === 'ai') openAi();
+  else show('home');
   send('ai.get-config');
 })();
