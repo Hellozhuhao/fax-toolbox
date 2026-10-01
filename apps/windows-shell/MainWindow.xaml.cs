@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Text;
 using System.Text.Json;
@@ -18,6 +19,12 @@ public partial class MainWindow : Window
     private const string ModuleUrl = "https://module.toolbox.invalid/smoke.html";
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
+    private static readonly ConcurrentDictionary<string, Lazy<Task<CoreWebView2Environment>>> SharedWebViewEnvironments = new();
+
+    private static Task<CoreWebView2Environment> GetSharedWebViewEnvironmentAsync(string folder) =>
+        SharedWebViewEnvironments.GetOrAdd(folder, path => new Lazy<Task<CoreWebView2Environment>>(() =>
+            CoreWebView2Environment.CreateAsync(userDataFolder: path,
+                options: new CoreWebView2EnvironmentOptions { AdditionalBrowserArguments = "--no-proxy-server" }))).Value;
 
     private readonly bool smokeMode;
     private readonly bool courseSmokeMode;
@@ -48,7 +55,7 @@ public partial class MainWindow : Window
         tabSmokeChild = childForTabSmoke;
         homeworkSmokeMode = args.Length == 3 && args[1] == "--homework-smoke";
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
-            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
+            "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
@@ -67,6 +74,7 @@ public partial class MainWindow : Window
         NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
         NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
         NativeButtonGlow.Attach(BrowserBackButton, () => darkTaskTabs);
+        NativeButtonGlow.Attach(BrowserReloadButton, () => darkTaskTabs);
         NativeButtonGlow.Attach(CourseRetryButton, () => darkTaskTabs, primary: true);
         Trace("constructor");
         InitializeCatalog();
@@ -131,23 +139,19 @@ public partial class MainWindow : Window
 
             var profileRoot = smokeMode ? Path.Combine(smokeDataDirectory!, "WebView2") :
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox", "WebView2");
-            var directOptions = new CoreWebView2EnvironmentOptions
-            {
-                AdditionalBrowserArguments = "--no-proxy-server"
-            };
             Trace("WebView2 network: direct");
-            var uiEnvironment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(profileRoot, "ui"), options: directOptions);
-            var moduleEnvironment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(profileRoot, "modules", "smoke"), options: directOptions);
-            var courseEnvironment = await CoreWebView2Environment.CreateAsync(
-                userDataFolder: Path.Combine(profileRoot, "modules", "chaoxing"), options: directOptions);
-            await ShellView.EnsureCoreWebView2Async(uiEnvironment);
-            Trace("UI WebView ready");
-            await ModuleView.EnsureCoreWebView2Async(moduleEnvironment);
-            Trace("module WebView ready");
-            await CourseView.EnsureCoreWebView2Async(courseEnvironment);
-            Trace("course WebView ready");
+            var uiEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "ui"));
+            var moduleEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "smoke"));
+            var courseEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "chaoxing"));
+            await Task.WhenAll(uiEnvironmentTask, moduleEnvironmentTask, courseEnvironmentTask);
+            var uiEnvironment = await uiEnvironmentTask;
+            var moduleEnvironment = await moduleEnvironmentTask;
+            var courseEnvironment = await courseEnvironmentTask;
+            var uiReady = ShellView.EnsureCoreWebView2Async(uiEnvironment);
+            var moduleReady = ModuleView.EnsureCoreWebView2Async(moduleEnvironment);
+            var courseReady = CourseView.EnsureCoreWebView2Async(courseEnvironment);
+            await Task.WhenAll(uiReady, moduleReady, courseReady);
+            Trace("UI, module and course WebViews ready");
             ConfigureWebViews();
             Publish("READY", "后端已连接。点击“开始演示”创建会话。");
             ShellView.CoreWebView2.Navigate(UiUrl);
@@ -194,6 +198,7 @@ public partial class MainWindow : Window
             if (!string.Equals(args.Uri, ModuleUrl, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
         };
         CourseView.CoreWebView2.NavigationStarting += CourseNavigationStarting;
+        CourseView.CoreWebView2.WebResourceResponseReceived += CourseWebResourceResponseReceived;
         CourseView.CoreWebView2.NavigationCompleted += (_, args) =>
         {
             ModuleNavigationCompleted(args);
@@ -232,6 +237,7 @@ public partial class MainWindow : Window
             PublishAiConfiguration();
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
+            PublishMessageWebHealth();
             if (activeModule == "homework") PublishHomeworkStatus(homeworkDetail);
             Trace("UI navigation completed");
             if (tabSmokeChild) { taskWindowReady.TrySetResult(true); return; }
@@ -302,6 +308,11 @@ public partial class MainWindow : Window
         detail = nextDetail;
         RefreshTaskTabs();
         Title = $"Fax Toolbox — {nextState}";
+        TitleStatus.Text = " · " + (nextState switch
+        {
+            "READY" => "就绪", "RUNNING" => "运行中", "PAUSED" => "已暂停",
+            "ERROR" => "需要检查", _ => "处理中"
+        });
         if (ShellView.CoreWebView2 is not null)
         {
             var json = JsonSerializer.Serialize(new { v = 1, kind = "status", state, detail });
@@ -324,7 +335,9 @@ public partial class MainWindow : Window
             switch (message.GetProperty("command").GetString())
             {
                 case "ui.layout":
-                    SetWorkspaceLayout(message.GetProperty("mode").GetString() == "module");
+                    SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
+                    shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
+                    UpdateBrowserBackButton();
                     UpdateTaskTabs();
                     break;
                 case "ui.theme":
@@ -335,6 +348,10 @@ public partial class MainWindow : Window
                 case "course.open": await OpenCourseAsync(); break;
                 case "homework.open": await OpenHomeworkAsync(); break;
                 case "homework.results": ShowHomeworkResults(); break;
+                case "homework.explain":
+                    if (message.TryGetProperty("number", out var questionNumber) && questionNumber.TryGetInt32(out var number))
+                        await ShowHomeworkExplanationAsync(number);
+                    break;
                 case "homework.start": await StartHomeworkReviewAsync(); break;
                 case "homework.activate":
                     if (assignedModule is not null && assignedModule != "homework" && !smokeMode)
@@ -429,6 +446,9 @@ public partial class MainWindow : Window
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
         Background = Brush(dark ? "#202126" : "#F5F5F3");
         BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F5F5F3");
+        TitleBar.Background = Brush(dark ? "#17181C" : "#F5F5F3");
+        TitleName.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
+        TitleStatus.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
         var accent = Brush(dark ? "#7858EB" : "#D66B49");

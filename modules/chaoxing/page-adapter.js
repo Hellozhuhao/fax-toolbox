@@ -287,6 +287,8 @@
         if (findQuiz().length && !quizSubmitted) { report('QUIZ_FOUND'); return; }
         const foundVideo = document.querySelector('video');
         if (foundVideo && visible(foundVideo)) {
+          foundVideo.defaultMuted = true;
+          foundVideo.muted = true;
           if (video !== foundVideo) {
             video = foundVideo;
             video.addEventListener('ended', () => report('VIDEO_ENDED', true), {once: true});
@@ -307,8 +309,12 @@
         if (action?.v !== 1 || action?.kind !== 'course.action' ||
             action.sessionId !== sessionId || action.generation !== generation) return;
         switch (action.action) {
-          case 'PLAY_VIDEO': if (video && !video.ended) video.play().catch(error =>
-            report(error?.name === 'NotAllowedError' ? 'PLAYBACK_BLOCKED' : 'PLAYBACK_FAILED', true)); break;
+          case 'PLAY_VIDEO': if (video && !video.ended) {
+            video.defaultMuted = true;
+            video.muted = true;
+            video.play().catch(error =>
+              report(error?.name === 'NotAllowedError' ? 'PLAYBACK_BLOCKED' : 'PLAYBACK_FAILED', true));
+          } break;
           case 'NEXT_UNIT': nextUnit(); break;
           case 'ADVANCE_AFTER_VIDEO': advanceAfterVideo(); break;
           case 'DOCUMENT_NEXT': {

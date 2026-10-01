@@ -22,6 +22,43 @@ public partial class MainWindow
     private List<ChapterEntry> catalogEntries = [];
     private CoreWebView2Frame? catalogFrame;
     private bool catalogLive;
+    private string lastAutomaticAdvanceChapter = "";
+    private bool automaticAdvanceBusy;
+
+    private async Task<bool> TryAdvanceCatalogAfterQuizAsync(string chapter)
+    {
+        if (!catalogLive || catalogEntries.Count < 2 || activeModule != "chaoxing" || automaticAdvanceBusy) return false;
+        var index = catalogEntries.FindIndex(item => item.Id == chapter);
+        if (index < 0) index = catalogEntries.FindIndex(item => item.Id == catalogCurrentId);
+        if (index < 0) index = catalogEntries.FindIndex(item => item.Name == catalogCurrentName);
+        if (index < 0 || index + 1 >= catalogEntries.Count ||
+            lastAutomaticAdvanceChapter == catalogEntries[index].Id) return false;
+        var next = catalogEntries[index + 1];
+        var script = "window.FaxCatalogReader?.jump(" + JsonSerializer.Serialize(next.Id) + ") === true";
+        automaticAdvanceBusy = true;
+        var previousUrl = CourseView.CoreWebView2.Source;
+        try
+        {
+            var result = catalogFrame is { } frame && frame.IsDestroyed() == 0 ?
+                await frame.ExecuteScriptAsync(script) : await CourseView.CoreWebView2.ExecuteScriptAsync(script);
+            if (result != "true") return false;
+            var switched = false;
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                await Task.Delay(300);
+                var current = await ReadCatalogAsync(catalogFrame);
+                if (current?.CurrentId == next.Id || CourseView.CoreWebView2.Source != previousUrl)
+                { switched = true; break; }
+            }
+            if (!switched) return false;
+            lastAutomaticAdvanceChapter = catalogEntries[index].Id;
+            PublishCourse("RUNNING", "测验已完成，正在进入“" + next.Name + "”。", true);
+            await RefreshCatalogAsync();
+            return true;
+        }
+        catch (Exception error) { Trace("catalog advance failed: " + error.Message); return false; }
+        finally { automaticAdvanceBusy = false; }
+    }
 
     private static string CourseKeyFromUrl(string? value)
     {

@@ -35,8 +35,9 @@
       hideConfirmation(); document.body.dataset.quizSubmitted = 'true';
       if (new URLSearchParams(location.search).get('result') === '1') {
         document.getElementById('quiz-frame').contentWindow.showResult();
-        document.getElementById(new URLSearchParams(location.search).has('manual') ?
-          'manual-chapter' : 'step-forward').hidden = false;
+        if (!new URLSearchParams(location.search).has('catalogadvance'))
+          document.getElementById(new URLSearchParams(location.search).has('manual') ?
+            'manual-chapter' : 'step-forward').hidden = false;
       }
     }
     function advancePage() { location.href = 'studentstudy-video-quiz-done.html?chapterId=2.6'; }
@@ -48,6 +49,8 @@
       document.getElementById('chapter-25').className = '';
       document.getElementById('chapter-26').className = 'active';
     }
+    if (new URLSearchParams(location.search).has('catalogadvance'))
+      document.getElementById('chapter-26').addEventListener('click', showNextChapter);
     document.querySelector('video').play = () => Promise.resolve();
     setTimeout(() => document.querySelector('video').dispatchEvent(new Event('ended')), 700);
   </script>

@@ -2,7 +2,13 @@ using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Web.WebView2.Core;
 
 namespace FaxToolbox.Windows;
@@ -22,6 +28,144 @@ public partial class MainWindow
     private long homeworkGeneration;
     private string homeworkDetail = "请在右侧打开作业题目。";
     private CancellationTokenSource? homeworkCancellation;
+    private CancellationTokenSource? homeworkExplanationCancellation;
+    private HomeworkReviewItem[] homeworkReviewItems = [];
+    private bool homeworkExplanationRestoreBrowser;
+    private Window? homeworkExplanationWindow;
+    private TextBlock? homeworkDetachedText;
+
+    private static string ReadableMath(string value)
+    {
+        var text = Regex.Replace(value, @"\\begin\{(p|b|v)matrix\}([\s\S]*?)\\end\{\1matrix\}", match =>
+        {
+            var rows = match.Groups[2].Value.Split(@"\\", StringSplitOptions.RemoveEmptyEntries);
+            if (rows.Length is < 1 or > 8) return match.Value;
+            var left = match.Groups[1].Value == "p" ? "(" : match.Groups[1].Value == "b" ? "[" : "│";
+            var right = match.Groups[1].Value == "p" ? ")" : match.Groups[1].Value == "b" ? "]" : "│";
+            return "\n" + string.Join("\n", rows.Select(row => left +
+                string.Join("   ", row.Split('&').Select(cell => cell.Trim())) + right)) + "\n";
+        });
+        foreach (var (source, target) in new[] { (@"\cdot", "·"), (@"\times", "×"),
+            (@"\div", "÷"), (@"\leq", "≤"), (@"\geq", "≥"), (@"\neq", "≠"),
+            (@"\sqrt", "√"), (@"\pi", "π"), (@"\alpha", "α"), (@"\beta", "β"),
+            (@"\theta", "θ"), (@"\left", ""), (@"\right", ""), (@"\(", ""),
+            (@"\)", ""), (@"\[", ""), (@"\]", "") })
+            text = text.Replace(source, target, StringComparison.Ordinal);
+        return text.Trim();
+    }
+
+    private async Task ShowHomeworkExplanationAsync(int number)
+    {
+        var item = homeworkReviewItems.FirstOrDefault(result => result.Number == number);
+        if (item is null || activeModule != "homework") return;
+        homeworkExplanationCancellation?.Cancel();
+        homeworkExplanationWindow?.Close();
+        homeworkExplanationWindow = null;
+        homeworkDetachedText = null;
+        var cancellation = new CancellationTokenSource();
+        homeworkExplanationCancellation = cancellation;
+        if (HomeworkExplanationOverlay.Visibility != Visibility.Visible)
+            homeworkExplanationRestoreBrowser = homeworkBrowserVisible;
+        homeworkBrowserVisible = true;
+        SetWorkspaceLayout(true);
+        CourseView.Visibility = Visibility.Visible;
+        await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+        try
+        {
+            await using var imageStream = new MemoryStream();
+            await CourseView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, imageStream);
+            imageStream.Position = 0;
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.StreamSource = imageStream;
+            image.EndInit();
+            image.Freeze();
+            HomeworkExplanationBackdropImage.Source = image;
+        }
+        catch (Exception error) { Trace("homework explanation preview unavailable: " + error.Message); }
+        CourseView.Visibility = Visibility.Collapsed;
+        HomeworkExplanationQuestion.Text = $"第 {item.Number} 题 · {ReadableMath(item.Question)}";
+        HomeworkExplanationAnswer.Text = "校对答案：" + (item.Answer.Length > 0 ? ReadableMath(item.Answer) : "需要人工核对");
+        HomeworkExplanationText.Text = "正在整理详细解答…";
+        HomeworkExplanationOverlay.Visibility = Visibility.Visible;
+        try
+        {
+            var detail = homeworkSmokeMode ? "结论：x = 2。\n\n推理步骤\n1. 从 2x + 1 = 5 出发。\n2. 两边同时减去 1，得到 2x = 4。\n3. 两边除以 2，得到 x = 2。" :
+                await HomeworkReviewService.ExplainAsync(AiSettings.Load() ??
+                    throw new InvalidDataException("尚未配置 AI 服务。"), item, cancellation.Token);
+            if (!cancellation.IsCancellationRequested)
+            {
+                HomeworkExplanationText.Text = detail;
+                if (homeworkExplanationWindow?.IsVisible == true && homeworkDetachedText is not null)
+                    homeworkDetachedText.Text = detail;
+            }
+        }
+        catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
+            TimeoutException or IOException or System.Security.Cryptography.CryptographicException)
+        {
+            if (!cancellation.IsCancellationRequested)
+            {
+                HomeworkExplanationText.Text = "详解暂不可用：" + error.Message;
+                if (homeworkExplanationWindow?.IsVisible == true && homeworkDetachedText is not null)
+                    homeworkDetachedText.Text = HomeworkExplanationText.Text;
+            }
+        }
+    }
+
+    private void CloseHomeworkExplanation(bool cancel = true)
+    {
+        if (HomeworkExplanationOverlay.Visibility != Visibility.Visible) return;
+        if (cancel) homeworkExplanationCancellation?.Cancel();
+        HomeworkExplanationOverlay.Visibility = Visibility.Collapsed;
+        HomeworkExplanationBackdropImage.Source = null;
+        CourseView.Visibility = Visibility.Visible;
+        if (activeModule == "homework")
+        {
+            homeworkBrowserVisible = homeworkExplanationRestoreBrowser;
+            SetWorkspaceLayout(homeworkBrowserVisible);
+        }
+    }
+
+    private void HomeworkExplanationClose_Click(object sender, RoutedEventArgs e) => CloseHomeworkExplanation();
+
+    private void HomeworkExplanationHeader_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount != 2 || HomeworkExplanationOverlay.Visibility != Visibility.Visible) return;
+        DetachHomeworkExplanation();
+        e.Handled = true;
+    }
+
+    private void DetachHomeworkExplanation()
+    {
+        var contents = new StackPanel { Margin = new Thickness(36), MaxWidth = 1080 };
+        contents.Children.Add(new TextBlock { Text = HomeworkExplanationQuestion.Text, FontSize = 20,
+            FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
+        contents.Children.Add(new TextBlock { Text = HomeworkExplanationAnswer.Text, FontSize = 16,
+            Foreground = Brushes.IndianRed, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
+        var detail = new TextBlock { Text = HomeworkExplanationText.Text, FontSize = 16, LineHeight = 29,
+            FontFamily = new FontFamily("Cambria Math,Microsoft YaHei UI"), TextWrapping = TextWrapping.Wrap };
+        homeworkDetachedText = detail;
+        contents.Children.Add(detail);
+        homeworkExplanationWindow?.Close();
+        var workArea = SystemParameters.WorkArea;
+        homeworkExplanationWindow = new Window
+        {
+            Title = "作业详解 · Fax Toolbox",
+            Width = Math.Min(workArea.Width * 0.82, 1180),
+            Height = Math.Min(workArea.Height * 0.86, 880),
+            MinWidth = 540, MinHeight = 400,
+            ResizeMode = ResizeMode.CanResizeWithGrip,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            Background = new SolidColorBrush(Color.FromRgb(250, 250, 248)),
+            Content = new ScrollViewer { Content = contents,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }
+        };
+        homeworkExplanationWindow.Show();
+        CloseHomeworkExplanation(false);
+    }
 
     private void PublishHomeworkStatus(string detail)
     {
@@ -40,12 +184,18 @@ public partial class MainWindow
 
     private void CancelHomeworkReview()
     {
+        CloseHomeworkExplanation();
+        homeworkExplanationCancellation?.Cancel();
+        homeworkExplanationWindow?.Close();
+        homeworkExplanationWindow = null;
+        homeworkDetachedText = null;
         homeworkGeneration++;
         homeworkCancellation?.Cancel();
     }
 
     private void ClearHomeworkResults()
     {
+        homeworkReviewItems = [];
         ShellView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
         {
             v = 1, kind = "homework.result", items = Array.Empty<object>()
@@ -300,6 +450,7 @@ public partial class MainWindow
                     throw new InvalidDataException("未转写的题干图片应只影响对应题目。");
             }
             if (run != homeworkGeneration || source != CourseView.CoreWebView2.Source || cancellation.IsCancellationRequested) return;
+            homeworkReviewItems = results;
             PublishHomeworkProgress(82, "模型已返回答案，正在核对题号和解析…");
             var current = await ReadHomeworkSnapshotAsync();
             if (JsonSerializer.Serialize(current.Snapshot) != JsonSerializer.Serialize(snapshot))
@@ -344,6 +495,44 @@ public partial class MainWindow
                 if (ui == "true" && untouched == "true" && frameUntouched &&
                     !homeworkBrowserVisible && WorkspaceColumn.Width.Value == 0)
                 {
+                    await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('.homework-explanation summary').click()");
+                    for (var attempt = 0; attempt < 20 &&
+                        HomeworkExplanationOverlay.Visibility != Visibility.Visible; attempt++)
+                        await Task.Delay(100);
+                    if (HomeworkExplanationOverlay.Visibility != Visibility.Visible ||
+                        !HomeworkExplanationText.Text.Contains("x = 2", StringComparison.Ordinal) ||
+                        HomeworkExplanationQuestion.Text.Contains(@"\begin", StringComparison.Ordinal) ||
+                        HomeworkExplanationBackdropImage.Source is null ||
+                        CourseView.Visibility != Visibility.Collapsed || WorkspaceColumn.Width.Value == 0)
+                    { FailSmoke("homework detailed explanation board did not open"); return; }
+                    if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                    {
+                        var boardPreview = new RenderTargetBitmap((int)ActualWidth,
+                            (int)ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                        boardPreview.Render(this);
+                        var boardEncoder = new PngBitmapEncoder();
+                        boardEncoder.Frames.Add(BitmapFrame.Create(boardPreview));
+                        await using var boardOutput = File.Create(Path.Combine(root, ".cache", "ui-homework-explanation-preview.png"));
+                        boardEncoder.Save(boardOutput);
+                    }
+                    DetachHomeworkExplanation();
+                    await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+                    var detached = homeworkExplanationWindow;
+                    if (detached is null || detached.ResizeMode != ResizeMode.CanResizeWithGrip ||
+                        detached.Width < Math.Min(SystemParameters.WorkArea.Width * 0.8, 1100) ||
+                        homeworkDetachedText?.Text.Contains("x = 2", StringComparison.Ordinal) != true)
+                    { FailSmoke("homework explanation window was not resizable or was too small"); return; }
+                    detached.Width = Math.Max(detached.MinWidth, detached.Width - 160);
+                    detached.Height = Math.Max(detached.MinHeight, detached.Height - 120);
+                    await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+                    if (detached.ActualWidth < detached.MinWidth || detached.ActualHeight < detached.MinHeight)
+                    { FailSmoke("homework explanation window resize failed"); return; }
+                    detached.Close();
+                    homeworkExplanationWindow = null;
+                    homeworkDetachedText = null;
+                    if (WorkspaceColumn.Width.Value != 0 || CourseView.Visibility != Visibility.Visible)
+                    { FailSmoke("homework results were not restored after closing explanation"); return; }
                     if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                     {
                         await ShellView.CoreWebView2.ExecuteScriptAsync(

@@ -6,6 +6,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>FaxToolbox.Windows</AssemblyName>
+    <ApplicationIcon>assets\fax-toolbox.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />

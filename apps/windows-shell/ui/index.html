@@ -16,14 +16,15 @@
   <div class="app">
     <aside class="sidebar">
       <header class="brand"><div class="brand-mark">F</div><div><span class="eyebrow">FAX TOOLBOX</span><h1>工具箱</h1></div></header>
-      <span class="nav-label">工作空间</span>
+      <span class="nav-label">导航</span>
       <nav aria-label="工具箱导航">
-        <button class="nav-item active" type="button" data-view="home" title="首页"><span class="nav-icon">⌂</span><span>首页</span></button>
-        <button class="nav-item" type="button" data-view="modules" title="模块"><span class="nav-icon">▦</span><span>模块</span></button>
-        <button class="nav-item" type="button" data-view="workspace" title="工作台"><span class="nav-icon">▤</span><span>工作台</span></button>
-        <button class="nav-item" type="button" data-view="activity" title="活动"><span class="nav-icon">◷</span><span>活动</span></button>
+        <button class="nav-item active" type="button" data-view="home" title="首页"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg></span><span>首页</span></button>
+        <button class="nav-item" type="button" data-view="course" title="学习通"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4.5h7a3 3 0 0 1 3 3V20a3 3 0 0 0-3-3H4z"/><path d="M20 4.5h-3a3 3 0 0 0-3 3V20a3 3 0 0 1 3-3h3z"/></svg></span><span>学习</span></button>
+        <button class="nav-item" type="button" data-view="homework" title="作业校对"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v14H5V3z"/><path d="M15 3v5h4M8 12h8M8 16h5"/></svg></span><span>作业</span></button>
+        <button class="nav-item" type="button" data-view="modules" title="全部模块"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span>模块</span></button>
+        <button class="nav-item" type="button" data-view="activity" title="最近活动"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>活动</span></button>
       </nav>
-      <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings" title="系统选项"><span class="nav-icon">⚙</span><span>设置</span></button><div class="connection" title="后端连接状态"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
+      <div class="sidebar-bottom"><button class="nav-item" type="button" data-view="settings" title="系统选项"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.5 2.4 2 .9 2.1-1.3 2.8 2.8-1.3 2.1.9 2L23 11v2l-2.4.5-.9 2 1.3 2.1-2.8 2.8-2.1-1.3-2 .9L14 22h-4l-.5-2.4-2-.9-2.1 1.3-2.8-2.8 1.3-2.1-.9-2L1 13v-2l2.4-.5.9-2L3 6.4l2.8-2.8 2.1 1.3 2-.9z"/></svg></span><span>设置</span></button><div class="connection" title="后端连接状态"><span class="connection-dot"></span><span id="state">正在连接</span></div></div>
     </aside>
     <main class="content">
     <header class="command-bar"><div class="location"><strong id="location-name">首页</strong></div><div class="command-actions"><button id="quick-actions" type="button" class="quick-actions" aria-label="打开快速操作">快速操作 <kbd>Ctrl K</kbd></button></div></header>
@@ -47,7 +48,7 @@
       <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通</h2>
       <p class="muted">在右侧登录并选择课程。切换模块会保留此页面；工具箱不会读取登录密码。</p>
       <div class="course-actions"><button id="course-open" class="secondary" type="button">打开学习通首页</button><button id="course-save-vault" class="secondary" type="button">保存账号到密码箱</button></div>
-      <details class="card course-current collapsible" open><summary>当前章节</summary><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p></details>
+      <details class="card course-current collapsible" open><summary>当前章节</summary><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p><p id="course-web-health" class="web-health" hidden aria-live="polite"></p></details>
       <details class="card course-catalog collapsible" open><summary>章节目录</summary>
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>

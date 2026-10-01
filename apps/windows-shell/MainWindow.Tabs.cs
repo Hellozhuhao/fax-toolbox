@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace FaxToolbox.Windows;
@@ -16,8 +17,33 @@ public partial class MainWindow
     private bool closingAsTab;
     private bool closingTask;
     private bool darkTaskTabs;
+    private bool shellCanGoBack;
     private readonly TaskCompletionSource<bool> taskWindowReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<MainWindow, TaskTabVisual> taskTabVisuals = [];
+
+    private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ClickCount == 2) { ToggleWindowMaximized(); e.Handled = true; }
+        else if (e.LeftButton == MouseButtonState.Pressed)
+        {
+            try { DragMove(); } catch (InvalidOperationException) { }
+        }
+    }
+
+    private void ToggleWindowMaximized()
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void Window_StateChanged(object sender, EventArgs e)
+    {
+        if (TitleMaximizeButton is not null)
+            TitleMaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
+    }
+
+    private void TitleMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void TitleMaximize_Click(object sender, RoutedEventArgs e) => ToggleWindowMaximized();
+    private void TitleClose_Click(object sender, RoutedEventArgs e) => Close();
 
     private sealed class TaskTabVisual(Border shell, Button open, Button close)
     {
@@ -106,6 +132,9 @@ public partial class MainWindow
         BrowserBackButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
         BrowserBackButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
         BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
+        BrowserReloadButton.Background = BrowserBackButton.Background;
+        BrowserReloadButton.Foreground = BrowserBackButton.Foreground;
+        BrowserReloadButton.BorderBrush = BrowserBackButton.BorderBrush;
         UpdateBrowserBackButton();
     }
 
@@ -140,19 +169,32 @@ public partial class MainWindow
     private void UpdateBrowserBackButton()
     {
         if (BrowserBackButton is null) return;
-        var module = assignedModule is "course" or "homework" || activeModule is "chaoxing" or "homework";
-        BrowserBackButton.Visibility = assignedModule is null ? Visibility.Collapsed : Visibility.Visible;
-        BrowserBackButton.IsEnabled = module ? CourseView.CoreWebView2?.CanGoBack == true :
-            ModuleView.CoreWebView2?.CanGoBack == true;
+        var module = WorkspaceColumn.Width.Value > 0 && activeModule is ("chaoxing" or "homework");
+        BrowserBackButton.Visibility = Visibility.Visible;
+        BrowserBackButton.IsEnabled = shellCanGoBack || (module ? CourseView.CoreWebView2?.CanGoBack == true :
+            WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2?.CanGoBack == true);
     }
 
     private void BrowserBack_Click(object sender, RoutedEventArgs e)
     {
-        if (assignedModule is "course" or "homework")
+        if (WorkspaceColumn.Width.Value > 0 && activeModule is ("chaoxing" or "homework"))
         {
-            if (CourseView.CoreWebView2?.CanGoBack == true) CourseView.CoreWebView2.GoBack();
+            if (CourseView.CoreWebView2?.CanGoBack == true) { CourseView.CoreWebView2.GoBack(); return; }
         }
-        else if (ModuleView.CoreWebView2?.CanGoBack == true) ModuleView.CoreWebView2.GoBack();
+        else if (WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2?.CanGoBack == true)
+        { ModuleView.CoreWebView2.GoBack(); return; }
+        if (shellCanGoBack && ShellView.CoreWebView2 is not null)
+            _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.goBack()");
+    }
+
+    private void BrowserReload_Click(object sender, RoutedEventArgs e)
+    {
+        if (WorkspaceColumn.Width.Value > 0 && activeModule is ("chaoxing" or "homework") &&
+            CourseView.CoreWebView2 is not null) CourseView.CoreWebView2.Reload();
+        else if (WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2 is not null)
+            ModuleView.CoreWebView2.Reload();
+        else if (ShellView.CoreWebView2 is not null)
+            _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.refresh()");
     }
 
     private MainWindow CreateTaskWindow(string? module = null)
@@ -200,9 +242,12 @@ public partial class MainWindow
         if (target.WindowState != WindowState) target.WindowState = WindowState;
         target.ShowActivated = true;
         if (target.Visibility != Visibility.Visible) target.Show();
+        target.UpdateLayout();
         target.ShowInTaskbar = !smokeMode;
         target.Activate();
         await target.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
+        // Allow the WebView compositor one frame to present before hiding the old HWND.
+        await Task.Delay(20);
         Hide();
         target.UpdateTaskTabs();
     }
@@ -231,6 +276,7 @@ public partial class MainWindow
         {
             target.CancelAiRequest("标签已关闭，AI 请求已取消。");
             target.CancelHomeworkReview();
+            target.homeworkExplanationWindow?.Close();
             if (target.courseSessionId is not null && target.courseState != "STOPPED")
                 await target.CourseCommandAsync("stop");
             if (target.sessionId is not null) await target.CancelSessionAsync();

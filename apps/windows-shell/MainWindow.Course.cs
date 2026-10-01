@@ -17,6 +17,7 @@ public partial class MainWindow
     private const string VideoQuizFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5";
     private const string StickyQuizFixture = VideoQuizFixture + "&sticky=1";
     private const string ResultFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1";
+    private const string CatalogAdvanceFixture = ResultFixture + "&catalogadvance=1";
     private const string ManualFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-video-quiz.html?chapterId=2.5&result=1&manual=1";
     private const string DocumentFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-document.html?chapterId=2.3";
     private const string ChallengeFixture = "https://mooc1.chaoxing.com/mycourse/studentstudy-challenge.html?chapterId=2.4";
@@ -28,6 +29,7 @@ public partial class MainWindow
         "--course-video-quiz-smoke" => VideoQuizFixture,
         "--course-sticky-quiz-smoke" => StickyQuizFixture,
         "--course-result-smoke" => ResultFixture,
+        "--course-catalog-result-smoke" => CatalogAdvanceFixture,
         "--course-manual-next-smoke" => ManualFixture,
         "--course-document-smoke" => DocumentFixture,
         "--course-pause-smoke" => DocumentFixture,
@@ -56,6 +58,7 @@ public partial class MainWindow
     private int courseAutoRetryCount;
     private ulong courseLatestNavigationId;
     private string courseLastAttemptedUrl = CourseHome;
+    private string messageResourceIssue = "";
     private readonly List<CoreWebView2Frame> courseFrames = [];
 
     private static bool IsChaoxingUrl(string? value)
@@ -120,6 +123,11 @@ public partial class MainWindow
 
     private void CourseNavigationStarting(object? sender, CoreWebView2NavigationStartingEventArgs args)
     {
+        if (messageResourceIssue.Length > 0)
+        {
+            messageResourceIssue = "";
+            PublishMessageWebHealth();
+        }
         if (!IsChaoxingUrl(args.Uri))
         {
             args.Cancel = true;
@@ -138,6 +146,27 @@ public partial class MainWindow
             PublishHomeworkProgress(0, "页面已切换，请打开作业后重新开始。");
             PublishHomeworkStatus("学习通页面正在加载…");
         }
+    }
+
+    private void PublishMessageWebHealth()
+    {
+        ShellView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+        { v = 1, kind = "course.web-health", detail = messageResourceIssue }));
+    }
+
+    private void CourseWebResourceResponseReceived(object? sender, CoreWebView2WebResourceResponseReceivedEventArgs args)
+    {
+        if (!Uri.TryCreate(CourseView.CoreWebView2.Source, UriKind.Absolute, out var page) ||
+            !page.Host.Equals("i.chaoxing.com", StringComparison.OrdinalIgnoreCase) ||
+            !page.AbsolutePath.StartsWith("/base", StringComparison.OrdinalIgnoreCase) ||
+            !Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out var request) ||
+            !IsChaoxingUrl(request.AbsoluteUri)) return;
+        var status = args.Response.StatusCode;
+        if (status is not (401 or 403 or 429) && status < 500) return;
+        var detail = $"学习通消息资源返回 HTTP {status}（{request.Host}）。可点击顶部刷新重试；若仍空白，请在 Edge 对照查看。";
+        if (detail == messageResourceIssue) return;
+        messageResourceIssue = detail;
+        PublishMessageWebHealth();
     }
 
     private void ShowCourseLoading()
@@ -441,7 +470,7 @@ public partial class MainWindow
                         new { number = 2, answer = "B" }, new { number = 3, answer = "测试答案" },
                         new { number = 4, answer = "对" } }
                 });
-            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-manual-next-smoke")
+            if (Environment.GetCommandLineArgs()[1] is "--course-video-quiz-smoke" or "--course-sticky-quiz-smoke" or "--course-result-smoke" or "--course-catalog-result-smoke" or "--course-manual-next-smoke")
                 await backend.RequestAsync("answers.put", new
                 {
                     chapter = "2.5", answers = new[] { new { number = 1, answer = "A" } }
@@ -786,6 +815,17 @@ public partial class MainWindow
             if (activeSession != courseSessionId || activeGeneration != courseGeneration || courseState != "RUNNING") return;
             var action = result.GetProperty("action").GetString() ?? "NONE";
             var nextState = result.GetProperty("state").GetString() ?? "ERROR";
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-video-smoke" &&
+                observation == "VIDEO_FOUND")
+            {
+                var muted = frame is null ? await CourseView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('video')?.muted === true") :
+                    await frame.ExecuteScriptAsync("document.querySelector('video')?.muted === true");
+                if (muted != "true") { FailSmoke("course video did not start muted"); return; }
+            }
+            if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-catalog-result-smoke" &&
+                observation == "VIDEO_FOUND" && chapter == "2.6" && lastAutomaticAdvanceChapter == "2.5")
+            { PassSmoke(); return; }
             Trace("course observation: " + observation + " chapter=" + chapter + " action=" + action + " state=" + nextState);
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
                 observation == "VIDEO_FOUND" &&
@@ -861,6 +901,8 @@ public partial class MainWindow
                 return;
             }
             if (action is "NONE" or "NEEDS_ANSWERS" or "REVIEW_QUIZ") return;
+            if (action == "NEXT_UNIT" && observation == "QUIZ_RESULT_READY" &&
+                await TryAdvanceCatalogAfterQuizAsync(chapter)) return;
             var payload = JsonSerializer.Serialize(new
             {
                 v = 1, kind = "course.action", sessionId = activeSession, generation = activeGeneration,

@@ -32,9 +32,9 @@ body { background: #fafaf9; }
   background: #fff; color: #ce6848; font-size: 27px;
   box-shadow: 0 9px 17px #24232122, inset 0 0 0 1px #ffffffa0;
 }
-.sidebar nav { gap: 9px; }
+.sidebar nav { gap: 5px; }
 .sidebar .nav-item {
-  position: relative; min-height: 70px; border-radius: 25px;
+  position: relative; min-height: 60px; border-radius: 22px;
   padding: 9px 3px; color: #f5f4f2; font-size: 10px;
   transition: background .24s ease, color .24s ease, transform .24s ease;
 }
@@ -42,9 +42,17 @@ body { background: #fafaf9; }
 .sidebar .nav-item.active { background: #ffffff27; color: #fff; }
 .sidebar .nav-item.active .nav-icon { background: #fff; color: #d66b49; box-shadow: 0 8px 18px #20202024; }
 .nav-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; font-size: 19px; }
-.sidebar-bottom .nav-item { min-height: 70px; }
+.nav-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.sidebar-bottom .nav-item { min-height: 60px; }
 .connection { border-color: #ffffff4d; margin: 5px 8px 0; }
 .connection-dot { width: 9px; height: 9px; background: #e5a086; box-shadow: 0 0 0 4px #e5a08635; }
+@media (max-height: 640px) {
+  .sidebar { padding-top: 9px; padding-bottom: 8px; }
+  .brand { margin-bottom: 10px; }
+  .sidebar nav { gap: 1px; }
+  .sidebar .nav-item, .sidebar-bottom .nav-item { min-height: 48px; }
+  .connection { display: none; }
+}
 
 main.content {
   position: relative; overflow: clip; min-height: calc(100vh - 36px);
@@ -61,6 +69,9 @@ main.content {
 .eyebrow { color: #c2694d; font-size: 10px; letter-spacing: .13em; }
 .version { color: #8a8783; }
 .content h2 { color: #151514; letter-spacing: -.035em; }
+.web-health { padding: 10px 12px; border-radius: 13px; background: #fff1e8; color: #9b4931; font-size: 12px; line-height: 1.5; }
+.web-health[hidden] { display: none; }
+:root[data-theme="dark"] .web-health { background: #433027; color: #ffc4a5; }
 .muted, .lead, .label { color: #74716d; }
 
 .hero {

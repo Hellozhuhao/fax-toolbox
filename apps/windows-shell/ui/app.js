@@ -12,19 +12,23 @@
   let homeworkBrowsing = false;
   let balanceAvailable = false;
   let balanceLoading = false;
+  const viewHistory = [];
+  let currentView = '';
   const activity = [];
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
   const viewNames = {home: '首页', modules: '模块', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', activity: '活动', settings: '系统选项', vault: '密码箱'};
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
-  function show(view) {
+  function show(view, record = true) {
+    if (record && currentView && currentView !== view) viewHistory.push(currentView);
+    currentView = view;
     for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
-    const navigation = ['course', 'homework', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
+    const navigation = view === 'demo' ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     $('location-name').textContent = viewNames[view];
     send('ui.layout', {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
-      ['course', 'demo'].includes(view) ? 'module' : 'home', view});
+      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
     if (view === 'vault') send('vault.list');
   }
   function showWorkspace() {
@@ -55,8 +59,16 @@
   function openHomework() {
     activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
     $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
-    setHomeworkBrowsing(false);
     show('homework'); send('homework.activate');
+  }
+  function goBack() {
+    if (!viewHistory.length) return false;
+    const previous = viewHistory.pop();
+    show(previous, false);
+    if (previous === 'course') send('course.activate');
+    else if (previous === 'homework') send('homework.activate');
+    else if (previous === 'demo') send('demo.activate');
+    return true;
   }
   function setHomeworkBrowsing(browsing) {
     homeworkBrowsing = browsing;
@@ -217,7 +229,9 @@
       const question = document.createElement('p'); question.className = 'homework-question'; appendHomeworkMath(question, item.question || '');
       const answer = document.createElement('p'); answer.className = 'homework-answer'; appendHomeworkMath(answer, `答案：${item.answer || '需要人工核对'}`);
       const explanation = document.createElement('details'); explanation.className = 'homework-explanation';
-      const toggle = document.createElement('summary'); toggle.textContent = '查看解析';
+      const toggle = document.createElement('summary'); toggle.textContent = '查看详细解答 ↗';
+      toggle.title = '在右侧画板中阅读详解；双击画板标题可移到独立窗口';
+      toggle.addEventListener('click', event => { event.preventDefault(); send('homework.explain', {number: item.number}); });
       const body = document.createElement('p'); appendHomeworkMath(body, item.explanation || '模型未提供解析。');
       explanation.append(toggle, body); card.append(heading, question, answer, explanation); list.append(card);
     }
@@ -233,6 +247,10 @@
       logActivity('工具箱', stateName(message.state), message.detail || '');
     }
     if (message.kind === 'course.status') renderCourse(message);
+    if (message.kind === 'course.web-health') {
+      const note = $('course-web-health'); note.textContent = message.detail || '';
+      note.hidden = !message.detail;
+    }
     if (message.kind === 'homework.status') renderHomeworkStatus(message);
     if (message.kind === 'homework.progress') renderHomeworkProgress(message);
     if (message.kind === 'homework.result') renderHomeworkResults(message);
@@ -244,13 +262,19 @@
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
   });
-  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
+  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => {
+    if (item.dataset.view === 'workspace') showWorkspace();
+    else if (item.dataset.view === 'course') openCourse();
+    else if (item.dataset.view === 'homework') openHomework();
+    else show(item.dataset.view);
+  });
   $('open-course-card').addEventListener('click', openCourse);
   for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : openDemo());
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
   $('module-demo').addEventListener('click', openDemo);
-  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, showHome: () => show('home')});
+  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, showHome: () => show('home'),
+    goBack, refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
   $('quick-actions').addEventListener('click', () => togglePalette(true));

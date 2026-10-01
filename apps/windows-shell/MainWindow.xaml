@@ -2,8 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Fax Toolbox" Width="1280" Height="800" MinWidth="780" MinHeight="560"
-        Background="#F5F5F3" FontFamily="PingFang SC, Microsoft YaHei UI" Loaded="Window_Loaded" Closing="Window_Closing" Closed="Window_Closed">
+        WindowStyle="None" ResizeMode="CanResize" Background="#F5F5F3" FontFamily="PingFang SC, Microsoft YaHei UI"
+        Loaded="Window_Loaded" Closing="Window_Closing" Closed="Window_Closed" StateChanged="Window_StateChanged">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#D66B49" />
@@ -51,6 +56,7 @@
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="36" />
             <RowDefinition x:Name="ToolbarRow" Height="0" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -59,14 +65,33 @@
             <ColumnDefinition x:Name="SplitterColumn" Width="0" />
             <ColumnDefinition x:Name="WorkspaceColumn" Width="0" />
         </Grid.ColumnDefinitions>
-        <DockPanel x:Name="BrowserToolbar" Grid.Row="0" Grid.ColumnSpan="3" Visibility="Collapsed"
+        <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="3" Background="#F5F5F3"
+              MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                <Border Width="18" Height="18" CornerRadius="5" Background="#D66B49" VerticalAlignment="Center">
+                    <TextBlock Text="F" Foreground="White" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <TextBlock x:Name="TitleName" Text="Fax Toolbox" Margin="9,0,0,0" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#292826"/>
+                <TextBlock x:Name="TitleStatus" Text=" · 准备中" Margin="5,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#74716E"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+                <Button Width="43" Height="34" Content="−" FontSize="18" ToolTip="最小化" Style="{StaticResource TaskTabInnerStyle}" Click="TitleMinimize_Click"/>
+                <Button x:Name="TitleMaximizeButton" Width="43" Height="34" Content="□" FontSize="17" ToolTip="最大化或还原" Style="{StaticResource TaskTabInnerStyle}" Click="TitleMaximize_Click"/>
+                <Button Width="48" Height="34" Content="×" FontSize="20" ToolTip="关闭工具箱" Style="{StaticResource TaskTabInnerStyle}" Click="TitleClose_Click"/>
+            </StackPanel>
+        </Grid>
+        <DockPanel x:Name="BrowserToolbar" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"
                    Background="#F5F5F3" LastChildFill="True">
             <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="130" Margin="4"
                     Style="{StaticResource ToolbarButtonStyle}" Click="ToggleControls_Click" Content="展开学习页面" />
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,3,0,3">
                 <Button x:Name="BrowserBackButton" Width="35" Height="35" Margin="0,0,7,0" Padding="0"
                         Style="{StaticResource TaskTabButtonStyle}" Click="BrowserBack_Click"
-                        ToolTip="返回上一个网页" Content="←" IsEnabled="False" Visibility="Collapsed" />
+                        ToolTip="返回上一页" Content="←" IsEnabled="False" />
+                <Button x:Name="BrowserReloadButton" Width="35" Height="35" Margin="0,0,7,0" Padding="0"
+                        Style="{StaticResource TaskTabButtonStyle}" Click="BrowserReload_Click"
+                        ToolTip="刷新当前页面" Content="↻" />
                 <StackPanel x:Name="TaskTabsPanel" Orientation="Horizontal" />
                 <Button x:Name="NewTaskTabButton" Width="35" Height="35" Padding="0" Style="{StaticResource TaskTabButtonStyle}"
                         Click="NewTaskTab_Click" ToolTip="新建首页标签" Content="＋" />
@@ -74,13 +99,13 @@
             <TextBlock x:Name="ToolbarTitle" Margin="14,0" VerticalAlignment="Center" Foreground="#74716E"
                        Text="关闭标签将结束该标签的任务" />
         </DockPanel>
-        <wv2:WebView2 x:Name="ShellView" Grid.Row="1" Grid.Column="0" />
-        <GridSplitter x:Name="WorkspaceSplitter" Grid.Row="1" Grid.Column="1" Width="6"
+        <wv2:WebView2 x:Name="ShellView" Grid.Row="2" Grid.Column="0" />
+        <GridSplitter x:Name="WorkspaceSplitter" Grid.Row="2" Grid.Column="1" Width="6" Cursor="SizeWE"
                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DEDAD5"
                       ResizeBehavior="PreviousAndNext" Visibility="Collapsed" />
-        <wv2:WebView2 x:Name="ModuleView" Grid.Row="1" Grid.Column="2" />
-        <wv2:WebView2 x:Name="CourseView" Grid.Row="1" Grid.Column="2" Visibility="Collapsed" />
-        <Border x:Name="CourseOverlay" Grid.Row="1" Grid.Column="2" Visibility="Collapsed"
+        <wv2:WebView2 x:Name="ModuleView" Grid.Row="2" Grid.Column="2" />
+        <wv2:WebView2 x:Name="CourseView" Grid.Row="2" Grid.Column="2" Visibility="Collapsed" />
+        <Border x:Name="CourseOverlay" Grid.Row="2" Grid.Column="2" Visibility="Collapsed"
                 Background="#F5F5F3" Padding="32">
             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="440">
                 <TextBlock x:Name="CourseOverlayTitle" Text="正在打开学习通…" FontSize="24" FontWeight="SemiBold"
@@ -91,5 +116,39 @@
                         Visibility="Collapsed" Style="{StaticResource ToolbarButtonStyle}" Click="CourseRetry_Click" />
             </StackPanel>
         </Border>
+        <Grid x:Name="HomeworkExplanationOverlay" Grid.Row="2" Grid.Column="2" Visibility="Collapsed"
+              Background="#A62B2A2A">
+            <Image x:Name="HomeworkExplanationBackdropImage" Stretch="UniformToFill"/>
+            <Border Background="#AB242323"/>
+            <Border x:Name="HomeworkExplanationBoard" Margin="18" HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch" Background="#FFFAFAF8" CornerRadius="24" Padding="28"
+                    BorderBrush="#E6E4E1" BorderThickness="1">
+                <Grid Width="Auto">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,16" MouseLeftButtonDown="HomeworkExplanationHeader_DoubleClick">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="详细解答" FontSize="23" FontWeight="SemiBold" Foreground="#171716"/>
+                            <TextBlock Text="拖动左侧分隔线调整宽度 · 双击标题弹出独立窗口" Margin="0,5,0,0" FontSize="12" Foreground="#74716E"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Width="34" Height="34" Content="×" FontSize="20"
+                                ToolTip="关闭详解" Style="{StaticResource TaskTabButtonStyle}"
+                                Click="HomeworkExplanationClose_Click"/>
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel MaxWidth="980">
+                            <TextBlock x:Name="HomeworkExplanationQuestion" TextWrapping="Wrap" FontSize="16"
+                                       FontWeight="SemiBold" Foreground="#171716" Margin="0,0,0,14"/>
+                            <TextBlock x:Name="HomeworkExplanationAnswer" TextWrapping="Wrap" FontSize="15"
+                                       Foreground="#B95538" Margin="0,0,0,18"/>
+                            <Border Height="1" Background="#E6E4E1" Margin="0,0,0,20"/>
+                            <TextBlock x:Name="HomeworkExplanationText" TextWrapping="Wrap" FontSize="16"
+                                       FontFamily="Cambria Math,Microsoft YaHei UI" LineHeight="29"
+                                       Foreground="#292826"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
     </Grid>
 </Window>
