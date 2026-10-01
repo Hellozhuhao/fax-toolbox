@@ -3,10 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'none'">
   <title>Fax Toolbox</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="theme.css">
+  <script defer src="vendor/katex/katex.min.js"></script>
   <script defer src="app.js"></script>
   <script defer src="button-glow.js"></script>
 </head>
@@ -30,39 +32,52 @@
       <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
       <div class="hero"><div><span class="eyebrow">WELCOME TO FAX TOOLBOX</span><h2>让每个工具，<br><span class="hero-accent">各司其职。</span></h2><p>从这里启动模块、查看状态，或管理本地数据。每个网页模块拥有独立的会话。</p><button id="open-course-card" type="button">打开学习通模块　↗</button></div><div class="hero-art" aria-hidden="true">F</div></div>
       <div class="section-head"><div><span class="eyebrow">QUICK ACCESS</span><h2>常用模块</h2></div><button class="text-button" type="button" data-view="modules">查看全部模块 →</button></div>
-      <div class="module-grid"><button class="module-card" type="button" data-open="course"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo"><span class="module-icon demo-icon">◇</span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
+      <div class="module-grid"><button class="module-card" type="button" data-open="course"><span class="module-icon">学</span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="homework"><span class="module-icon">校</span><span><strong>作业校对</strong><small>只读取题目 · 展示答案与解析</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo"><span class="module-icon demo-icon">◇</span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
       <div class="section-head"><div><span class="eyebrow">OVERVIEW</span><h2>运行概览</h2></div></div>
       <div class="overview-grid"><div class="card"><span class="label">应用状态</span><strong id="home-backend">连接中</strong><p id="home-detail" class="muted">正在启动本地服务…</p></div><div class="card"><span class="label">学习模块</span><strong id="home-course">等待打开</strong><p class="muted">课程任务状态在工作台中显示。</p></div></div>
     </section>
 
-    <section id="view-modules" class="view" hidden><div class="eyebrow">LIBRARY</div><h2>模块</h2><p class="lead">选择模块，进入独立的网页会话与任务工作台。</p><div class="module-grid"><article class="card library-card"><span class="module-icon">学</span><span class="pill">内置</span><h3>学习通刷课</h3><p>打开学习通、选择课程，再由你启动任务。视频、文档与章节答案库处于早期验证阶段。</p><button id="module-course" type="button">打开模块 →</button></article><article class="card library-card"><span class="module-icon demo-icon">◇</span><span class="pill">内置</span><h3>页面事件演示</h3><p>通过本地测试页面体验模块隔离、状态回传与停止流程。</p><button id="module-demo" class="secondary" type="button">打开模块 →</button></article></div></section>
+    <section id="view-modules" class="view" hidden><div class="eyebrow">LIBRARY</div><h2>模块</h2><p class="lead">选择模块，进入独立的网页会话与任务工作台。</p><div class="module-grid"><article class="card library-card"><span class="module-icon">学</span><span class="pill">内置</span><h3>学习通刷课</h3><p>打开学习通、选择课程，再由你启动任务。视频、文档与章节答案库处于早期验证阶段。</p><button id="module-course" type="button">打开模块 →</button></article><article class="card library-card"><span class="module-icon">校</span><span class="pill">内置</span><h3>作业校对</h3><p>打开学习通作业页面，读取当前可见题目，并在工作台查看答案与解析。</p><button id="module-homework" type="button">打开模块 →</button></article><article class="card library-card"><span class="module-icon demo-icon">◇</span><span class="pill">内置</span><h3>页面事件演示</h3><p>通过本地测试页面体验模块隔离、状态回传与停止流程。</p><button id="module-demo" class="secondary" type="button">打开模块 →</button></article></div></section>
 
-    <section id="view-workspace" class="view" hidden><div class="eyebrow">WORKSPACE</div><h2>工作台</h2><p class="lead">选择一个模块后，这里会显示网页与任务控制。</p><div class="card"><span class="label">当前模块</span><strong id="workspace-module">尚未打开模块</strong><p id="workspace-detail" class="muted">从模块列表中打开学习通或页面事件演示。</p></div><button id="workspace-modules" type="button">查看模块 →</button></section>
+    <section id="view-workspace" class="view" hidden><div class="eyebrow">WORKSPACE</div><h2>工作台</h2><p class="lead">选择一个模块后，这里会显示网页与任务控制。</p><details class="card collapsible" open><summary>当前模块</summary><strong id="workspace-module">尚未打开模块</strong><p id="workspace-detail" class="muted">从模块列表中打开学习通、作业校对或页面事件演示。</p></details><button id="workspace-modules" type="button">查看模块 →</button></section>
 
-    <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。切换顶部标签不会结束其他模块的任务。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><div class="card status"><span class="label">当前状态</span><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></div></section>
+    <section id="view-demo" class="view" hidden><div class="eyebrow">WORKSPACE / DEMO</div><h2>页面事件演示</h2><p class="lead">右侧是独立的演示页面。切换顶部标签不会结束其他模块的任务。</p><div class="action-row"><button id="start" type="button">开始演示</button><button id="cancel" class="secondary" type="button">停止演示</button></div><details class="card status collapsible" open><summary>当前状态</summary><strong id="demo-state">等待启动</strong><p id="demo-detail" class="muted">点击开始演示创建会话。</p></details></section>
 
     <section id="view-course" class="view" hidden>
       <div class="eyebrow">WORKSPACE / LEARNING</div><h2>学习通</h2>
       <p class="muted">在右侧登录并选择课程。切换模块会保留此页面；工具箱不会读取登录密码。</p>
       <div class="course-actions"><button id="course-open" class="secondary" type="button">打开学习通首页</button><button id="course-save-vault" class="secondary" type="button">保存账号到密码箱</button></div>
-      <div class="card course-current"><span class="label">当前章节</span><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p></div>
-      <div class="card course-catalog"><span class="label">章节目录</span>
+      <details class="card course-current collapsible" open><summary>当前章节</summary><p id="course-chapter">等待识别章节名称</p><p id="course-chapter-id" class="muted"></p><p id="course-url" class="url">尚未打开</p></details>
+      <details class="card course-catalog collapsible" open><summary>章节目录</summary>
         <select id="course-chapters" aria-label="选择章节"><option value="">等待读取课程目录</option></select>
         <button id="course-jump" type="button" disabled>跳转到所选章节</button>
-        <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></div>
-      <div class="card course-control"><span class="label">自动完成</span><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">任务会持续运行，切换模块或章节不会自动暂停。点击“暂停任务”可稍后继续；点击“结束任务”会退出本次任务。遇到验证码或无法处理的题目时会提示你处理。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></div>
-      <div class="card ai-card"><span class="label">AI 自动答题</span><p class="muted">没有可用的本章答案时，向模型发送当前可见题目。答案可能有误，请留意提交结果。</p>
+        <p id="course-catalog-note" class="muted">进入课程学习页后读取并保存章节名称。</p></details>
+      <details class="card course-control collapsible" open><summary>自动完成</summary><div class="course-run"><button id="course-start" type="button" disabled>开始自动完成</button><button id="course-pause" class="secondary" type="button" title="保留任务，稍后从当前章节继续" disabled>暂停任务</button><button id="course-stop" class="secondary" type="button" title="结束本次任务；网页和章节仍保留" disabled>结束任务</button></div><p class="control-explain">任务会持续运行，切换模块或章节不会自动暂停。点击“暂停任务”可稍后继续；点击“结束任务”会退出本次任务。遇到验证码或无法处理的题目时会提示你处理。</p><div class="status" aria-live="polite"><strong id="course-state">等待打开</strong><p id="course-detail" class="muted">右侧将显示学习通页面。</p></div></details>
+      <details class="card ai-card collapsible" open><summary>AI 自动答题</summary><p class="muted">没有可用的本章答案时，向模型发送当前可见题目。答案可能有误，请留意提交结果。</p>
         <p id="ai-config-summary" class="ai-config-summary">正在读取 AI 配置…</p>
           <div class="ai-balance-row"><span id="ai-balance" aria-live="polite">API 余额：正在读取…</span><button id="ai-balance-refresh" class="secondary" type="button" disabled>刷新</button></div>
           <div class="ai-actions"><button id="ai-configure" class="secondary" type="button" title="查看或修改服务商、模型与 API Key">管理配置</button><button id="ai-test" class="secondary" type="button">测试连接</button></div>
         <p class="muted">连接测试仅发送一道示例题，不读取课程内容；可能消耗少量服务额度。</p>
         <p id="ai-test-result" class="muted" aria-live="polite"></p>
-        <p id="ai-result" class="muted" aria-live="polite">当前没有 AI 答题请求。</p></div>
+        <p id="ai-result" class="muted" aria-live="polite">当前没有 AI 答题请求。</p></details>
       <details class="card advanced"><summary>章节答案库 · 高级设置</summary><p class="muted">仅使用你录入的答案。每行“题号:答案”，如 1:A、2:对、3:文本。多空用 | 分隔。</p>
         <label for="answers-chapter">章节 ID（用于匹配答案）</label><input id="answers-chapter" maxlength="128" placeholder="选择章节后自动填入">
         <label for="answers-text">答案</label><textarea id="answers-text" rows="4" placeholder="1:A&#10;2:BC"></textarea>
         <button id="answers-save" type="button">保存本章答案</button><p id="answers-result" class="muted"></p>
       </details>
+    </section>
+
+    <section id="view-homework" class="view" hidden>
+      <div class="eyebrow">WORKSPACE / HOMEWORK</div><h2>作业校对</h2>
+      <p class="muted">在右侧登录学习通并打开作业。只读取本页各题的题干和题干图片，不读取选择题选项；选择题显示实际答案，不猜选项字母。不会填写或提交网页。</p>
+      <div class="course-actions"><button id="homework-open" class="secondary" type="button">打开学习通首页</button><button id="homework-start" type="button" disabled>开始作业校对</button></div>
+      <details class="card course-current collapsible" open><summary>当前页面</summary><p id="homework-page" class="url">尚未打开</p><p id="homework-status" class="muted" aria-live="polite">请在右侧打开作业题目。</p></details>
+      <details class="card collapsible homework-progress-card" open><summary>校对进度</summary><progress id="homework-progress" max="100" value="0" aria-label="作业校对进度"></progress><p id="homework-progress-label" class="muted" aria-live="polite">等待开始</p></details>
+      <details class="card ai-card collapsible" open><summary>大模型接入</summary><p id="homework-ai-summary" class="ai-config-summary">正在读取 AI 配置…</p>
+        <div class="ai-balance-row"><span id="homework-ai-balance" aria-live="polite">API 余额：正在读取…</span><button id="homework-ai-balance-refresh" class="secondary" type="button" disabled>刷新</button></div>
+        <div class="ai-actions"><button id="homework-ai-configure" class="secondary" type="button">管理配置与 API Key</button><button id="homework-ai-test" class="secondary" type="button">测试连接</button></div>
+        <p class="muted">连接测试仅发送一道示例题，不读取作业内容；可能消耗少量服务额度。</p><p id="homework-ai-test-result" class="muted" aria-live="polite"></p></details>
+      <details class="card homework-results collapsible" open><summary><span>校对结果</span><span id="homework-count" class="muted"></span></summary><div id="homework-results" aria-live="polite"><p class="muted">当前没有校对结果。</p></div></details>
     </section>
 
     <section id="view-vault" class="view" hidden>
@@ -79,6 +94,6 @@
     <footer><span id="detail">正在连接后端…</span></footer>
     </main>
   </div>
-  <div id="command-palette" class="palette-backdrop" hidden><div class="palette" role="dialog" aria-modal="true" aria-label="快速操作"><div class="palette-heading">快速操作 <span>Esc 关闭</span></div><button type="button" data-action="course">打开学习通模块 <span>↵</span></button><button type="button" data-action="demo">打开页面事件演示</button><button type="button" data-action="modules">查看所有模块</button><button type="button" data-action="ai">配置 AI 答题服务</button><button type="button" data-action="settings">打开系统选项</button></div></div>
+  <div id="command-palette" class="palette-backdrop" hidden><div class="palette" role="dialog" aria-modal="true" aria-label="快速操作"><div class="palette-heading">快速操作 <span>Esc 关闭</span></div><button type="button" data-action="course">打开学习通模块 <span>↵</span></button><button type="button" data-action="homework">打开作业校对</button><button type="button" data-action="demo">打开页面事件演示</button><button type="button" data-action="modules">查看所有模块</button><button type="button" data-action="ai">配置 AI 答题服务</button><button type="button" data-action="settings">打开系统选项</button></div></div>
 </body>
 </html>

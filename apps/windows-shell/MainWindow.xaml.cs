@@ -21,6 +21,7 @@ public partial class MainWindow : Window
 
     private readonly bool smokeMode;
     private readonly bool courseSmokeMode;
+    private readonly bool homeworkSmokeMode;
     private readonly bool courseLiveSmokeMode;
     private readonly bool tabSmokeMode;
     private readonly bool tabSmokeChild;
@@ -45,10 +46,11 @@ public partial class MainWindow : Window
         var args = Environment.GetCommandLineArgs();
         tabSmokeMode = args.Length == 3 && args[1] == "--tabs-smoke";
         tabSmokeChild = childForTabSmoke;
+        homeworkSmokeMode = args.Length == 3 && args[1] == "--homework-smoke";
         courseSmokeMode = args.Length == 3 && args[1] is "--course-smoke" or "--course-video-smoke" or
             "--course-video-quiz-smoke" or "--course-result-smoke" or "--course-document-smoke" or "--course-challenge-smoke" or
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
-            "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke";
+            "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
         smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
@@ -62,6 +64,10 @@ public partial class MainWindow : Window
             if (smokeOutput is not null) File.WriteAllText(smokeOutput, "FAIL XAML: " + error);
             throw;
         }
+        NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
+        NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
+        NativeButtonGlow.Attach(BrowserBackButton, () => darkTaskTabs);
+        NativeButtonGlow.Attach(CourseRetryButton, () => darkTaskTabs, primary: true);
         Trace("constructor");
         InitializeCatalog();
         RegisterTaskWindow();
@@ -187,13 +193,26 @@ public partial class MainWindow : Window
             if (!string.Equals(args.Uri, ModuleUrl, StringComparison.OrdinalIgnoreCase)) args.Cancel = true;
         };
         CourseView.CoreWebView2.NavigationStarting += CourseNavigationStarting;
-        CourseView.CoreWebView2.NavigationCompleted += (_, args) => ModuleNavigationCompleted(args);
+        CourseView.CoreWebView2.NavigationCompleted += (_, args) =>
+        {
+            ModuleNavigationCompleted(args);
+            UpdateBrowserBackButton();
+        };
+        CourseView.CoreWebView2.HistoryChanged += (_, _) => UpdateBrowserBackButton();
+        ModuleView.CoreWebView2.HistoryChanged += (_, _) => UpdateBrowserBackButton();
         CourseView.CoreWebView2.ProcessFailed += (_, args) =>
         {
-            if (activeModule != "chaoxing") return;
+            if (activeModule is not ("chaoxing" or "homework")) return;
             var reason = "学习通页面进程已中断（" + args.ProcessFailedKind + "）。请点击重试打开学习通。";
+            if (activeModule == "homework")
+            {
+                CancelHomeworkReview();
+                ClearHomeworkResults();
+                homeworkLoading = false;
+            }
             ShowCourseError(reason);
-            PublishCourse("ERROR", reason, false);
+            if (activeModule == "homework") PublishHomeworkStatus(reason);
+            else PublishCourse("ERROR", reason, false);
         };
         CourseView.CoreWebView2.FrameCreated += CourseFrameCreated;
         ShellView.CoreWebView2.WebMessageReceived += UiMessageReceived;
@@ -211,6 +230,7 @@ public partial class MainWindow : Window
             PublishAiConfiguration();
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
+            if (activeModule == "homework") PublishHomeworkStatus(homeworkDetail);
             Trace("UI navigation completed");
             if (tabSmokeChild) return;
             if (initialModule is not null)
@@ -218,7 +238,7 @@ public partial class MainWindow : Window
                 var target = initialModule;
                 initialModule = null;
                 await ShellView.CoreWebView2.ExecuteScriptAsync(
-                    "window.FaxToolboxUi?." + (target == "course" ? "openCourse" : "openDemo") + "()");
+                    "window.FaxToolboxUi?." + (target switch { "course" => "openCourse", "homework" => "openHomework", _ => "openDemo" }) + "()");
             }
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
@@ -255,6 +275,10 @@ public partial class MainWindow : Window
                 if ((JsonSerializer.Deserialize<string>(balance) ?? "").Contains("正在读取", StringComparison.Ordinal))
                 { FailSmoke("AI balance status was not rendered"); return; }
                 PassSmoke();
+            }
+            else if (homeworkSmokeMode)
+            {
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('module-homework').click()");
             }
             else if (courseSmokeMode || courseLiveSmokeMode)
             {
@@ -306,6 +330,21 @@ public partial class MainWindow : Window
                 case "session.start": Trace("UI start command received"); await StartSessionAsync(); break;
                 case "session.cancel": await CancelSessionAsync(); break;
                 case "course.open": await OpenCourseAsync(); break;
+                case "homework.open": await OpenHomeworkAsync(); break;
+                case "homework.start": await StartHomeworkReviewAsync(); break;
+                case "homework.activate":
+                    if (assignedModule is not null && assignedModule != "homework" && !smokeMode)
+                    {
+                        await RestoreAssignedModuleUiAsync();
+                        OpenModuleInNewTab("homework");
+                    }
+                    else
+                    {
+                        assignedModule = "homework";
+                        UpdateAllTaskTabs();
+                        await ActivateHomeworkAsync();
+                    }
+                    break;
                 case "course.activate":
                     if (assignedModule is not null && assignedModule != "course" && !smokeMode)
                     {
@@ -351,6 +390,7 @@ public partial class MainWindow : Window
             Publish("ERROR", error.Message);
             if (activeModule == "chaoxing")
                 PublishCourse("ERROR", error.Message, IsCoursePage(CourseView.CoreWebView2?.Source));
+            if (activeModule == "homework") PublishHomeworkStatus("作业校对出错：" + error.Message);
             if (smokeMode) FailSmoke(error.ToString());
         }
     }
@@ -369,6 +409,7 @@ public partial class MainWindow : Window
         WorkspaceSplitter.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
         WorkspaceColumn.Width = showModule ? new GridLength(split ? 2.8 : 1, GridUnitType.Star) : new GridLength(0);
         ToggleControlsButton.Content = controlsCollapsed ? "显示控制面板" : "展开学习页面";
+        UpdateBrowserBackButton();
     }
 
     private void ToggleControls_Click(object sender, RoutedEventArgs e)
@@ -509,6 +550,8 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        homeworkClosed = true;
+        CancelHomeworkReview();
         if (!smokeMode || tabSmokeMode)
         {
             TaskWindows.Remove(this);

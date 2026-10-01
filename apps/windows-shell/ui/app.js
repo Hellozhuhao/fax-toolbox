@@ -13,19 +13,20 @@
   let balanceLoading = false;
   const activity = [];
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
-  const viewNames = {home: '首页', modules: '模块', workspace: '工作台', demo: '页面事件演示', course: '学习通', activity: '活动', settings: '系统选项', vault: '密码箱'};
+  const viewNames = {home: '首页', modules: '模块', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', activity: '活动', settings: '系统选项', vault: '密码箱'};
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
   function show(view) {
-    for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
-    const navigation = ['course', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
+    for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
+    const navigation = ['course', 'homework', 'demo'].includes(view) ? 'workspace' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar [data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     $('location-name').textContent = viewNames[view];
-    send('ui.layout', {mode: ['course', 'demo'].includes(view) ? 'module' : 'home', view});
+    send('ui.layout', {mode: ['course', 'homework', 'demo'].includes(view) ? 'module' : 'home', view});
     if (view === 'vault') send('vault.list');
   }
   function showWorkspace() {
     if (activeModule === 'course') openCourse();
+    else if (activeModule === 'homework') openHomework();
     else if (activeModule === 'demo') openDemo();
     else show('workspace');
   }
@@ -47,6 +48,11 @@
     $('workspace-detail').textContent = '点击左侧工作台可随时回到课程控制页。';
     show('course');
     send('course.activate');
+  }
+  function openHomework() {
+    activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
+    $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
+    show('homework'); send('homework.activate');
   }
   function openDemo() {
     activeModule = 'demo'; $('workspace-module').textContent = '页面事件演示';
@@ -130,20 +136,81 @@
     $('ai-config-summary').textContent = detail;
     $('settings-ai-summary').textContent = detail;
     balanceAvailable = !!(message.configured && message.hasKey && message.balanceSupported);
-    for (const id of ['ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
+    $('homework-ai-summary').textContent = detail;
+    for (const id of ['ai-balance-refresh', 'homework-ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiBalance(message) {
     const detail = message.detail || 'API 余额暂不可用。';
     $('ai-balance').textContent = detail;
     $('settings-ai-balance').textContent = detail;
+    $('homework-ai-balance').textContent = detail;
     balanceLoading = message.state === 'loading';
-    for (const id of ['ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
+    for (const id of ['ai-balance-refresh', 'homework-ai-balance-refresh', 'settings-ai-balance-refresh']) $(id).disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiTest(message) {
     const detail = message.detail || '';
     $('ai-test-result').textContent = detail;
     $('settings-ai-test-result').textContent = detail;
-    for (const id of ['ai-test', 'settings-ai-test']) $(id).disabled = message.state === 'testing';
+    $('homework-ai-test-result').textContent = detail;
+    for (const id of ['ai-test', 'homework-ai-test', 'settings-ai-test']) $(id).disabled = message.state === 'testing';
+  }
+  function renderHomeworkStatus(message) {
+    $('homework-page').textContent = message.url || '尚未打开';
+    $('homework-status').textContent = message.detail || '';
+    $('homework-start').disabled = !message.ready || !!message.busy;
+    $('homework-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
+    logActivity('作业校对', message.busy ? '校对中' : '页面状态', message.detail || '状态已更新');
+  }
+  function renderHomeworkProgress(message) {
+    const bar = $('homework-progress');
+    if (Number.isFinite(message.percent)) bar.value = Math.max(0, Math.min(100, message.percent));
+    else bar.removeAttribute('value');
+    $('homework-progress-label').textContent = message.detail || '正在处理…';
+  }
+  function appendHomeworkMath(target, value) {
+    const source = String(value || '');
+    // Keep the source as text unless a complete TeX delimiter or matrix environment is present.
+    const pattern = /\\\[([\s\S]*?)\\\]|\\\(([\s\S]*?)\\\)|\$\$([\s\S]*?)\$\$|(?<!\$)\$([^$\n]+?)\$(?!\$)|\\begin\{(p|b|v|V|B)matrix\}[\s\S]*?\\end\{\5matrix\}/g;
+    let cursor = 0;
+    for (const match of source.matchAll(pattern)) {
+      if (match.index > cursor) target.append(document.createTextNode(source.slice(cursor, match.index)));
+      const formula = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[0];
+      const displayMode = match[1] !== undefined || match[3] !== undefined;
+      const span = document.createElement('span');
+      span.className = 'homework-math' + (displayMode ? ' display' : '');
+      try {
+        if (!window.katex) throw new Error('KaTeX unavailable');
+        window.katex.render(formula, span, {
+          displayMode, throwOnError: true, strict: 'ignore', trust: false,
+          output: 'htmlAndMathml', maxExpand: 100, maxSize: 10
+        });
+      } catch (_) {
+        span.className += ' homework-math-error';
+        span.textContent = match[0];
+      }
+      target.append(span);
+      cursor = match.index + match[0].length;
+    }
+    if (cursor < source.length) target.append(document.createTextNode(source.slice(cursor)));
+  }
+  function renderHomeworkResults(message) {
+    const list = $('homework-results'); list.replaceChildren();
+    const items = Array.isArray(message.items) ? message.items : [];
+    $('homework-count').textContent = items.length ? `${items.length} 道题` : '';
+    if (!items.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '当前没有校对结果。'; list.append(empty); return; }
+    for (const item of items) {
+      const card = document.createElement('article'); card.className = 'homework-item';
+      const heading = document.createElement('div'); heading.className = 'homework-item-heading';
+      const number = document.createElement('span'); number.className = 'homework-number'; number.textContent = `第 ${item.number} 题`;
+      const type = document.createElement('span'); type.className = 'muted'; type.textContent = item.type === 'multi' ? '多选 · 仅题干' : item.type === 'single' ? '单选 / 判断 · 仅题干' : item.type === 'essay' ? '解答题' : '填空题';
+      heading.append(number, type);
+      const question = document.createElement('p'); question.className = 'homework-question'; appendHomeworkMath(question, item.question || '');
+      const answer = document.createElement('p'); answer.className = 'homework-answer'; appendHomeworkMath(answer, `答案：${item.answer || '需要人工核对'}`);
+      const explanation = document.createElement('details'); explanation.className = 'homework-explanation';
+      const toggle = document.createElement('summary'); toggle.textContent = '查看解析';
+      const body = document.createElement('p'); appendHomeworkMath(body, item.explanation || '模型未提供解析。');
+      explanation.append(toggle, body); card.append(heading, question, answer, explanation); list.append(card);
+    }
   }
   window.chrome?.webview?.addEventListener('message', event => {
     const message = event.data; if (!message || message.v !== 1) return;
@@ -156,6 +223,9 @@
       logActivity('工具箱', stateName(message.state), message.detail || '');
     }
     if (message.kind === 'course.status') renderCourse(message);
+    if (message.kind === 'homework.status') renderHomeworkStatus(message);
+    if (message.kind === 'homework.progress') renderHomeworkProgress(message);
+    if (message.kind === 'homework.result') renderHomeworkResults(message);
     if (message.kind === 'course.catalog') renderCatalog(message);
     if (message.kind === 'vault.list') renderVault(message.entries || []);
     if (message.kind === 'answers.status') $('answers-result').textContent = message.detail || '';
@@ -166,10 +236,11 @@
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => item.dataset.view === 'workspace' ? showWorkspace() : show(item.dataset.view));
   $('open-course-card').addEventListener('click', openCourse);
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : openDemo());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : openDemo());
   $('module-course').addEventListener('click', openCourse);
+  $('module-homework').addEventListener('click', openHomework);
   $('module-demo').addEventListener('click', openDemo);
-  window.FaxToolboxUi = Object.freeze({openCourse, openDemo, showHome: () => show('home')});
+  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, showHome: () => show('home')});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
   $('quick-actions').addEventListener('click', () => togglePalette(true));
@@ -178,6 +249,7 @@
     togglePalette(false);
     const action = item.dataset.action;
     if (action === 'course') openCourse();
+    else if (action === 'homework') openHomework();
     else if (action === 'demo') openDemo();
     else if (action === 'ai') { openCourse(); send('ai.configure'); }
     else show(action);
@@ -190,6 +262,11 @@
   $('start').addEventListener('click', () => { openDemo(); send('session.start'); });
   $('cancel').addEventListener('click', () => send('session.cancel'));
   $('course-open').addEventListener('click', () => send('course.open'));
+  $('homework-open').addEventListener('click', () => send('homework.open'));
+  $('homework-start').addEventListener('click', () => send('homework.start'));
+  $('homework-ai-configure').addEventListener('click', () => send('ai.configure'));
+  $('homework-ai-test').addEventListener('click', () => send('ai.test'));
+  $('homework-ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
   $('course-save-vault').addEventListener('click', () => send('vault.save'));
   $('course-start').addEventListener('click', () => send('course.start'));
   $('course-chapters').addEventListener('change', () => { $('course-jump').disabled = !catalogLive || !$('course-chapters').value; });

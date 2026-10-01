@@ -22,6 +22,7 @@ internal sealed class VaultEntryDialog : Window
         var border = Brush(dark ? "#35363E" : "#E6E4E1");
         var accent = Brush(dark ? "#7858EB" : "#D66B49");
         Owner = owner;
+        FontFamily = owner.FontFamily;
         Title = "保存学习通账号";
         Width = 380;
         Height = 275;

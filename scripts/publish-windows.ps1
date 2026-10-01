@@ -28,6 +28,13 @@ $resolvedDist = [System.IO.Path]::GetFullPath($dist)
 if (-not $resolvedDist.StartsWith($root + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Unsafe publish directory'
 }
+$runningDistProcess = Get-CimInstance Win32_Process | Where-Object {
+    $_.Name -in @('FaxToolbox.Windows.exe', 'toolbox-backend.exe') -and
+    $_.ExecutablePath -and
+    $_.ExecutablePath.StartsWith($resolvedDist + [System.IO.Path]::DirectorySeparatorChar,
+        [System.StringComparison]::OrdinalIgnoreCase)
+}
+if ($runningDistProcess) { throw 'Close FaxToolbox.Windows.exe before publishing to dist/windows' }
 if (Test-Path -LiteralPath $resolvedDist) { Remove-Item -LiteralPath $resolvedDist -Recurse -Force }
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 & dotnet publish $project -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $dist --nologo

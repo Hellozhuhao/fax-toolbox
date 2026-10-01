@@ -10,7 +10,7 @@
   --subtle: #74716e;
   --accent: #d66b49;
   --nav: #f9f8f6;
-  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-family: "PingFang SC", "PingFang TC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
 }
 
 body { background: #fafaf9; }
@@ -293,3 +293,35 @@ button[aria-disabled="true"] { background-image: none; }
 @media (prefers-reduced-motion: reduce) {
   button, .sidebar .nav-item { transition: none; }
 }
+
+/* Homework results share the current theme and keep long answers readable. */
+.homework-results{margin-top:12px}
+.homework-results-head,.homework-item-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.homework-item{padding:16px 0;border-top:1px solid var(--border)}
+.homework-item:first-child{margin-top:12px}
+.homework-number{font-weight:700;color:var(--text)}
+.homework-question{margin:10px 0;color:var(--text);line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.homework-answer{margin:10px 0;padding:11px 14px;border-radius:17px;background:var(--surface);color:var(--text);font-weight:700;white-space:pre-wrap;overflow-wrap:anywhere}
+.homework-explanation{color:var(--subtle);font-size:12px;line-height:1.65}
+.homework-explanation summary{width:max-content;max-width:100%;padding:5px 10px;border-radius:18px;cursor:pointer;color:var(--accent);font-weight:650}
+.homework-explanation summary:hover{background:var(--surface)}
+.homework-explanation summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.homework-explanation p{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 0}
+
+.card.collapsible>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;list-style:none;color:var(--text);font-weight:750;font-size:14px}
+.card.collapsible>summary::-webkit-details-marker{display:none}
+.card.collapsible>summary::after{content:'⌄';font-size:20px;font-weight:400;line-height:1;color:var(--accent);transform:rotate(180deg);transition:transform .2s ease}
+.card.collapsible:not([open])>summary::after{transform:rotate(0)}
+.card.collapsible>summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px;border-radius:8px}
+.card.collapsible:not([open]){padding-bottom:20px}
+.card.collapsible[open]>summary{margin-bottom:12px}
+.homework-progress-card{margin:0 0 12px}
+.homework-progress-card progress{display:block;width:100%;height:12px;accent-color:var(--accent);border:0;border-radius:20px;overflow:hidden;background:var(--surface)}
+.homework-progress-card progress::-webkit-progress-bar{background:var(--surface);border-radius:20px}
+.homework-progress-card progress::-webkit-progress-value{background:var(--accent);border-radius:20px;transition:width .3s ease}
+.homework-progress-card progress:indeterminate{opacity:.8}
+.homework-progress-card p{margin:10px 0 0;font-size:12px}
+.homework-results>summary #homework-count{margin-left:auto;margin-right:8px;font-size:12px;font-weight:400}
+.homework-math{display:inline-block;vertical-align:middle}
+.homework-math.display{display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;text-align:center}
+.homework-math-error{color:var(--accent);font-family:inherit;overflow-wrap:anywhere}

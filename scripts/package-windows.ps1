@@ -14,7 +14,9 @@ if (-not $source.StartsWith($distRoot + [IO.Path]::DirectorySeparatorChar,
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\index.html', 'apps\windows-shell\ui\theme.css',
-    'apps\windows-shell\ui\button-glow.js', 'modules\chaoxing\page-adapter.js')) {
+    'apps\windows-shell\ui\button-glow.js', 'apps\windows-shell\ui\vendor\katex\katex.min.js',
+    'apps\windows-shell\ui\vendor\katex\katex.min.css', 'modules\chaoxing\page-adapter.js',
+    'modules\chaoxing\homework-reader.js')) {
     if (-not (Test-Path -LiteralPath (Join-Path $source $relative) -PathType Leaf)) {
         throw "Published package is incomplete: $relative"
     }
