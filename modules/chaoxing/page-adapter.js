@@ -165,9 +165,13 @@
       }
       const questionSelector = '.StudentTimu, .timu, .TiMu, [class*="Timu"], [class*="timu"], .questionLi, .questionWrap, .ans-question, .q_body, .question-item, .question, [data-question-id]';
       function findQuiz() {
-        return Array.from(document.querySelectorAll(questionSelector)).filter(item =>
-          visible(item) && !item.parentElement?.closest(questionSelector) &&
-          item.querySelector('input[type="radio"],input[type="checkbox"],textarea,input[type="text"],input[type="number"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]'));
+        const controls = 'input[type="radio"],input[type="checkbox"],textarea,input[type="text"],input[type="number"],li[role="radio"],li[role="checkbox"],li[onclick*="addChoice"]';
+        const candidates = Array.from(document.querySelectorAll(questionSelector)).filter(item =>
+          visible(item) && item.querySelector(controls));
+        // A chapter wrapper often has the same class family as each question.
+        // Prefer the smallest matching container so one quiz is not mistaken for one question.
+        const leaves = candidates.filter(item => !candidates.some(other => other !== item && item.contains(other)));
+        return leaves.length ? leaves : candidates;
       }
       function snapshotQuiz() {
         const questions = findQuiz();
@@ -285,6 +289,10 @@
         // A quiz can be shown over a video that remains mounted and visible in the DOM.
         // In that state the questions, rather than the old video, own the current task.
         if (findQuiz().length && !quizSubmitted) { report('QUIZ_FOUND'); return; }
+        const answerControls = document.querySelectorAll('input[type="radio"],input[type="checkbox"],li[role="radio"],li[role="checkbox"]').length;
+        if (answerControls >= 2 && /单选题|多选题|判断题|章节测验|章节检测/.test((document.body?.innerText || '').slice(0, 3000))) {
+          report('QUIZ_UNMATCHED'); return;
+        }
         const foundVideo = document.querySelector('video');
         if (foundVideo && visible(foundVideo)) {
           foundVideo.defaultMuted = true;
@@ -345,6 +353,10 @@
       };
       window.chrome.webview.addEventListener('message', onMessage);
       window.__faxCourseAdapterSnapshotQuiz = snapshotQuiz;
+      window.__faxCourseAdapterDiagnose = () => ({questions: findQuiz().length,
+        answerControls: document.querySelectorAll('input[type="radio"],input[type="checkbox"],li[role="radio"],li[role="checkbox"]').length,
+        running, lastObservation: lastObservation.split(':')[0] || ''});
+      window.__faxCourseAdapterInspect = inspect;
       const observer = new MutationObserver(() => {
         if (!active || !running || document.readyState === 'loading' || pendingInspection) return;
         pendingInspection = setTimeout(() => { pendingInspection = 0; inspect(); }, 150);
@@ -383,9 +395,13 @@
         window.__faxCourseAdapterPause = null;
         window.__faxCourseAdapterResume = null;
         window.__faxCourseAdapterSnapshotQuiz = null;
+        window.__faxCourseAdapterDiagnose = null;
+        window.__faxCourseAdapterInspect = null;
       };
     },
     snapshotQuiz() { return window.__faxCourseAdapterSnapshotQuiz?.() ?? null; },
+    diagnose() { return window.__faxCourseAdapterDiagnose?.() ?? null; },
+    inspect() { window.__faxCourseAdapterInspect?.(); },
     pause() { window.__faxCourseAdapterPause?.(); },
     resume(inspectNow = true) { window.__faxCourseAdapterResume?.(inspectNow); },
     stop() { window.__faxCourseAdapterStop?.(); }

@@ -161,9 +161,10 @@ public partial class MainWindow
             !page.Host.Equals("i.chaoxing.com", StringComparison.OrdinalIgnoreCase) ||
             !page.AbsolutePath.StartsWith("/base", StringComparison.OrdinalIgnoreCase) ||
             !Uri.TryCreate(args.Request.Uri, UriKind.Absolute, out var request) ||
-            !IsChaoxingUrl(request.AbsoluteUri)) return;
+            request.Scheme != Uri.UriSchemeHttps) return;
         var status = args.Response.StatusCode;
         if (status is not (401 or 403 or 429) && status < 500) return;
+        PublishDiagnostic("学习通", "消息资源失败", $"HTTP {status} · {request.Host}");
         var detail = $"学习通消息资源返回 HTTP {status}（{request.Host}）。可点击顶部刷新重试；若仍空白，请在 Edge 对照查看。";
         if (detail == messageResourceIssue) return;
         messageResourceIssue = detail;
@@ -515,6 +516,12 @@ public partial class MainWindow
         for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
         if (second.currentShellView != "course")
         { FailSmoke("clicking current tab did not restore its module"); return; }
+        await second.ShellView.CoreWebView2.ExecuteScriptAsync(
+            "document.querySelector('.sidebar [data-view=home]').click()");
+        second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+        if (second.currentShellView != "course")
+        { FailSmoke("clicking Home then the course tab did not restore learning"); return; }
         second.OpenModuleInNewTab("homework");
         if (TaskWindows.Count != 4) { FailSmoke("homework did not open in a new tab"); return; }
         var homeworkTab = TaskWindows[3];
@@ -586,6 +593,8 @@ public partial class MainWindow
 
     private void PublishCourse(string nextState, string nextDetail, bool? ready = null)
     {
+        if (courseState != nextState || courseDetail != nextDetail)
+            PublishDiagnostic("学习通", nextState, nextDetail);
         courseState = nextState;
         courseDetail = nextDetail;
         RefreshTaskTabs();
@@ -854,6 +863,7 @@ public partial class MainWindow
                 observation == "VIDEO_FOUND" && chapter == "2.6" && lastAutomaticAdvanceChapter == "2.5")
             { PassSmoke(); return; }
             Trace("course observation: " + observation + " chapter=" + chapter + " action=" + action + " state=" + nextState);
+            PublishDiagnostic("学习通", observation, "页面动作：" + action + " · 任务状态：" + nextState);
             if (courseSmokeMode && Environment.GetCommandLineArgs()[1] == "--course-manual-next-smoke" &&
                 observation == "VIDEO_FOUND" &&
                 await CourseView.CoreWebView2.ExecuteScriptAsync(

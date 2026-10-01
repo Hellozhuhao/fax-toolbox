@@ -20,7 +20,8 @@ public partial class MainWindow : Window
     private static bool IsUiUrl(string value) => value == UiUrl ||
         value is "https://ui.toolbox.invalid/index.html?module=course" or
             "https://ui.toolbox.invalid/index.html?module=homework" or
-            "https://ui.toolbox.invalid/index.html?module=demo";
+            "https://ui.toolbox.invalid/index.html?module=demo" or
+            "https://ui.toolbox.invalid/index.html?module=ai";
     private const string ModuleUrl = "https://module.toolbox.invalid/smoke.html";
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
@@ -51,6 +52,7 @@ public partial class MainWindow : Window
     private bool demoActionInProgress;
     private bool controlsCollapsed;
     private Task moduleWebViewsReady = Task.CompletedTask;
+    private AiModuleRuntime? aiRuntime;
     private string currentShellView = "home";
     private string workspaceLayoutMode = "";
     private DispatcherTimer? workspaceLayoutTimer;
@@ -128,6 +130,7 @@ public partial class MainWindow : Window
                 Path.Combine(root, "apps", "rust-backend", "target", "debug", "toolbox-backend.exe");
             backend = smokeMode && !tabSmokeMode ? await BackendClient.StartAsync(backendPath, smokeDataDirectory) :
                 await BackendPool.AcquireAsync(backendPath, smokeDataDirectory);
+            aiRuntime = new AiModuleRuntime(backend);
             Trace("backend ping passed");
             if (smokeMode && Environment.GetCommandLineArgs()[1] != "--course-ai-smoke")
             {
@@ -160,7 +163,7 @@ public partial class MainWindow : Window
             ConfigureShellView();
             Trace("UI WebView ready");
             Publish("READY", "后端已连接。点击“开始演示”创建会话。");
-            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" ?
+            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" ?
                 UiUrl + "?module=" + initialModule : UiUrl);
             Trace("UI navigation started");
             await moduleWebViewsReady;
@@ -193,7 +196,7 @@ public partial class MainWindow : Window
 #if DEBUG
         ShellView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #else
-        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        ShellView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #endif
         ShellView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
         ShellView.CoreWebView2.NavigationStarting += (_, args) =>
@@ -216,8 +219,8 @@ public partial class MainWindow : Window
         ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
         CourseView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #else
-        ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = false;
-        CourseView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+        ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
+        CourseView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #endif
         ModuleView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
         CourseView.CoreWebView2.NewWindowRequested += (_, args) => HandleModuleNewWindow(args);
@@ -249,6 +252,8 @@ public partial class MainWindow : Window
             else PublishCourse("ERROR", reason, false);
         };
         CourseView.CoreWebView2.FrameCreated += CourseFrameCreated;
+        InitializeCourseDiagnostics();
+        _ = EnablePageErrorDiagnosticsAsync();
         ModuleView.CoreWebView2.WebMessageReceived += ModuleMessageReceived;
         CourseView.CoreWebView2.WebMessageReceived += async (_, args) => await HandleCourseMessageAsync(args, null);
     }
@@ -265,6 +270,7 @@ public partial class MainWindow : Window
                 return;
             }
             Publish(state, detail);
+            PublishDiagnosticSnapshot();
             PublishAiConfiguration();
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
@@ -343,11 +349,11 @@ public partial class MainWindow : Window
         detail = nextDetail;
         RefreshTaskTabs();
         Title = $"Fax Toolbox — {nextState}";
-        TitleStatus.Text = " · " + (nextState switch
+        TitleStatus.Text = nextState switch
         {
             "READY" => "就绪", "RUNNING" => "运行中", "PAUSED" => "已暂停",
             "ERROR" => "需要检查", _ => "处理中"
-        });
+        };
         if (ShellView.CoreWebView2 is not null)
         {
             var json = JsonSerializer.Serialize(new { v = 1, kind = "status", state, detail });
@@ -434,6 +440,24 @@ public partial class MainWindow : Window
                         await ActivateDemoAsync();
                     }
                     break;
+                case "ai.activate":
+                    if (assignedModule is not null && assignedModule != "ai" && !smokeMode)
+                    {
+                        await RestoreAssignedModuleUiAsync();
+                        OpenModuleInNewTab("ai");
+                    }
+                    else
+                    {
+                        assignedModule = "ai";
+                        activeModule = "ai";
+                        UpdateAllTaskTabs();
+                        catalogTimer.Stop();
+                        SetWorkspaceLayout(false);
+                        CourseView.Visibility = Visibility.Collapsed;
+                        ModuleView.Visibility = Visibility.Collapsed;
+                        CourseOverlay.Visibility = Visibility.Collapsed;
+                    }
+                    break;
                 case "course.start": await StartCourseAsync(); break;
                 case "course.pause": await CourseCommandAsync("pause"); break;
                 case "course.stop": await CourseCommandAsync("stop"); break;
@@ -443,6 +467,8 @@ public partial class MainWindow : Window
                 case "ai.get-config": PublishAiConfiguration(); break;
                 case "ai.test": await TestAiConnectionAsync(); break;
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
+                case "diagnostics.inspect": await InspectCurrentPageAsync(); break;
+                case "diagnostics.devtools": OpenPageDevTools(); break;
                 case "vault.list": await PublishVaultAsync(); break;
                 case "vault.save": await SaveVaultAsync(); break;
                 case "vault.delete": await DeleteVaultAsync(message); break;
@@ -465,7 +491,8 @@ public partial class MainWindow : Window
         ToggleControlsButton.Visibility = showModule ? Visibility.Visible : Visibility.Collapsed;
         var split = showModule && !controlsCollapsed;
         var mode = !showModule ? "home" : split ? "split" : "browser";
-        ToggleControlsButton.Content = controlsCollapsed ? "显示控制面板" : "展开学习页面";
+        ToggleControlsButton.Content = controlsCollapsed ? "⇥" : "⇤";
+        ToggleControlsButton.ToolTip = controlsCollapsed ? "显示控制面板" : "收起控制面板";
         if (mode == workspaceLayoutMode) return;
         if (workspaceLayoutMode == "split" && ShellColumn.ActualWidth >= 330 &&
             WorkspaceColumn.ActualWidth >= 400)
@@ -541,7 +568,8 @@ public partial class MainWindow : Window
         ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
         var accent = Brush(dark ? "#7858EB" : "#D66B49");
-        ToggleControlsButton.Background = accent;
+        ToggleControlsButton.Background = Brush(dark ? "#24252C" : "#FFFFFF");
+        ToggleControlsButton.Foreground = Brush(dark ? "#F5F5F8" : "#74716E");
         CourseRetryButton.Background = accent;
         CourseOverlay.Background = Brush(dark ? "#202126" : "#F5F5F3");
         CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
@@ -673,6 +701,7 @@ public partial class MainWindow : Window
         }
         smokeTimer.Stop();
         catalogTimer.Stop();
+        courseWatchdog.Stop();
         ShellView.Dispose();
         ModuleView.Dispose();
         CourseView.Dispose();

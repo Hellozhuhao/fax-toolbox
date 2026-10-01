@@ -7,7 +7,7 @@
         WindowStyle="None" ResizeMode="CanResize" Background="#F5F5F3" FontFamily="PingFang SC, Microsoft YaHei UI"
         Loaded="Window_Loaded" Closing="Window_Closing" Closed="Window_Closed" StateChanged="Window_StateChanged">
     <shell:WindowChrome.WindowChrome>
-        <shell:WindowChrome CaptionHeight="36" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
+        <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
@@ -53,10 +53,25 @@
                 </Border>
             </ControlTemplate></Setter.Value></Setter>
         </Style>
+        <Style x:Key="TitleActionStyle" TargetType="Button" BasedOn="{StaticResource TaskTabInnerStyle}">
+            <Setter Property="Foreground" Value="#555350" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="17" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#E7E3DF" /></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#DAD4CF" /></Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="TitleCloseStyle" TargetType="Button" BasedOn="{StaticResource TitleActionStyle}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#CA4B43" /><Setter Property="Foreground" Value="White" /></Trigger>
+                <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#A93831" /><Setter Property="Foreground" Value="White" /></Trigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
-            <RowDefinition Height="36" />
+            <RowDefinition Height="44" />
             <RowDefinition x:Name="ToolbarRow" Height="0" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
@@ -68,22 +83,24 @@
         <Grid x:Name="TitleBar" Grid.Row="0" Grid.ColumnSpan="3" Background="#F5F5F3"
               MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
-                <Image Source="pack://application:,,,/assets/fax-toolbox.png" Width="18" Height="18"
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
+                <Image Source="pack://application:,,,/assets/fax-toolbox.png" Width="26" Height="26"
                        VerticalAlignment="Center" />
-                <TextBlock x:Name="TitleName" Text="Fax Toolbox" Margin="9,0,0,0" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Foreground="#292826"/>
-                <TextBlock x:Name="TitleStatus" Text=" · 准备中" Margin="5,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#74716E"/>
+                <TextBlock x:Name="TitleName" Text="Fax Toolbox" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="#292826"/>
+                <Border Height="17" Width="1" Background="#D7D3CE" Margin="11,0,10,0" />
+                <Ellipse Width="6" Height="6" Fill="#D66B49" VerticalAlignment="Center" />
+                <TextBlock x:Name="TitleStatus" Text="准备中" Margin="6,0,0,0" VerticalAlignment="Center" FontSize="11" Foreground="#74716E"/>
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-                <Button Width="43" Height="34" Content="−" FontSize="18" ToolTip="最小化" Style="{StaticResource TaskTabInnerStyle}" Click="TitleMinimize_Click"/>
-                <Button x:Name="TitleMaximizeButton" Width="43" Height="34" Content="□" FontSize="17" ToolTip="最大化或还原" Style="{StaticResource TaskTabInnerStyle}" Click="TitleMaximize_Click"/>
-                <Button Width="48" Height="34" Content="×" FontSize="20" ToolTip="关闭工具箱" Style="{StaticResource TaskTabInnerStyle}" Click="TitleClose_Click"/>
+                <Button Width="45" Height="44" Content="−" ToolTip="最小化" Style="{StaticResource TitleActionStyle}" Click="TitleMinimize_Click"/>
+                <Button x:Name="TitleMaximizeButton" Width="45" Height="44" Content="□" ToolTip="最大化或还原" Style="{StaticResource TitleActionStyle}" Click="TitleMaximize_Click"/>
+                <Button Width="48" Height="44" Content="×" FontSize="20" ToolTip="关闭工具箱" Style="{StaticResource TitleCloseStyle}" Click="TitleClose_Click"/>
             </StackPanel>
         </Grid>
         <DockPanel x:Name="BrowserToolbar" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"
                    Background="#F5F5F3" LastChildFill="True">
-            <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="130" Margin="4"
-                    Style="{StaticResource ToolbarButtonStyle}" Click="ToggleControls_Click" Content="展开学习页面" />
+            <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="35" Height="35" Margin="4,3,9,3" Padding="0"
+                    Style="{StaticResource TaskTabButtonStyle}" Click="ToggleControls_Click" Content="⇤" ToolTip="收起控制面板" />
             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,3,0,3">
                 <Button x:Name="BrowserBackButton" Width="35" Height="35" Margin="0,0,7,0" Padding="0"
                         Style="{StaticResource TaskTabButtonStyle}" Click="BrowserBack_Click"

@@ -378,3 +378,39 @@ button[aria-disabled="true"] { background-image: none; }
 .homework-math{display:inline-block;vertical-align:middle}
 .homework-math.display{display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;margin:10px 0;text-align:center}
 .homework-math-error{color:var(--accent);font-family:inherit;overflow-wrap:anywhere}
+
+/* Service, status and second-level settings share the toolbox visual language. */
+.command-meta{color:var(--subtle);font-size:10px;font-weight:750;letter-spacing:.12em;white-space:nowrap}
+.ai-icon{font-size:13px;letter-spacing:-.05em}
+.ai-service-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(220px,.8fr);gap:14px;margin-top:18px}
+.ai-service-primary,.ai-consumer,.ai-service-log{padding:22px}
+.service-heading{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.service-heading h3{margin:2px 0 0}
+.service-glyph{display:grid;place-items:center;flex:none;width:46px;height:46px;border-radius:15px;background:color-mix(in srgb,var(--accent) 14%,var(--panel));color:var(--accent);font-size:15px;font-weight:850}
+.ai-consumers{display:grid;gap:14px}
+.ai-consumer{margin:0;min-height:116px}
+.ai-consumer h3{margin:7px 0 4px}.ai-consumer p{margin:0 0 5px;font-weight:700;font-size:13px;overflow-wrap:anywhere}
+.ai-consumer small{color:var(--subtle);line-height:1.5}
+.ai-service-log{margin-top:2px}.ai-service-log p{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
+.activity-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
+.activity-overview .card{min-height:104px;padding:18px;margin:0}.activity-overview span,.activity-overview small{display:block;color:var(--subtle);font-size:11px}
+.activity-overview strong{display:block;font-size:21px;line-height:1.25;margin:8px 0 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.diagnostics-tools{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:20px 22px}
+.diagnostics-tools h3{margin:0}.diagnostics-tools p{max-width:550px;margin-bottom:0}
+.diagnostics-actions{display:flex;flex-wrap:wrap;gap:8px}.diagnostics-actions button{white-space:nowrap}
+.activity-panel{padding:20px 22px}.activity-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:8px}
+.activity-toolbar h3{margin:0}.activity-filters{display:flex;gap:4px;padding:3px;border-radius:11px;background:var(--surface)}
+.activity-filters button{min-height:29px;padding:0 11px;background:transparent;color:var(--subtle);box-shadow:none;border-radius:8px}
+.activity-filters button.selected{background:var(--panel);color:var(--accent);box-shadow:0 1px 5px #00000014}
+.activity-list{max-height:560px;overflow:auto}.activity-row{position:relative;padding:13px 0}.activity-row strong{font-size:13px}.activity-row p{overflow-wrap:anywhere;margin:5px 0 0;line-height:1.5}
+.activity-empty{font-size:12px;color:var(--subtle);padding:14px 0}
+.settings-layout{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);gap:16px;margin-top:22px;align-items:start}
+.settings-menu{display:grid;gap:5px;margin:0;padding:7px;border:1px solid var(--border);border-radius:17px;background:var(--panel)}
+.settings-menu button{width:100%;min-height:61px;text-align:left;background:transparent;color:var(--text);box-shadow:none;padding:9px 12px;border-radius:11px}
+.settings-menu button:hover,.settings-menu button.selected{background:color-mix(in srgb,var(--accent) 10%,var(--panel));color:var(--accent)}
+.settings-menu strong,.settings-menu small{display:block}.settings-menu small{font-weight:450;color:var(--subtle);margin-top:3px}
+.settings-detail{border:1px solid var(--border);border-radius:17px;background:var(--panel);padding:27px;min-height:270px}
+.settings-detail section[hidden]{display:none}.settings-detail h3{margin:8px 0}.settings-detail p{line-height:1.65}.settings-detail button:not([data-theme]){margin-top:18px}
+.settings-note{padding:13px 15px;border-radius:12px;background:var(--surface);color:var(--subtle);font-size:12px}
+@media(max-width:930px){.ai-service-grid{grid-template-columns:1fr}.ai-consumers{grid-template-columns:repeat(2,minmax(0,1fr))}.diagnostics-tools{align-items:flex-start;flex-direction:column}}
+@media(max-width:620px){.activity-overview{grid-template-columns:1fr}.ai-consumers,.settings-layout{grid-template-columns:1fr}.settings-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.command-meta{display:none}}

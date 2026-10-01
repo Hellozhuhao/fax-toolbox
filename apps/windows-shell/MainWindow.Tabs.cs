@@ -111,6 +111,7 @@ public partial class MainWindow
                 "course" => (window.courseState == "RUNNING" ? "● " : "") + "学习通",
                 "homework" => (window.homeworkBusy ? "● " : "") + "作业校对",
                 "demo" => (window.state == "OBSERVING" ? "● " : "") + "页面演示",
+                "ai" => "AI 服务",
                 _ => "首页"
             };
             if (view.Label == label && view.Selected == selected && view.Dark == darkTaskTabs) continue;
@@ -196,12 +197,8 @@ public partial class MainWindow
             _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.goBack()");
     }
 
-    private Task RestoreCurrentTabAsync()
-    {
-        var expected = assignedModule switch { "course" => "course", "homework" => "homework",
-            "demo" => "demo", _ => "home" };
-        return expected != "home" && currentShellView != expected ? RestoreAssignedModuleUiAsync() : Task.CompletedTask;
-    }
+    private Task RestoreCurrentTabAsync() =>
+        assignedModule is not null ? RestoreAssignedModuleUiAsync() : Task.CompletedTask;
 
     private void BrowserReload_Click(object sender, RoutedEventArgs e)
     {
@@ -230,7 +227,7 @@ public partial class MainWindow
     }
 
     private Task RestoreAssignedModuleUiAsync() =>
-        ShowTaskUiAsync(assignedModule switch { "course" => "openCourse", "homework" => "openHomework", _ => "openDemo" });
+        ShowTaskUiAsync(assignedModule switch { "course" => "openCourse", "homework" => "openHomework", "ai" => "openAi", _ => "openDemo" });
 
     private async Task ShowTaskUiAsync(string action)
     {

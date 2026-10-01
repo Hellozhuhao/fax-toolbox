@@ -29,24 +29,23 @@ try {
         try { $graphics.FillPath($gradient, $shape) } finally { $gradient.Dispose() }
         $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 250, 246))
         $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75))
-        $line = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 216, 137, 106), 2.3)
         $slot = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(255, 213, 108, 75), 3.0)
         try {
-            $line.StartCap = $line.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
             $slot.StartCap = $slot.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-            $paper = New-RoundedPath 18 9 28 27 3
+            $paper = New-RoundedPath 18 8 28 28 3
             $machine = New-RoundedPath 11 30 42 21 6
             try {
                 $graphics.FillPath($white, $paper)
-                $graphics.DrawLine($line, 24, 17, 40, 17)
-                $graphics.DrawLine($line, 24, 22, 40, 22)
-                $graphics.DrawLine($line, 24, 27, 35, 27)
+                foreach ($tile in @(@(23,14), @(34,14), @(23,24), @(34,24))) {
+                    $module = New-RoundedPath $tile[0] $tile[1] 7 7 2
+                    try { $graphics.FillPath($ink, $module) } finally { $module.Dispose() }
+                }
                 $graphics.FillPath($white, $machine)
                 $graphics.DrawLine($slot, 19, 45, 45, 45)
                 $graphics.FillEllipse($ink, 43, 35, 4, 4)
                 $graphics.FillRectangle($white, 21, 50, 22, 5)
             } finally { $paper.Dispose(); $machine.Dispose() }
-        } finally { $white.Dispose(); $ink.Dispose(); $line.Dispose(); $slot.Dispose() }
+        } finally { $white.Dispose(); $ink.Dispose(); $slot.Dispose() }
     } finally { $shape.Dispose() }
 } finally { $graphics.Dispose() }
 

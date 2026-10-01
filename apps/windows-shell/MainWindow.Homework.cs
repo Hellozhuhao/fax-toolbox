@@ -91,8 +91,9 @@ public partial class MainWindow
         HomeworkExplanationOverlay.Visibility = Visibility.Visible;
         try
         {
-            var detail = homeworkSmokeMode ? "结论：x = 2。\n\n推理步骤\n1. 从 2x + 1 = 5 出发。\n2. 两边同时减去 1，得到 2x = 4。\n3. 两边除以 2，得到 x = 2。" :
-                await HomeworkReviewService.ExplainAsync(AiSettings.Load() ??
+            var detail = homeworkSmokeMode ? await aiRuntime!.RunAsync("homework", "explain", cancellation.Token,
+                () => Task.FromResult("结论：x = 2。\n\n推理步骤\n1. 从 2x + 1 = 5 出发。\n2. 两边同时减去 1，得到 2x = 4。\n3. 两边除以 2，得到 x = 2。")) :
+                await aiRuntime!.ExplainHomeworkAsync(aiRuntime.LoadSettings() ??
                     throw new InvalidDataException("尚未配置 AI 服务。"), item, cancellation.Token);
             if (!cancellation.IsCancellationRequested)
             {
@@ -343,7 +344,7 @@ public partial class MainWindow
         if (assignedModule != "homework" || activeModule != "homework" || homeworkBusy || homeworkLoading ||
             !IsChaoxingUrl(CourseView.CoreWebView2?.Source) || IsLoginPage(CourseView.CoreWebView2!.Source)) return;
         AiSettings? settings;
-        try { settings = homeworkSmokeMode ? null : AiSettings.Load() ??
+        try { settings = homeworkSmokeMode ? null : aiRuntime?.LoadSettings() ??
             throw new InvalidDataException("尚未配置 AI 服务。请先填写 API Key。"); }
         catch (Exception error) when (error is InvalidDataException or JsonException or IOException)
         { PublishHomeworkStatus(error.Message); PublishHomeworkProgress(0, error.Message); return; }
@@ -422,8 +423,9 @@ public partial class MainWindow
                     new { number = 3, answer = "x=2", explanation = "两边先减 1，再除以 2。" }
                 }
             });
-            var results = homeworkSmokeMode ? HomeworkReviewService.ParseResults(smokeReply, snapshot, images) :
-                await HomeworkReviewService.ReviewAsync(settings!, snapshot, images, cancellation.Token);
+            var results = homeworkSmokeMode ? await aiRuntime!.RunAsync("homework", "review", cancellation.Token,
+                () => Task.FromResult(HomeworkReviewService.ParseResults(smokeReply, snapshot, images))) :
+                await aiRuntime!.ReviewHomeworkAsync(settings!, snapshot, images, cancellation.Token);
             if (homeworkSmokeMode)
             {
                 var twoBlanks = new AiQuizSnapshot([
@@ -497,8 +499,9 @@ public partial class MainWindow
                 {
                     await ShellView.CoreWebView2.ExecuteScriptAsync(
                         "document.querySelector('.homework-explanation summary').click()");
-                    for (var attempt = 0; attempt < 20 &&
-                        HomeworkExplanationOverlay.Visibility != Visibility.Visible; attempt++)
+                    for (var attempt = 0; attempt < 30 &&
+                        (HomeworkExplanationOverlay.Visibility != Visibility.Visible ||
+                        !HomeworkExplanationText.Text.Contains("x = 2", StringComparison.Ordinal)); attempt++)
                         await Task.Delay(100);
                     if (HomeworkExplanationOverlay.Visibility != Visibility.Visible ||
                         !HomeworkExplanationText.Text.Contains("x = 2", StringComparison.Ordinal) ||
