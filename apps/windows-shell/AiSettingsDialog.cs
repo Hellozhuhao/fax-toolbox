@@ -35,7 +35,7 @@ internal sealed class AiSettingsDialog : Window
         subtle = Brush(dark ? "#A3A3AD" : "#74716E");
         border = Brush(dark ? "#35363E" : "#E6E4E1");
         accent = Brush(dark ? "#7858EB" : "#D66B49");
-        Owner = owner; Title = "配置 AI 服务";
+        Owner = owner; FontFamily = owner.FontFamily; Title = "配置 AI 服务";
         Width = 620; Height = 625; MinWidth = 540; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize; ShowInTaskbar = false;

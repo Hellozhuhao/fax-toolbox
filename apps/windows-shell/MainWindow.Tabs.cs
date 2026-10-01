@@ -43,6 +43,7 @@ public partial class MainWindow
             var label = window.assignedModule switch
             {
                 "course" => (window.courseState == "RUNNING" ? "● " : "") + "学习通",
+                "homework" => (window.homeworkBusy ? "● " : "") + "作业校对",
                 "demo" => (window.state == "OBSERVING" ? "● " : "") + "页面演示",
                 _ => "首页"
             };
@@ -57,6 +58,7 @@ public partial class MainWindow
                 BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1")
             };
             open.Click += (_, _) => ActivateTaskWindow(window);
+            NativeButtonGlow.Attach(open, () => darkTaskTabs, primary: selected && darkTaskTabs);
             var close = new Button
             {
                 Content = "×", Width = 27, Height = 35, Margin = new Thickness(2, 0, 0, 0),
@@ -67,6 +69,7 @@ public partial class MainWindow
                 BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1")
             };
             close.Click += (_, _) => CloseTaskWindow(window);
+            NativeButtonGlow.Attach(close, () => darkTaskTabs);
             tab.Children.Add(open);
             tab.Children.Add(close);
             TaskTabsPanel.Children.Add(tab);
@@ -74,6 +77,28 @@ public partial class MainWindow
         NewTaskTabButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
         NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
         NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
+        BrowserBackButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
+        BrowserBackButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
+        BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
+        UpdateBrowserBackButton();
+    }
+
+    private void UpdateBrowserBackButton()
+    {
+        if (BrowserBackButton is null) return;
+        var module = assignedModule is "course" or "homework" || activeModule is "chaoxing" or "homework";
+        BrowserBackButton.Visibility = assignedModule is null ? Visibility.Collapsed : Visibility.Visible;
+        BrowserBackButton.IsEnabled = module ? CourseView.CoreWebView2?.CanGoBack == true :
+            ModuleView.CoreWebView2?.CanGoBack == true;
+    }
+
+    private void BrowserBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (assignedModule is "course" or "homework")
+        {
+            if (CourseView.CoreWebView2?.CanGoBack == true) CourseView.CoreWebView2.GoBack();
+        }
+        else if (ModuleView.CoreWebView2?.CanGoBack == true) ModuleView.CoreWebView2.GoBack();
     }
 
     private MainWindow CreateTaskWindow(string? module = null)
@@ -90,7 +115,7 @@ public partial class MainWindow
     }
 
     private Task RestoreAssignedModuleUiAsync() =>
-        ShowTaskUiAsync(assignedModule == "course" ? "openCourse" : "openDemo");
+        ShowTaskUiAsync(assignedModule switch { "course" => "openCourse", "homework" => "openHomework", _ => "openDemo" });
 
     private async Task ShowTaskUiAsync(string action)
     {
@@ -133,6 +158,7 @@ public partial class MainWindow
         try
         {
             target.CancelAiRequest("标签已关闭，AI 请求已取消。");
+            target.CancelHomeworkReview();
             if (target.courseSessionId is not null && target.courseState != "STOPPED")
                 await target.CourseCommandAsync("stop");
             if (target.sessionId is not null) await target.CancelSessionAsync();

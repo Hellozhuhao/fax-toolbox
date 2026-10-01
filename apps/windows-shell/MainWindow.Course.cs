@@ -98,7 +98,7 @@ public partial class MainWindow
     private void HandleModuleNewWindow(CoreWebView2NewWindowRequestedEventArgs args)
     {
         args.Handled = true;
-        if (activeModule == "chaoxing" && IsChaoxingUrl(args.Uri))
+        if ((activeModule is "chaoxing" or "homework") && IsChaoxingUrl(args.Uri))
             CourseView.CoreWebView2.Navigate(args.Uri);
     }
 
@@ -124,7 +124,15 @@ public partial class MainWindow
         }
         courseLatestNavigationId = args.NavigationId;
         courseLastAttemptedUrl = args.Uri;
-        if (activeModule == "chaoxing") ShowCourseLoading();
+        if (activeModule is "chaoxing" or "homework") ShowCourseLoading();
+        if (activeModule == "homework")
+        {
+            homeworkLoading = true;
+            CancelHomeworkReview();
+            ClearHomeworkResults();
+            PublishHomeworkProgress(0, "页面已切换，请打开作业后重新开始。");
+            PublishHomeworkStatus("学习通页面正在加载…");
+        }
     }
 
     private void ShowCourseLoading()
@@ -152,7 +160,8 @@ public partial class MainWindow
         if (CourseView.CoreWebView2 is null) return;
         courseAutoRetryCount = 0;
         ShowCourseLoading();
-        PublishCourse("WAITING_LOGIN", "正在重新打开学习通…", false);
+        if (activeModule == "homework") PublishHomeworkStatus("正在重新打开学习通…");
+        else PublishCourse("WAITING_LOGIN", "正在重新打开学习通…", false);
         var target = IsChaoxingUrl(courseLastAttemptedUrl) ? courseLastAttemptedUrl : CourseHome;
         Trace("course retry: " + DisplayUrl(target));
         CourseView.CoreWebView2.Navigate(target);
@@ -177,6 +186,11 @@ public partial class MainWindow
 
     private async Task HandleCourseNavigationCompletedAsync(CoreWebView2NavigationCompletedEventArgs args)
     {
+        if (activeModule == "homework")
+        {
+            await HomeworkNavigationCompletedAsync(args);
+            return;
+        }
         Trace("course navigation completed: " + args.IsSuccess + " " + DisplayUrl(CourseView.CoreWebView2.Source));
         CancelAiRequest("页面已切换，本次 AI 答题请求已取消。");
         if (!args.IsSuccess)

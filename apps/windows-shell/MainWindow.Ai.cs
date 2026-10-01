@@ -31,6 +31,8 @@ public partial class MainWindow
             if (dialog.ShowDialog() == true && dialog.Settings is not null)
             {
                 aiAnswerCancellation?.Cancel();
+                CancelHomeworkReview();
+                if (activeModule == "homework") PublishHomeworkStatus("AI 配置已更新，请重新开始校对。");
                 PublishAiConfiguration();
                 PublishAiStatus($"已保存 {dialog.Settings.Model}。下次答题将使用此配置。");
                 _ = RefreshAiBalanceAsync();

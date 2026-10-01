@@ -1,4 +1,4 @@
-:root{color-scheme:dark;font-family:"Segoe UI",system-ui,sans-serif}
+:root{color-scheme:dark;font-family:"PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;color:#eaf0fa;background:radial-gradient(circle at 90% 0%,#22304f 0,transparent 35%),#10151f}
 main{min-height:100vh;padding:26px 22px;display:flex;flex-direction:column}
@@ -6,11 +6,11 @@ main{min-height:100vh;padding:26px 22px;display:flex;flex-direction:column}
 .eyebrow{color:#92a6c4;font-size:10px;font-weight:800;letter-spacing:.16em}h1{font-size:20px;margin:0}h2{font-size:23px;line-height:1.25;margin:9px 0 8px}h3{font-size:15px;margin:0 0 8px}p{line-height:1.55;margin:8px 0}.muted{font-size:12px;color:#acbbcf}
 nav{display:grid;gap:4px;margin:25px -8px 25px}.nav-item{text-align:left;background:transparent;color:#a9b7cb;min-height:39px;padding:0 12px}.nav-item:hover,.nav-item.active{background:#273452;color:#fff}.nav-item.active{box-shadow:inset 3px 0 #8d7bff}
 .view{padding-bottom:20px}.view[hidden]{display:none}
-button{border:0;border-radius:10px;min-height:42px;padding:0 14px;background:#7968e9;color:#fff;font:650 12px "Segoe UI",system-ui,sans-serif;cursor:pointer}button:hover{background:#8f7dfa}button:disabled{opacity:.45;cursor:default}button.secondary{background:#2b3850}button.secondary:hover{background:#3b4b68}
+button{border:0;border-radius:10px;min-height:42px;padding:0 14px;background:#7968e9;color:#fff;font:650 12px "PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif;cursor:pointer}button:hover{background:#8f7dfa}button:disabled{opacity:.45;cursor:default}button.secondary{background:#2b3850}button.secondary:hover{background:#3b4b68}
 .view>button+button{margin-top:8px}
 .module-card{display:flex;align-items:center;gap:13px;width:100%;height:80px;text-align:left;margin:20px 0;background:#24324e;border:1px solid #3f4c68}.module-card:hover{background:#30405f}.module-card strong,.module-card small{display:block}.module-card small{margin-top:4px;font-size:11px;color:#b4c4db}.module-icon{display:grid;place-items:center;width:42px;height:42px;border-radius:12px;background:#5948bb;font-size:19px}.arrow{margin-left:auto;font-size:19px}
 .card{background:#1b263a;border:1px solid #324158;border-radius:14px;padding:16px;margin:18px 0}.demo-card{display:grid;gap:7px}.demo-card .muted{margin:0 0 5px}.label{color:#91a4bf;font-size:11px;font-weight:650}.status strong{display:block;color:#88e2b4;margin:5px 0;font-size:13px}.step{display:flex;align-items:center;gap:11px;margin:21px 0 10px}.step>span{display:grid;place-items:center;width:26px;height:26px;background:#403b76;border-radius:8px;font-weight:800;font-size:12px}.step strong,.step small{display:block}.step strong{font-size:13px}.step small{font-size:11px;color:#a6b6cb;margin-top:3px}.button-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
-.url{word-break:break-all;font-size:11px;color:#d9e2f1}.card label{display:block;font-size:11px;margin:14px 0 6px;color:#bbcae0}input,textarea{width:100%;border:1px solid #40516c;border-radius:9px;background:#101b2c;color:#fff;padding:10px;font:12px "Segoe UI",system-ui,sans-serif}textarea{resize:vertical;min-height:86px}.card button{margin-top:12px;width:100%}.vault-list{font-size:12px;color:#b9c8da}.vault-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #344157}.vault-row button{width:auto;margin:0;min-height:30px;background:#4b3343}
+.url{word-break:break-all;font-size:11px;color:#d9e2f1}.card label{display:block;font-size:11px;margin:14px 0 6px;color:#bbcae0}input,textarea{width:100%;border:1px solid #40516c;border-radius:9px;background:#101b2c;color:#fff;padding:10px;font:12px "PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif}textarea{resize:vertical;min-height:86px}.card button{margin-top:12px;width:100%}.vault-list{font-size:12px;color:#b9c8da}.vault-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid #344157}.vault-row button{width:auto;margin:0;min-height:30px;background:#4b3343}
 footer{margin-top:auto;border-top:1px solid #2d3b50;padding-top:17px;color:#8d9fba;font-size:11px;display:grid;gap:3px}
 
 /* Application shell */
@@ -40,13 +40,13 @@ main.content{min-width:0;min-height:100vh;padding:34px clamp(22px,5vw,64px) 24px
 footer{border-color:var(--border);color:var(--subtle)}
 @media(max-width:700px){.app{display:block}.sidebar{height:auto;position:static;padding:13px 16px 8px;border-right:0;border-bottom:1px solid var(--border)}.brand{margin:0 0 12px}.brand-mark{width:31px;height:31px;border-radius:9px;font-size:17px}.brand h1{font-size:14px}.brand .eyebrow{font-size:8px}.nav-label,.connection{display:none}.sidebar nav{display:flex;gap:4px;overflow-x:auto;margin:0 0 5px}.sidebar .nav-item{white-space:nowrap;width:auto;min-height:33px;padding:0 9px;font-size:11px}.sidebar-bottom{position:absolute;right:13px;top:12px}.sidebar-bottom .nav-item{min-height:31px}.content{padding:20px 18px}.hero{min-height:170px;padding:23px}.hero h2{font-size:25px}.hero p{font-size:11px}.hero-art{display:none}.module-grid,.overview-grid{grid-template-columns:1fr}.section-head{margin-top:24px}.module-card{height:78px}.library-card{min-height:0}.content h2{font-size:20px}}
 .advanced{margin-top:19px}.advanced summary{cursor:pointer;font-size:13px;font-weight:750;color:var(--text);list-style-position:inside}.advanced[open] summary{margin-bottom:10px}.advanced .muted{margin-bottom:12px}#view-workspace .card strong{display:block;margin-top:10px;font-size:18px}#view-workspace .card p{margin-top:8px}
-select{width:100%;min-height:42px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:12px "Segoe UI",system-ui,sans-serif}#course-chapter{font-weight:750;overflow-wrap:anywhere}#course-chapter-id{margin:3px 0 0;font-size:11px}#course-catalog-note{margin:10px 0 0}
+select{width:100%;min-height:42px;margin-top:10px;padding:8px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);font:12px "PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif}#course-chapter{font-weight:750;overflow-wrap:anywhere}#course-chapter-id{margin:3px 0 0;font-size:11px}#course-catalog-note{margin:10px 0 0}
 
 /* Unified desktop appearance: calm surfaces, clear hierarchy, and restrained color. */
 :root,:root[data-theme="light"]{
   color-scheme:light;--bg:#f5f5f7;--panel:#fff;--surface:#f2f2f7;--border:#dedee3;
   --text:#1d1d1f;--subtle:#6e6e73;--accent:#007aff;--nav:#515158;
-  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-family:"PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif;
 }
 :root[data-theme="dark"]{
   color-scheme:dark;--bg:#1c1c1e;--panel:#2c2c2e;--surface:#3a3a3c;--border:#48484a;
@@ -103,7 +103,7 @@ main.content{padding:0 0 15px;min-height:100vh}
 .command-actions{display:flex;align-items:center;gap:4px}.command-actions button{min-height:30px;padding:0 9px;border-radius:7px;background:transparent;color:var(--subtle);font-size:11px;white-space:nowrap}
 .command-actions button:hover,.command-actions button.selected{background:var(--surface);color:var(--text)}
 .command-actions .quick-actions{border:1px solid var(--border);background:var(--surface);color:var(--text);margin-left:7px}
-kbd{font:10px "Segoe UI",sans-serif;color:var(--subtle);margin-left:5px}
+kbd{font:10px "PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-serif;color:var(--subtle);margin-left:5px}
 .content .view{max-width:none;padding:22px clamp(18px,3vw,34px) 24px}
 .content h2{margin:7px 0 9px}.content footer{margin:0 clamp(18px,3vw,34px);padding-top:10px}
 .hero{min-height:190px;padding:23px 26px}.hero-art{width:85px;height:85px;font-size:52px;border-radius:20px}
