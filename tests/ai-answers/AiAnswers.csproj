@@ -15,6 +15,7 @@
     <Compile Include="../../apps/windows-shell/AiAnswerService.cs" Link="AiAnswerService.cs" />
     <Compile Include="../../apps/windows-shell/AiBalanceService.cs" Link="AiBalanceService.cs" />
     <Compile Include="../../apps/windows-shell/AiProviderPresets.cs" Link="AiProviderPresets.cs" />
+    <Compile Include="../../apps/windows-shell/AiPricingCatalog.cs" Link="AiPricingCatalog.cs" />
     <Compile Include="../../apps/windows-shell/VaultCrypto.cs" Link="VaultCrypto.cs" />
   </ItemGroup>
 </Project>

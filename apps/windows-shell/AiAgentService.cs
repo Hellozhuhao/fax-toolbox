@@ -17,10 +17,17 @@ internal static class AiAgentService
     internal static async Task<string> CompleteAsync(string consumer, AiSettings settings,
         string instructions, string prompt, CancellationToken cancellation,
         TimeSpan? timeout = null, IReadOnlyList<AiImageInput>? images = null)
+        => (await CompleteWithUsageAsync(consumer, settings, instructions, prompt,
+            cancellation, timeout, images)).Text;
+
+    internal static async Task<AiCompletionResult> CompleteWithUsageAsync(string consumer, AiSettings settings,
+        string instructions, string prompt, CancellationToken cancellation,
+        TimeSpan? timeout = null, IReadOnlyList<AiImageInput>? images = null)
     {
         AiConsumerRegistry.Require(consumer);
         using var client = new ToolboxChatClient(settings, timeout, images);
-        return await RunWithClientAsync(consumer, client, instructions, prompt, cancellation);
+        var content = await RunWithClientAsync(consumer, client, instructions, prompt, cancellation);
+        return new AiCompletionResult(content, client.LastUsage);
     }
 
     internal static async Task<string> RunWithClientAsync(string consumer, IChatClient client,
@@ -38,6 +45,7 @@ internal static class AiAgentService
     private sealed class ToolboxChatClient(AiSettings settings, TimeSpan? timeout,
         IReadOnlyList<AiImageInput>? images) : IChatClient
     {
+        public AiUsage? LastUsage { get; private set; }
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
 
@@ -54,9 +62,10 @@ internal static class AiAgentService
                 .Select(message => message.Text));
             if (string.IsNullOrWhiteSpace(user))
                 throw new InvalidDataException("Agent 请求内容为空");
-            var result = await AiAnswerService.CompleteAsync(settings, system, user,
+            var result = await AiAnswerService.CompleteWithUsageAsync(settings, system, user,
                 cancellationToken, timeout, images);
-            return new ChatResponse(new ChatMessage(ChatRole.Assistant, result));
+            LastUsage = result.Usage;
+            return new ChatResponse(new ChatMessage(ChatRole.Assistant, result.Text));
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

@@ -198,6 +198,12 @@
       if (target) target.textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置模型';
       if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置学习通 AI';
       if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置作业 AI';
+      if (item.id === 'agent') {
+        agentImagesSupported = !(item.provider === '阿里百炼' && item.model === 'qwen-plus');
+        $('agent-image-file').disabled = !agentImagesSupported;
+        $('agent-image-add').classList.toggle('disabled', !agentImagesSupported);
+        $('agent-image-add').title = agentImagesSupported ? '添加图片，也可直接粘贴截图' : '当前 qwen-plus 预设仅支持文字';
+      }
     }
     $('ai-config-summary').textContent = detail;
     balanceAvailable = !!(message.configured && message.hasKey && message.balanceSupported);
@@ -219,6 +225,70 @@
   }
   let agentBusy = false;
   let agentApprovalId = '';
+  let agentPreparingImages = false;
+  let agentImages = [];
+  let agentImagesSupported = true;
+  let activeAgentSessionId = '';
+  const agentDrafts = new Map();
+  function renderAgentSessions(data) {
+    const list = $('agent-session-list'); list.replaceChildren();
+    for (const session of data.sessions || []) {
+      const row = document.createElement('div'); row.className = 'agent-session-row';
+      const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
+      select.textContent = session.title || '新任务'; select.title = select.textContent;
+      select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
+      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); });
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
+      remove.textContent = '×'; remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
+      remove.addEventListener('click', () => { if (!agentBusy && confirm('删除这个 Agent 会话及其记录？')) send('agent.session.delete', {sessionId: session.id}); });
+      row.append(select, remove); list.append(row);
+    }
+  }
+  function renderAgentUsage(data) {
+    const input = Number(data.input || 0), output = Number(data.output || 0);
+    const rate = input > 0 && data.cached != null ? Math.round(100 * Number(data.cached) / input) + '%' : '—';
+    $('agent-meter').hidden = !data.calls;
+    const amount = data.cost == null ? '' : ` · 估算 ${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(4)}`;
+    $('agent-meter').textContent = `输入 ${input.toLocaleString()} · 输出 ${output.toLocaleString()} · 缓存 ${rate}${amount}`;
+    $('agent-usage').textContent = `${data.calls || 0} 次请求 · 输入 ${input.toLocaleString()} token · 输出 ${output.toLocaleString()} token · 缓存命中 ${rate}`;
+    $('agent-cost').textContent = data.cost == null ? '本会话暂无费用估算' : `估算费用：${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(6)} ${data.currency || ''}`;
+  }
+  function renderAgentImages() {
+    const tray = $('agent-attachments'); tray.replaceChildren(); tray.hidden = agentImages.length === 0;
+    agentImages.forEach((dataUrl, index) => {
+      const item = document.createElement('div'); item.className = 'agent-image';
+      const preview = document.createElement('img'); preview.src = dataUrl; preview.alt = '待发送图片 ' + (index + 1);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除图片';
+      remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
+      item.append(preview, remove); tray.append(item);
+    });
+  }
+  async function addAgentImages(files) {
+    if (agentBusy || agentPreparingImages) return;
+    if (!agentImagesSupported) { $('agent-state').textContent = '当前模型仅支持文字'; return; }
+    if (agentImages.length + files.length > 4) { $('agent-state').textContent = '最多添加 4 张图片'; return; }
+    agentPreparingImages = true; $('agent-send').disabled = true; $('agent-state').textContent = '正在准备图片…';
+    try {
+      for (const file of files) {
+        if (!/^image\/(jpeg|png|webp|gif)$/.test(file.type) || file.size > 12 * 1024 * 1024) throw new Error('仅支持 12 MB 内的常见图片');
+        const bitmap = await createImageBitmap(file);
+        let scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+        let encoded = '';
+        for (let attempt = 0; attempt < 4; attempt++) {
+          const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+          const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+          encoded = canvas.toDataURL('image/jpeg', .84 - attempt * .12);
+          if (encoded.length < 2_700_000) break;
+          scale *= .75;
+        }
+        bitmap.close();
+        if (encoded.length >= 2_700_000) throw new Error('图片仍然过大，请选择较小的图片');
+        agentImages.push(encoded);
+      }
+      renderAgentImages(); $('agent-state').textContent = '';
+    } catch (error) { $('agent-state').textContent = error.message || '图片无法读取'; }
+    finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; $('agent-image-file').value = ''; }
+  }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
     timeline.querySelector('.agent-empty')?.remove();
@@ -229,14 +299,34 @@
   }
   function renderAgentMessage(message) {
     if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
+    if (message.kind === 'agent.sessions') {
+      const nextId = message.extra?.activeId || '';
+      if (nextId !== activeAgentSessionId && activeAgentSessionId)
+        agentDrafts.set(activeAgentSessionId, {prompt: $('agent-prompt').value, images: agentImages});
+      activeAgentSessionId = nextId;
+      renderAgentSessions(message.extra || {});
+    }
+    if (message.kind === 'agent.snapshot') {
+      const data = message.extra || {};
+      $('agent-task-title').textContent = data.title || '新任务';
+      $('agent-root').textContent = data.root || '未选择项目文件夹';
+      const timeline = $('agent-timeline'); timeline.replaceChildren();
+      for (const entry of data.events || []) addAgentEvent(entry.type, entry.text);
+      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); }
+      const draft = agentDrafts.get(activeAgentSessionId);
+      $('agent-prompt').value = draft?.prompt || '';
+      agentImages = draft?.images || []; renderAgentImages();
+      renderAgentUsage(data);
+    }
     if (message.kind === 'agent.state') {
       agentBusy = !!message.extra?.busy; $('agent-state').textContent = agentBusy ? (message.detail || '正在处理') : '';
       $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
       $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
+      for (const button of document.querySelectorAll('.agent-session-row button')) button.disabled = agentBusy;
     }
     if (message.kind === 'agent.root') $('agent-root').textContent = message.detail || '未选择项目文件夹';
-    if (message.kind === 'agent.clear') { const timeline = $('agent-timeline'); timeline.replaceChildren(); const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); $('agent-prompt').value = ''; $('agent-task-title').textContent = '新任务'; }
+    if (message.kind === 'agent.usage') renderAgentUsage(message.extra || {});
     if (message.kind === 'agent.approval') { agentApprovalId = message.extra?.id || ''; $('agent-approval-title').textContent = message.detail || '等待确认'; $('agent-approval-detail').textContent = message.extra?.preview || ''; $('agent-approval').hidden = false; }
     if (message.kind === 'agent.approval.clear') { agentApprovalId = ''; $('agent-approval').hidden = true; }
     if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); }
@@ -392,11 +482,13 @@
     item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
+  $('agent-image-file').addEventListener('change', event => addAgentImages([...event.target.files]));
+  $('agent-prompt').addEventListener('paste', event => { const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); addAgentImages(files); } });
   $('agent-clear').addEventListener('click', () => send('agent.clear'));
   $('agent-cancel').addEventListener('click', () => send('agent.cancel'));
   $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
-  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if (!prompt || agentBusy) return; if ($('agent-task-title').textContent === '新任务') $('agent-task-title').textContent = prompt.slice(0, 28); $('agent-prompt').value = ''; send('agent.send', {prompt}); });
+  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if ((!prompt && !agentImages.length) || agentBusy || agentPreparingImages) return; const images = agentImages; agentImages = []; renderAgentImages(); $('agent-prompt').value = ''; agentDrafts.delete(activeAgentSessionId); send('agent.send', {prompt, images}); });
   $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));

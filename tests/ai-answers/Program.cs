@@ -48,6 +48,51 @@ try { AiSettings.Validate("http://example.com/v1/chat/completions", "model");
     throw new Exception("insecure endpoint was accepted"); }
 catch (InvalidDataException) { }
 AiSettings.Validate("https://example.com/v1/chat/completions", "model");
+using (var deepSeekUsage = JsonDocument.Parse("{\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":200,\"prompt_cache_hit_tokens\":750}}"))
+{
+    var usage = AiAnswerService.ParseUsage(deepSeekUsage.RootElement);
+    if (usage is null || usage.CacheHitRate != .75 ||
+        usage.Estimate(new AiTokenPricing("CNY", 2m, .5m, 4m)) != .001675m)
+        throw new Exception("DeepSeek usage or cost was parsed incorrectly");
+}
+using (var openAiUsage = JsonDocument.Parse("{\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":25,\"prompt_tokens_details\":{\"cached_tokens\":40}}}"))
+    if (AiAnswerService.ParseUsage(openAiUsage.RootElement)?.CachedInputTokens != 40)
+        throw new Exception("OpenAI cached tokens were not parsed");
+using (var absentUsage = JsonDocument.Parse("{\"choices\":[]}"))
+    if (AiAnswerService.ParseUsage(absentUsage.RootElement) is not null)
+        throw new Exception("Missing provider usage must not be estimated");
+var metered = new AiUsage(1000, 200, 750);
+var fridayPeak = new DateTimeOffset(2026, 10, 2, 8, 0, 0, TimeSpan.Zero);
+var sundayOffPeak = new DateTimeOffset(2026, 10, 4, 8, 0, 0, TimeSpan.Zero);
+var deepSeek = new AiSettings("https://api.deepseek.com/chat/completions", "deepseek-flash", "");
+if (AiPricingCatalog.Resolve(deepSeek, metered, fridayPeak)?.InputPerMillion != 2m ||
+    AiPricingCatalog.Resolve(deepSeek, metered, sundayOffPeak)?.InputPerMillion != 1m)
+    throw new Exception("DeepSeek peak price was not selected from request time");
+if (AiPricingCatalog.Resolve(new AiSettings("https://api.openai.com/v1/chat/completions", "gpt-4.1-mini", ""),
+    metered, fridayPeak)?.CachedInputPerMillion != .1m)
+    throw new Exception("OpenAI preset price was not selected");
+if (AiPricingCatalog.Resolve(new AiSettings("https://custom.example/chat/completions", "my-model", ""),
+    metered, fridayPeak) is not null)
+    throw new Exception("Unknown model was assigned a made-up price");
+if (AiPricingCatalog.ParseDeepSeek("deepseek-flash 百万tokens输入（缓存命中） 空闲时段 0.02元 高峰时段 0.04元 百万tokens输入（缓存未命中） 空闲时段 1元 高峰时段 2元 百万tokens输出 空闲时段 4元 高峰时段 8元") is not { Length: 2 } liveDeepSeek ||
+    liveDeepSeek[1].OutputPerMillion != 8m)
+    throw new Exception("Official DeepSeek price refresh could not parse its table");
+if (AiPricingCatalog.ParseQwen("qwen-plus 模型价格 华北2（北京） 输入<=128k 输入 0.8 每百万tokens 输出 2 每百万tokens 输入（缓存命中） 0.16 每百万tokens 128k<输入<=256k 输入 2.4 每百万tokens 输出 20 每百万tokens 输入（缓存命中） 0.48 每百万tokens 256k<输入<=1m 输入 4.8 每百万tokens 输出 48 每百万tokens 输入（缓存命中） 0.96 每百万tokens 新加坡") is not { Length: 3 } liveQwen ||
+    liveQwen[2].OutputPerMillion != 48m)
+    throw new Exception("Official Qwen price refresh could not parse its tiers");
+if (AiPricingCatalog.ParseSiliconFlow("Qwen/Qwen3.6-27B 视觉输入 输入: ￥1.8 / M Tokens 输出: ￥14.4 / M Tokens") is not { Length: 1 } liveSilicon ||
+    liveSilicon[0].InputPerMillion != 1.8m)
+    throw new Exception("Official SiliconFlow price refresh could not parse its model card");
+if (AiPricingCatalog.ParseOpenAi("GPT-4.1 Mini Pricing Text tokens Per 1M tokens Input $0.40 Cached input $0.10 Output $1.60") is not { Length: 1 } liveOpenAi ||
+    liveOpenAi[0].CachedInputPerMillion != .1m)
+    throw new Exception("Official OpenAI price refresh could not parse its model page");
+var imagePayload = AiAnswerService.BuildCompletionPayload(
+    new AiSettings("https://api.deepseek.com/chat/completions", "deepseek-flash", ""),
+    "instructions", "describe", [new AiImageInput(0, "用户附图 1", "data:image/jpeg;base64,/9j/")]);
+using (var imageDocument = JsonDocument.Parse(imagePayload))
+    if (imageDocument.RootElement.GetProperty("messages")[1].GetProperty("content")[2]
+        .GetProperty("type").GetString() != "image_url")
+        throw new Exception("Agent image was not sent as a vision input");
 if (AiProviderPresets.All.Select(item => item.Id).Distinct().Count() != AiProviderPresets.All.Length)
     throw new Exception("provider IDs must be unique");
 if (AiProviderPresets.Match(null).Id != "deepseek")

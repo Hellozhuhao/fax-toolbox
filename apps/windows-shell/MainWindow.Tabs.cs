@@ -173,7 +173,7 @@ public partial class MainWindow
                 "course" => (window.courseState == "RUNNING" ? "● " : "") + "学习通",
                 "homework" => (window.homeworkBusy ? "● " : "") + "作业校对",
                 "demo" => (window.state == "OBSERVING" ? "● " : "") + "页面演示",
-                "ai" => "AI 服务",
+                "ai" => "Agent",
                 _ => "首页"
             };
             if (view.Label == label && view.Selected == selected && view.Dark == darkTaskTabs) continue;
@@ -301,6 +301,19 @@ public partial class MainWindow
     {
         if (ReferenceEquals(target, this) || !TaskWindows.Contains(target)) return;
         if (!TaskWindows.Contains(target) || target.closingTask) return;
+        // Keep the old HWND in front until the target's WebView has painted.
+        // A fixed delay from Show() races WebView2 startup and exposes its blank surface.
+        if (!await target.taskWindowReady.Task) return;
+        if (target.ShellView.CoreWebView2 is not null)
+        {
+            try
+            {
+                await target.ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))");
+            }
+            catch (InvalidOperationException) { return; }
+        }
+        if (target.closingTask || !TaskWindows.Contains(target)) return;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         // Keep maximized tabs maximized throughout the handoff. Switching through
         // Normal made Windows animate two different window sizes on every click.
@@ -320,11 +333,14 @@ public partial class MainWindow
         target.ShowInTaskbar = !smokeMode;
         target.Activate();
         await target.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
-        // Allow the WebView compositor one frame to present before hiding the old HWND.
-        await Task.Delay(20);
+        // Flush DWM's queued composition before removing the previous window.
+        DwmFlush();
         Hide();
         target.UpdateTaskTabs();
     }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmFlush();
 
     private async void NewTaskTab_Click(object sender, RoutedEventArgs e)
     {

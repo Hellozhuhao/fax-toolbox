@@ -149,6 +149,8 @@ public partial class MainWindow : Window
         try
         {
             root = FindProjectRoot();
+            InitializeAgentSessions();
+            if (!smokeMode) AiPricingCatalog.StartBackgroundRefresh();
             catalogReaderScript = await File.ReadAllTextAsync(Path.Combine(root, "modules", "chaoxing", "catalog-reader.js"));
             Trace("project root found");
             if (smokeMode && Environment.GetCommandLineArgs()[1] != "--course-ai-smoke" &&
@@ -303,6 +305,7 @@ public partial class MainWindow : Window
             PublishDiagnosticSnapshot();
             PublishDiagnosticEndpoint();
             PublishAiConfiguration();
+            PublishAgentSessions();
             _ = RefreshAiBalanceAsync();
             if (activeModule == "chaoxing") PublishCourse(courseState, courseDetail);
             PublishMessageWebHealth();
@@ -341,6 +344,36 @@ public partial class MainWindow : Window
                 var darkAgentPreview = Path.Combine(root, ".cache", "agent-workspace-dark-preview.png");
                 await using (var output = File.Create(darkAgentPreview))
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (async () => {
+                      const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2;
+                      canvas.getContext('2d').fillRect(0, 0, 2, 2);
+                      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+                      const files = new DataTransfer();
+                      files.items.add(new File([blob], 'sample.jpg', {type: 'image/jpeg'}));
+                      const input = document.getElementById('agent-image-file');
+                      input.files = files.files;
+                      input.dispatchEvent(new Event('change', {bubbles: true}));
+                    })()
+                    """);
+                var attached = false;
+                for (var attempt = 0; attempt < 25 && !attached; attempt++)
+                {
+                    attached = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelectorAll('#agent-attachments .agent-image img').length === 1") == "true";
+                    if (!attached) await Task.Delay(100);
+                }
+                if (!attached) { FailSmoke("Agent image attachment was not rendered"); return; }
+                PublishAgent("usage", extra: new { input = 100, output = 20, cached = (long?)25,
+                    calls = 1, cost = .00042m, currency = "CNY" });
+                var metered = false;
+                for (var attempt = 0; attempt < 20 && !metered; attempt++)
+                {
+                    metered = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('agent-meter').textContent.includes('25%')") == "true";
+                    if (!metered) await Task.Delay(100);
+                }
+                if (!metered) { FailSmoke("Agent token and cache meter was not rendered"); return; }
                 PublishAgent("event", "Agent 可用", new { type = "assistant" });
                 var rendered = "";
                 for (var attempt = 0; attempt < 20 && rendered != "Agent 可用"; attempt++)
@@ -378,6 +411,29 @@ public partial class MainWindow : Window
                     if (!(await run).Contains("退出码：", StringComparison.Ordinal))
                     { FailSmoke("Agent project command did not return an exit status"); return; }
                 }
+                var originalSession = currentAgentSession.Id;
+                NewAgentSession();
+                var nextSession = currentAgentSession.Id;
+                if (nextSession == originalSession || agentSessions.Count != 2 || agentHistory.Count != 0)
+                { FailSmoke("Agent new conversation did not isolate history"); return; }
+                using (var select = JsonDocument.Parse("{\"sessionId\":\"" + originalSession + "\"}"))
+                    SelectAgentSession(select.RootElement);
+                if (currentAgentSession.Id != originalSession ||
+                    !currentAgentSession.Events.Any(entry => entry.Text == "Agent 可用"))
+                { FailSmoke("Agent session switch did not restore events"); return; }
+                var protectedSessions = File.ReadAllText(AgentSessionsPath);
+                if (protectedSessions.Contains("Agent 可用", StringComparison.Ordinal))
+                { FailSmoke("Agent conversation was stored as plaintext"); return; }
+                var storedSessions = JsonSerializer.Deserialize<List<AgentSession>>(
+                    VaultCrypto.Unprotect(protectedSessions));
+                if (storedSessions is not { Count: 2 } ||
+                    !storedSessions.Any(item => item.Id == originalSession &&
+                        item.Events.Any(entry => entry.Text == "Agent 可用")))
+                { FailSmoke("Agent sessions were not saved for the next launch"); return; }
+                using (var remove = JsonDocument.Parse("{\"sessionId\":\"" + nextSession + "\"}"))
+                    DeleteAgentSession(remove.RootElement);
+                if (agentSessions.Count != 1 || agentSessions[0].Id != originalSession)
+                { FailSmoke("Agent session deletion affected the active conversation"); return; }
                 PassSmoke();
             }
             else if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
@@ -468,13 +524,15 @@ public partial class MainWindow : Window
         try
         {
             var raw = args.TryGetWebMessageAsString();
-            if (Encoding.UTF8.GetByteCount(raw) > MaxPageMessage) return;
+            var messageBytes = Encoding.UTF8.GetByteCount(raw);
+            if (messageBytes > 11 * 1024 * 1024) return;
             using var document = JsonDocument.Parse(raw);
             var message = document.RootElement;
             if (message.GetProperty("v").GetInt32() != 1) return;
             var id = message.GetProperty("id").GetString();
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
             var command = message.GetProperty("command").GetString();
+            if (messageBytes > MaxPageMessage && command != "agent.send") return;
             if (command is "session.start" or "session.cancel" or "course.open" or "course.activate" or
                 "course.start" or "course.pause" or "course.stop" or "course.jump" or
                 "homework.open" or "homework.results" or "homework.explain" or "homework.start" or
@@ -575,7 +633,9 @@ public partial class MainWindow : Window
                 case "agent.folder": SelectAgentFolder(); break;
                 case "agent.send": await SendAgentAsync(message); break;
                 case "agent.cancel": CancelAgent(); break;
-                case "agent.clear": ClearAgent(); break;
+                case "agent.clear": NewAgentSession(); break;
+                case "agent.session.select": SelectAgentSession(message); break;
+                case "agent.session.delete": DeleteAgentSession(message); break;
                 case "agent.approve": ResolveAgentApproval(message, true); break;
                 case "agent.reject": ResolveAgentApproval(message, false); break;
                 case "diagnostics.inspect": await InspectCurrentPageAsync(); break;

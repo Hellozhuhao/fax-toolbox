@@ -7,7 +7,26 @@ using System.Text.RegularExpressions;
 
 namespace FaxToolbox.Windows;
 
-internal sealed record AiSettings(string Endpoint, string Model, string EncryptedKey)
+internal sealed record AiTokenPricing(string Currency, decimal InputPerMillion,
+    decimal CachedInputPerMillion, decimal OutputPerMillion);
+
+internal sealed record AiUsage(long InputTokens, long OutputTokens, long? CachedInputTokens)
+{
+    public double? CacheHitRate => InputTokens > 0 && CachedInputTokens is not null ?
+        (double)CachedInputTokens.Value / InputTokens : null;
+
+    public decimal Estimate(AiTokenPricing pricing)
+    {
+        var cached = CachedInputTokens ?? 0;
+        return ((InputTokens - cached) * pricing.InputPerMillion +
+            cached * pricing.CachedInputPerMillion + OutputTokens * pricing.OutputPerMillion) / 1_000_000m;
+    }
+}
+
+internal sealed record AiCompletionResult(string Text, AiUsage? Usage);
+
+internal sealed record AiSettings(string Endpoint, string Model, string EncryptedKey,
+    AiTokenPricing? Pricing = null)
 {
     private static string PathOnDisk => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -38,6 +57,12 @@ internal sealed record AiSettings(string Endpoint, string Model, string Encrypte
     {
         AiConsumerRegistry.Require(consumer);
         Validate(settings.Endpoint, settings.Model);
+        if (settings.Pricing is { } pricing &&
+            (pricing.Currency is not ("CNY" or "USD") || pricing.InputPerMillion < 0 ||
+             pricing.CachedInputPerMillion < 0 || pricing.OutputPerMillion < 0 ||
+             pricing.InputPerMillion > 100000 || pricing.CachedInputPerMillion > 100000 ||
+             pricing.OutputPerMillion > 100000))
+            throw new InvalidDataException("计费单价无效");
         var path = ConsumerPath(consumer);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + ".tmp";
@@ -224,7 +249,8 @@ internal static class AiAnswerService
         {
             foreach (var image in images!)
             {
-                userContent.Add(new { type = "text", text = $"第 {image.QuestionNumber} 题的 {image.Marker}：" });
+                userContent.Add(new { type = "text", text = image.QuestionNumber > 0 ?
+                    $"第 {image.QuestionNumber} 题的 {image.Marker}：" : image.Marker + "：" });
                 userContent.Add(new { type = "image_url", image_url = new { url = image.DataUrl, detail = "original" } });
             }
         }
@@ -247,7 +273,28 @@ internal static class AiAnswerService
         return JsonSerializer.Serialize(body);
     }
 
+    internal static AiUsage? ParseUsage(JsonElement response)
+    {
+        if (!response.TryGetProperty("usage", out var value) || value.ValueKind != JsonValueKind.Object) return null;
+        static long? Count(JsonElement source, string name) =>
+            source.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.Number &&
+            field.TryGetInt64(out var count) && count >= 0 ? count : null;
+        var input = Count(value, "prompt_tokens");
+        var output = Count(value, "completion_tokens");
+        long? cached = Count(value, "prompt_cache_hit_tokens");
+        if (cached is null && value.TryGetProperty("prompt_tokens_details", out var details) &&
+            details.ValueKind == JsonValueKind.Object) cached = Count(details, "cached_tokens");
+        return input is not null && output is not null ? new AiUsage(input.Value, output.Value,
+            cached is >= 0 && cached <= input ? cached : null) : null;
+    }
+
     internal static async Task<string> CompleteAsync(AiSettings settings, string systemPrompt,
+        string userPrompt, CancellationToken cancellationToken, TimeSpan? timeout = null,
+        IReadOnlyList<AiImageInput>? images = null)
+        => (await CompleteWithUsageAsync(settings, systemPrompt, userPrompt, cancellationToken,
+            timeout, images)).Text;
+
+    internal static async Task<AiCompletionResult> CompleteWithUsageAsync(AiSettings settings, string systemPrompt,
         string userPrompt, CancellationToken cancellationToken, TimeSpan? timeout = null,
         IReadOnlyList<AiImageInput>? images = null)
     {
@@ -290,7 +337,7 @@ internal static class AiAnswerService
         var content = answerContent.GetString();
         if (string.IsNullOrWhiteSpace(content))
             throw new InvalidDataException("AI 未返回答案，请人工检查");
-        return content;
+        return new AiCompletionResult(content, ParseUsage(result.RootElement));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
         {
