@@ -54,6 +54,7 @@ $diagnosticsScript = Join-Path $dist 'scripts\read-live-diagnostics.ps1'
 New-Item -ItemType Directory -Path (Split-Path $diagnosticsScript) -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'scripts\read-live-diagnostics.ps1') `
     -Destination $diagnosticsScript -Force
+Copy-Item -LiteralPath (Join-Path $root 'THIRD_PARTY_NOTICES.md') -Destination $dist -Force
 $chaoxingDestination = Join-Path $dist 'modules\chaoxing'
 New-Item -ItemType Directory -Path $chaoxingDestination -Force | Out-Null
 foreach ($name in @('module.json', 'catalog-reader.js', 'homework-reader.js', 'page-adapter.js')) {
