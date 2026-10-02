@@ -233,7 +233,7 @@
   function renderAgentSessions(data) {
     const list = $('agent-session-list'); list.replaceChildren();
     for (const session of data.sessions || []) {
-      const row = document.createElement('div'); row.className = 'agent-session-row';
+      const row = document.createElement('div'); row.className = 'agent-session-row'; row.dataset.sessionId = session.id;
       const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
       select.textContent = session.title || '新任务'; select.title = select.textContent;
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
@@ -396,6 +396,10 @@
   }
   window.chrome?.webview?.addEventListener('message', event => {
     const message = event.data; if (!message || message.v !== 1) return;
+    if (message.kind === 'ui.clipboard.paste' && contextPasteTarget?.isConnected) {
+      const input = contextPasteTarget; contextPasteTarget = null; input.focus();
+      document.execCommand('insertText', false, message.text || '');
+    }
     if (message.kind === 'status') {
       $('state').textContent = message.state || '';
       $('home-backend').textContent = stateName(message.state);
@@ -442,6 +446,74 @@
     goBack, applyThemeFromHost: theme => setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
     refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
+  const contextMenu = $('toolbox-context-menu');
+  let contextTarget = null;
+  let contextPasteTarget = null;
+  function closeContextMenu() { contextMenu.hidden = true; contextMenu.replaceChildren(); contextTarget = null; }
+  function contextAction(label, run, enabled = true) { return {label, run, enabled}; }
+  function buildContextActions(target) {
+    const actions = [];
+    const add = (label, run, enabled = true) => actions.push(contextAction(label, run, enabled));
+    const click = id => $(id)?.click();
+    const input = target.closest('input:not([type="checkbox"]):not([type="file"]),textarea,[contenteditable="true"]');
+    const selected = String(window.getSelection()?.toString() || (input && 'selectionStart' in input ? input.value.slice(input.selectionStart, input.selectionEnd) : '')).trim();
+    if (input) {
+      add('剪切', () => { input.focus(); document.execCommand('cut'); }, !!selected);
+      add('复制', () => { input.focus(); document.execCommand('copy'); }, !!selected);
+      add('粘贴', () => { contextPasteTarget = input; send('ui.clipboard.paste'); });
+      add('全选', () => { input.focus(); if (input.select) input.select(); else document.execCommand('selectAll'); });
+    } else if (selected) add('复制所选内容', () => { send('ui.clipboard.copy', {text: selected.slice(0, 65536)}); });
+    const moduleCard = target.closest('[data-open],#module-ai,#module-course,#module-homework,#module-demo');
+    if (moduleCard && !moduleCard.hidden) add('打开' + (moduleCard.querySelector('strong')?.textContent || '工具'), () => moduleCard.click());
+    const session = target.closest('.agent-session-row');
+    if (currentView === 'ai' && session) {
+      add('切换到此会话', () => session.querySelector('.agent-session-select')?.click(), !agentBusy);
+      add('删除此会话', () => session.querySelector('.agent-session-delete')?.click(), !agentBusy);
+    }
+    const vaultRow = target.closest('.vault-row');
+    if (currentView === 'vault' && vaultRow) add('删除此项', () => vaultRow.querySelector('button')?.click());
+    const settingsItem = target.closest('[data-settings-panel]');
+    if (currentView === 'settings' && settingsItem) add('打开' + settingsItem.querySelector('strong')?.textContent, () => settingsItem.click());
+    const page = {
+      home: [['查看所有工具', () => show('modules')], ['打开 Agent', openAi]],
+      modules: [['打开 Agent', openAi], ['打开学习通', openCourse], ['打开作业校对', openHomework]],
+      workspace: [['查看所有工具', () => show('modules')]],
+      ai: [['新建会话', () => click('agent-clear'), !agentBusy], ['选择项目文件夹', () => click('agent-folder'), !agentBusy], ['模型配置', () => { document.querySelector('.agent-config-panel').open = true; click('ai-configure'); }]],
+      course: [['返回学习通页面', () => click('course-open')], ['保存当前登录状态', () => click('course-save-session')], ['开始任务', () => click('course-start'), !$('course-start').disabled], ['暂停任务', () => click('course-pause'), !$('course-pause').disabled], ['结束任务', () => click('course-stop'), !$('course-stop').disabled], ['分析页面', () => click('course-analyze'), developerMode]],
+      homework: [['查看学习通页面', () => click('homework-open')], ['查看校对结果', () => click('homework-show-results')], ['开始校对', () => click('homework-start'), !$('homework-start').disabled]],
+      demo: [['开始观察', () => click('start'), !$('start').disabled], ['结束观察', () => click('cancel'), !$('cancel').disabled]],
+      activity: [['导出运行日志', () => click('diagnostics-export')], ['检查当前网页', () => click('diagnostics-inspect'), developerMode], ['打开网页调试器', () => click('diagnostics-devtools'), developerMode]],
+      settings: [['外观设置', () => document.querySelector('[data-settings-panel="appearance"]').click()], ['服务设置', () => document.querySelector('[data-settings-panel="services"]').click()], ['管理密码箱', () => show('vault')]],
+      vault: [['添加账号', () => click('vault-add')], ['刷新列表', () => send('vault.list')]]
+    }[currentView] || [];
+    for (const [label, run, enabled = true] of page) if (!actions.some(item => item.label === label)) add(label, run, enabled);
+    if (viewHistory.length) add('返回上一页', goBack);
+    return actions;
+  }
+  function showContextMenu(event) {
+    if (event.target.closest('#toolbox-context-menu')) return;
+    event.preventDefault();
+    closeContextMenu();
+    contextTarget = event.target;
+    for (const action of buildContextActions(contextTarget)) {
+      const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem';
+      button.textContent = action.label; button.disabled = !action.enabled;
+      button.addEventListener('click', () => { closeContextMenu(); action.run(); });
+      contextMenu.append(button);
+    }
+    contextMenu.hidden = false;
+    const width = contextMenu.offsetWidth, height = contextMenu.offsetHeight;
+    contextMenu.style.left = Math.max(8, Math.min(event.clientX, innerWidth - width - 8)) + 'px';
+    contextMenu.style.top = Math.max(8, Math.min(event.clientY, innerHeight - height - 8)) + 'px';
+  }
+  document.addEventListener('contextmenu', showContextMenu);
+  document.addEventListener('pointerdown', event => { if (!event.target.closest('#toolbox-context-menu')) closeContextMenu(); }, true);
+  document.addEventListener('scroll', closeContextMenu, true);
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); closeContextMenu(); }
+    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus(); }
+  });
+  window.FaxToolboxContextMenu = Object.freeze({openFor: (selector) => { const element = document.querySelector(selector); if (!element) return false; const rect = element.getBoundingClientRect(); showContextMenu({target: element, clientX: rect.left + 8, clientY: rect.bottom - 8, preventDefault() {}}); return !contextMenu.hidden; }});
   const palette = $('command-palette');
   function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
   palette.addEventListener('click', event => { if (event.target === palette) togglePalette(false); });
