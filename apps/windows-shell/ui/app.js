@@ -491,7 +491,7 @@
     return actions;
   }
   function showContextMenu(event) {
-    if (event.target.closest('#toolbox-context-menu')) return;
+    if (event.target.closest('#toolbox-context-menu')) { event.preventDefault(); return; }
     event.preventDefault();
     closeContextMenu();
     contextTarget = event.target;
