@@ -484,6 +484,34 @@ button[aria-disabled="true"] { background-image: none; }
 .developer-only[hidden]{display:none!important}
 [data-developer-tool][hidden],.nav-flyout [hidden],.palette [hidden]{display:none!important}
 @media(max-width:930px){.ai-service-grid{grid-template-columns:1fr}.ai-consumers{grid-template-columns:repeat(2,minmax(0,1fr))}.diagnostics-tools{align-items:flex-start;flex-direction:column}}
-@media(max-width:1050px){.agent-layout{grid-template-columns:1fr}.agent-side{grid-template-columns:1fr}.agent-side .ai-consumers{grid-template-columns:repeat(3,minmax(0,1fr))}.agent-workspace{height:clamp(420px,62vh,620px)}}
-@media(max-width:620px){.agent-side .ai-consumers{grid-template-columns:1fr}.agent-workspace-heading{align-items:flex-start;flex-direction:column}.agent-workspace{height:clamp(400px,65vh,560px)}.agent-heading-actions{width:100%}}
+/* Keep the conversation at the centre of the Agent workspace. */
+.content #view-ai{padding:15px clamp(16px,2vw,30px) 18px}
+.agent-layout{grid-template-columns:minmax(0,1fr) minmax(220px,270px);gap:12px;margin-top:0;align-items:stretch;height:max(480px,calc(100dvh - 120px))}
+.agent-workspace{height:100%;min-height:0}
+.agent-timeline{padding:22px clamp(18px,3vw,40px);gap:17px}
+.agent-entry.agent-assistant{max-width:min(100%,850px)}
+.agent-entry.agent-user{max-width:min(82%,680px)}
+.agent-composer{padding:12px 20px 16px}
+.agent-composer textarea{min-height:64px;max-height:180px}
+.agent-side{align-content:start;overflow:auto;min-height:0;gap:10px}
+.agent-side>.card,.agent-side>.agent-configuration{margin:0}
+.agent-session-list{max-height:min(46dvh,380px)}
+.agent-config-panel{padding:14px 17px!important}
+.agent-config-panel summary,.ai-service-log summary{cursor:pointer;font-size:13px;font-weight:700}
+.agent-config-panel:not([open]){min-height:0}
+.agent-config-panel[open] summary{margin-bottom:14px}
+.agent-side .ai-service-log{margin-top:0;padding:13px 17px}
+.ai-service-log:not([open]){min-height:0}
+@media(max-width:850px){.agent-layout{grid-template-columns:1fr;height:auto}.agent-workspace{height:max(430px,calc(100dvh - 130px))}.agent-side{overflow:visible}.agent-side .ai-consumers{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){.agent-side .ai-consumers{grid-template-columns:1fr}.agent-workspace-heading{align-items:flex-start;flex-direction:column}.agent-heading-actions{width:100%}}
+.toolbox-context-menu{position:fixed;z-index:1000;min-width:190px;max-width:min(280px,calc(100vw - 16px));padding:5px;border:1px solid var(--border);border-radius:14px;background:var(--panel);color:var(--text);box-shadow:0 16px 42px #0003;animation:context-enter .11s ease-out both}
+.toolbox-context-menu[hidden]{display:none}
+.toolbox-context-menu button{display:block;width:100%;min-height:34px;margin:0;padding:6px 11px;border:0;border-radius:9px;background:transparent;color:var(--text);box-shadow:none;text-align:left;font-size:12px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toolbox-context-menu button:hover,.toolbox-context-menu button:focus-visible{background:color-mix(in srgb,var(--accent) 14%,var(--panel));color:var(--accent);outline:0;box-shadow:none}
+.toolbox-context-menu button:disabled{opacity:.4}
+:root[data-theme="dark"] .toolbox-context-menu button{background:transparent;background-image:none;color:var(--text);box-shadow:none}
+:root[data-theme="dark"] .toolbox-context-menu button:not(:disabled):not([aria-disabled="true"]):hover,
+:root[data-theme="dark"] .toolbox-context-menu button:focus-visible{background:color-mix(in srgb,var(--accent) 17%,var(--panel));background-image:none;color:#d8c9ff;box-shadow:none}
+@keyframes context-enter{from{opacity:0;transform:translateY(-3px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.toolbox-context-menu{animation:none}}
 @media(max-width:620px){.activity-overview{grid-template-columns:1fr}.ai-consumers,.settings-layout{grid-template-columns:1fr}.settings-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.command-meta{display:none}}

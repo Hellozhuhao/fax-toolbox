@@ -10,6 +10,9 @@
         <shell:WindowChrome CaptionHeight="44" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
+        <SolidColorBrush x:Key="ContextHoverBrush" Color="#F5E5DD" />
+        <SolidColorBrush x:Key="ContextHoverTextBrush" Color="#A94F33" />
+        <SolidColorBrush x:Key="ContextTextBrush" Color="#171716" />
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="#D66B49" />
             <Setter Property="Foreground" Value="White" />
@@ -93,6 +96,20 @@
                 <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#CA4B43" /><Setter Property="Foreground" Value="White" /></Trigger>
                 <Trigger Property="IsPressed" Value="True"><Setter Property="Background" Value="#A93831" /><Setter Property="Foreground" Value="White" /></Trigger>
             </Style.Triggers>
+        </Style>
+        <Style x:Key="EmbeddedContextItemStyle" TargetType="MenuItem">
+            <Setter Property="Height" Value="34" />
+            <Setter Property="Padding" Value="11,5" />
+            <Setter Property="Foreground" Value="{DynamicResource ContextTextBrush}" />
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="MenuItem">
+                <Border x:Name="ItemSurface" Background="Transparent" CornerRadius="8" Margin="3,1" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+                </Border>
+                <ControlTemplate.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="ItemSurface" Property="Background" Value="{DynamicResource ContextHoverBrush}" /><Setter Property="Foreground" Value="{DynamicResource ContextHoverTextBrush}" /></Trigger>
+                    <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.42" /></Trigger>
+                </ControlTemplate.Triggers>
+            </ControlTemplate></Setter.Value></Setter>
         </Style>
     </Window.Resources>
     <Grid>

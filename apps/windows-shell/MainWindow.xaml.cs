@@ -254,6 +254,8 @@ public partial class MainWindow : Window
         ModuleView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
         CourseView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #endif
+        ConfigureEmbeddedContextMenu(ModuleView);
+        ConfigureEmbeddedContextMenu(CourseView);
         ModuleView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
         CourseView.CoreWebView2.NewWindowRequested += (_, args) => HandleModuleNewWindow(args);
         ModuleView.CoreWebView2.NavigationStarting += (_, args) =>
@@ -335,6 +337,18 @@ public partial class MainWindow : Window
                 var ready = await ShellView.CoreWebView2.ExecuteScriptAsync(
                     "!document.getElementById('view-ai').hidden && !!document.getElementById('agent-prompt') && document.querySelectorAll('[data-ai-consumer]').length===3");
                 if (ready != "true") { FailSmoke("Agent workspace or model selectors were not rendered"); return; }
+                var conversationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const workspace = document.querySelector('.agent-workspace').getBoundingClientRect();
+                      if (workspace.height < innerHeight * .68) return false;
+                      if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return false;
+                      const labels = [...document.querySelectorAll('#toolbox-context-menu button')].map(item => item.textContent);
+                      if (!labels.includes('粘贴') || !labels.includes('新建会话')) return false;
+                      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                      return document.getElementById('toolbox-context-menu').hidden;
+                    })()
+                    """);
+                if (conversationLayout != "true") { FailSmoke("Agent conversation layout or context menu failed"); return; }
                 var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(agentPreview)!);
                 await using (var output = File.Create(agentPreview))
@@ -532,7 +546,8 @@ public partial class MainWindow : Window
             var id = message.GetProperty("id").GetString();
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
             var command = message.GetProperty("command").GetString();
-            if (messageBytes > MaxPageMessage && command != "agent.send") return;
+            if (messageBytes > MaxPageMessage && command != "agent.send" &&
+                !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024)) return;
             if (command is "session.start" or "session.cancel" or "course.open" or "course.activate" or
                 "course.start" or "course.pause" or "course.stop" or "course.jump" or
                 "homework.open" or "homework.results" or "homework.explain" or "homework.start" or
@@ -546,6 +561,17 @@ public partial class MainWindow : Window
                     shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
                     UpdateBrowserBackButton();
                     UpdateTaskTabs();
+                    break;
+                case "ui.clipboard.copy":
+                    var copyText = message.GetProperty("text").GetString() ?? "";
+                    if (copyText.Length is > 0 and <= 65536) Clipboard.SetText(copyText);
+                    break;
+                case "ui.clipboard.paste":
+                    var pasteText = Clipboard.ContainsText() ? Clipboard.GetText() : "";
+                    ShellView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                    {
+                        v = 1, kind = "ui.clipboard.paste", text = pasteText.Length > 65536 ? pasteText[..65536] : pasteText
+                    }));
                     break;
                 case "ui.theme":
                     var darkTheme = message.GetProperty("theme").GetString() == "dark";
@@ -706,6 +732,9 @@ public partial class MainWindow : Window
     private void ApplyHostTheme(bool dark)
     {
         darkTaskTabs = dark;
+        Resources["ContextHoverBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#403554" : "#F5E5DD"));
+        Resources["ContextHoverTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#D8C9FF" : "#A94F33"));
+        Resources["ContextTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#F5F5F8" : "#171716"));
         UpdateTaskTabs();
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
         Background = Brush(dark ? "#202126" : "#F5F5F3");

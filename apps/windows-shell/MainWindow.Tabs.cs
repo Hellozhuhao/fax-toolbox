@@ -301,8 +301,7 @@ public partial class MainWindow
     {
         if (ReferenceEquals(target, this) || !TaskWindows.Contains(target)) return;
         if (!TaskWindows.Contains(target) || target.closingTask) return;
-        // Keep the old HWND in front until the target's WebView has painted.
-        // A fixed delay from Show() races WebView2 startup and exposes its blank surface.
+        // Keep the old HWND in front until the target has painted at its final size.
         if (!await target.taskWindowReady.Task) return;
         if (target.ShellView.CoreWebView2 is not null)
         {
@@ -315,6 +314,9 @@ public partial class MainWindow
         }
         if (target.closingTask || !TaskWindows.Contains(target)) return;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+        // Changing taskbar membership can recreate a WPF HWND. Do it before
+        // moving a freshly created off-screen tab into the visible bounds.
+        target.ShowInTaskbar = !smokeMode;
         // Keep maximized tabs maximized throughout the handoff. Switching through
         // Normal made Windows animate two different window sizes on every click.
         if (WindowState == WindowState.Normal && target.WindowState != WindowState.Normal)
@@ -327,13 +329,28 @@ public partial class MainWindow
             target.Height = bounds.Height;
         }
         if (target.WindowState != WindowState) target.WindowState = WindowState;
-        target.ShowActivated = true;
+        // WPF requires ShowActivated when showing a maximized window. The
+        // source is immediately reactivated so it still covers the repaint.
+        target.ShowActivated = target.WindowState == WindowState.Maximized;
         if (target.Visibility != Visibility.Visible) target.Show();
         target.UpdateLayout();
-        target.ShowInTaskbar = !smokeMode;
-        target.Activate();
+        // Show() and resizing invalidate WebView2's surface even if the page has
+        // loaded. Wait for the compositor at the new bounds while the old tab
+        // still covers it, then perform the visible handoff.
+        Activate();
         await target.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Render);
-        // Flush DWM's queued composition before removing the previous window.
+        if (target.ShellView.CoreWebView2 is not null)
+        {
+            try
+            {
+                await target.ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))");
+            }
+            catch (InvalidOperationException) { return; }
+        }
+        if (target.closingTask || !TaskWindows.Contains(target)) return;
+        DwmFlush();
+        target.Activate();
         DwmFlush();
         Hide();
         target.UpdateTaskTabs();
