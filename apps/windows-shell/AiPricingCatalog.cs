@@ -136,8 +136,10 @@ internal static class AiPricingCatalog
         var start = text.IndexOf("模型价格", model,
             StringComparison.Ordinal);
         if (start < 0) return null;
-        var beijing = text.IndexOf("华北2（北京）", start, StringComparison.Ordinal);
-        if (beijing < 0) return null;
+        var region = Regex.Match(text[start..], @"华北\s*2\s*[（(]北京[）)]",
+            RegexOptions.None, TimeSpan.FromMilliseconds(300));
+        if (!region.Success) return null;
+        var beijing = start + region.Index;
         var limit = text.IndexOf("新加坡", beijing, StringComparison.Ordinal);
         var section = text[beijing..(limit > beijing ? limit : Math.Min(text.Length, beijing + 5000))];
         var tiers = new[] { "输入<=128k", "128k<输入<=256k", "256k<输入<=1m" };
