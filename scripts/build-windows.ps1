@@ -23,7 +23,7 @@ $package = Join-Path $feed "Microsoft.Web.WebView2.$version.nupkg"
 if (-not (Test-Path -LiteralPath $package)) { Copy-Item -LiteralPath $archive -Destination $package }
 $nugetConfig = Join-Path $feed 'NuGet.Config'
 $escapedFeed = [System.Security.SecurityElement]::Escape($feed)
-Set-Content -LiteralPath $nugetConfig -Encoding UTF8 -Value "<?xml version=`"1.0`" encoding=`"utf-8`"?><configuration><packageSources><clear /><add key=`"local`" value=`"$escapedFeed`" /></packageSources></configuration>"
+Set-Content -LiteralPath $nugetConfig -Encoding UTF8 -Value "<?xml version=`"1.0`" encoding=`"utf-8`"?><configuration><packageSources><clear /><add key=`"local`" value=`"$escapedFeed`" /><add key=`"nuget.org`" value=`"https://api.nuget.org/v3/index.json`" /></packageSources></configuration>"
 
 $backend = Join-Path $root 'apps\rust-backend'
 & cargo build --locked --manifest-path (Join-Path $backend 'Cargo.toml')
@@ -40,6 +40,11 @@ if ($LASTEXITCODE -ne 0) { throw '.NET restore failed' }
 if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
+    $aiTests = Join-Path $root 'tests\ai-answers\AiAnswers.csproj'
+    & dotnet restore $aiTests --configfile $nugetConfig --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'AI test restore failed' }
+    & dotnet run --project $aiTests --no-restore
+    if ($LASTEXITCODE -ne 0) { throw 'AI agent tests failed' }
     $executable = Join-Path $root 'apps\windows-shell\bin\Debug\net10.0-windows\FaxToolbox.Windows.exe'
     foreach ($mode in @('--smoke', '--ai-dialog-smoke', '--course-smoke', '--course-video-smoke', '--course-video-quiz-smoke', '--course-sticky-quiz-smoke', '--course-generic-quiz-smoke', '--course-overlay-quiz-smoke', '--course-diagnostics-smoke', '--course-session-smoke', '--course-result-smoke', '--course-catalog-result-smoke', '--course-manual-next-smoke', '--course-document-smoke', '--course-challenge-smoke', '--course-pause-smoke', '--course-login-smoke', '--course-catalog-smoke', '--course-ai-smoke', '--course-controls-smoke', '--course-retry-smoke', '--tabs-smoke', '--homework-smoke')) {
         $output = Join-Path $root ('.cache\windows-' + $mode.TrimStart('-') + '.txt')

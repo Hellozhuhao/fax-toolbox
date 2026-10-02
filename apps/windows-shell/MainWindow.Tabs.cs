@@ -18,6 +18,7 @@ public partial class MainWindow
     private bool closingTask;
     private bool darkTaskTabs;
     private bool shellCanGoBack;
+    private bool minimizing;
     private readonly TaskCompletionSource<bool> taskWindowReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<MainWindow, TaskTabVisual> taskTabVisuals = [];
 
@@ -37,11 +38,40 @@ public partial class MainWindow
 
     private void Window_StateChanged(object sender, EventArgs e)
     {
+        if (WindowState == WindowState.Minimized)
+        {
+            BeginAnimation(OpacityProperty, null);
+            Opacity = 1;
+            minimizing = false;
+        }
         if (TitleMaximizeButton is not null)
             TitleMaximizeButton.Content = WindowState == WindowState.Maximized ? "❐" : "□";
     }
 
-    private void TitleMinimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void TitleMinimize_Click(object sender, RoutedEventArgs e)
+    {
+        if (minimizing || WindowState == WindowState.Minimized) return;
+        if (!SystemParameters.MenuAnimation || smokeMode)
+        {
+            WindowState = WindowState.Minimized;
+            return;
+        }
+        minimizing = true;
+        var fade = new DoubleAnimation(1, 0.18, TimeSpan.FromMilliseconds(160))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn },
+            FillBehavior = FillBehavior.Stop
+        };
+        fade.Completed += (_, _) =>
+        {
+            if (!minimizing) return;
+            WindowState = WindowState.Minimized;
+            BeginAnimation(OpacityProperty, null);
+            Opacity = 1;
+            minimizing = false;
+        };
+        BeginAnimation(OpacityProperty, fade);
+    }
     private void TitleMaximize_Click(object sender, RoutedEventArgs e) => ToggleWindowMaximized();
     private void TitleClose_Click(object sender, RoutedEventArgs e) => Close();
 

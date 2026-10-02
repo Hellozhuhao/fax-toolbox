@@ -19,7 +19,7 @@ internal static class HomeworkReviewService
             "不要使用 Markdown 表格、HTML 或 LaTeX 命令。证据不足时明确说明，不能编造。";
         var userPrompt = JsonSerializer.Serialize(new { question = item.Question, proposedAnswer = item.Answer,
             briefReview = item.Explanation });
-        var response = await AiAnswerService.CompleteAsync(settings, systemPrompt, userPrompt,
+        var response = await AiAgentService.CompleteAsync("homework", settings, systemPrompt, userPrompt,
             cancellationToken, TimeSpan.FromMinutes(2));
         var clean = response.Trim();
         if (clean.StartsWith("```", StringComparison.Ordinal))
@@ -76,7 +76,7 @@ internal static class HomeworkReviewService
             "看不清时 latex 写空字符串。若某题的图片未随请求提供或看不清，不要猜测；该题答案写空字符串并说明需要人工核对。" +
             "不要回答形如‘此次作业为第 次作业’的题目。不要操作或提交网页。";
         var userPrompt = "请校对以下当前页面的全部作业题干；options 数组刻意为空，选择题选项未读取：\n" + JsonSerializer.Serialize(snapshot);
-        var content = await AiAnswerService.CompleteAsync(settings, systemPrompt, userPrompt, cancellationToken,
+        var content = await AiAgentService.CompleteAsync("homework", settings, systemPrompt, userPrompt, cancellationToken,
             TimeSpan.FromMinutes(3), images);
         return ParseResults(content, snapshot, images);
     }

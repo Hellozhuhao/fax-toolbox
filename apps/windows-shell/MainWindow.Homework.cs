@@ -93,7 +93,7 @@ public partial class MainWindow
         {
             var detail = homeworkSmokeMode ? await aiRuntime!.RunAsync("homework", "explain", cancellation.Token,
                 () => Task.FromResult("结论：x = 2。\n\n推理步骤\n1. 从 2x + 1 = 5 出发。\n2. 两边同时减去 1，得到 2x = 4。\n3. 两边除以 2，得到 x = 2。")) :
-                await aiRuntime!.ExplainHomeworkAsync(aiRuntime.LoadSettings() ??
+                await aiRuntime!.ExplainHomeworkAsync(aiRuntime.LoadSettings("homework") ??
                     throw new InvalidDataException("尚未配置 AI 服务。"), item, cancellation.Token);
             if (!cancellation.IsCancellationRequested)
             {
@@ -345,7 +345,7 @@ public partial class MainWindow
         if (assignedModule != "homework" || activeModule != "homework" || homeworkBusy || homeworkLoading ||
             !IsChaoxingUrl(CourseView.CoreWebView2?.Source) || IsLoginPage(CourseView.CoreWebView2!.Source)) return;
         AiSettings? settings;
-        try { settings = homeworkSmokeMode ? null : aiRuntime?.LoadSettings() ??
+        try { settings = homeworkSmokeMode ? null : aiRuntime?.LoadSettings("homework") ??
             throw new InvalidDataException("尚未配置 AI 服务。请先填写 API Key。"); }
         catch (Exception error) when (error is InvalidDataException or JsonException or IOException)
         { PublishHomeworkStatus(error.Message); PublishHomeworkProgress(0, error.Message); return; }

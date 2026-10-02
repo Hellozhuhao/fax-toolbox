@@ -1,4 +1,5 @@
 using System.IO;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace FaxToolbox.Windows;
@@ -11,10 +12,9 @@ namespace FaxToolbox.Windows;
 internal sealed class AiModuleRuntime(BackendClient backend)
 {
     private readonly string scopeId = Guid.NewGuid().ToString("N");
-    private long courseGeneration;
-    private long homeworkGeneration;
+    private readonly ConcurrentDictionary<string, long> generations = new(StringComparer.Ordinal);
 
-    public AiSettings? LoadSettings() => AiSettings.Load();
+    public AiSettings? LoadSettings(string consumer) => AiSettings.Load(consumer);
     public bool SupportsBalance(AiSettings? settings) => AiBalanceService.Supports(settings);
     public Task<AiBalance> QueryBalanceAsync(AiSettings settings, CancellationToken cancellation) =>
         AiBalanceService.QueryAsync(settings, cancellation);
@@ -38,9 +38,8 @@ internal sealed class AiModuleRuntime(BackendClient backend)
         Func<Task<T>> work)
     {
         cancellation.ThrowIfCancellationRequested();
-        var generation = consumer == "course" ? Interlocked.Increment(ref courseGeneration) :
-            consumer == "homework" ? Interlocked.Increment(ref homeworkGeneration) :
-            throw new ArgumentOutOfRangeException(nameof(consumer));
+        AiConsumerRegistry.RequireOperation(consumer, operation);
+        var generation = generations.AddOrUpdate(consumer, 1, (_, previous) => checked(previous + 1));
         var requestId = Guid.NewGuid().ToString("N");
         await backend.RequestAsync("ai.begin", new { scopeId, consumer, requestId, generation, operation });
         var finished = false;

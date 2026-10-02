@@ -13,22 +13,36 @@ internal sealed record AiSettings(string Endpoint, string Model, string Encrypte
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "FaxToolbox", "ai-settings.json");
 
-    public static AiSettings? Load()
+    private static string ConsumerPath(string consumer) => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "FaxToolbox", "ai", consumer + ".json");
+
+    public static AiSettings? Load() => Load("course");
+
+    public static AiSettings? Load(string consumer)
     {
-        if (!File.Exists(PathOnDisk)) return null;
-        var settings = JsonSerializer.Deserialize<AiSettings>(File.ReadAllText(PathOnDisk));
+        AiConsumerRegistry.Require(consumer);
+        var path = ConsumerPath(consumer);
+        // Existing installations keep their single configuration until each consumer is customized.
+        if (!File.Exists(path) && (consumer is "course" or "homework")) path = PathOnDisk;
+        if (!File.Exists(path)) return null;
+        var settings = JsonSerializer.Deserialize<AiSettings>(File.ReadAllText(path));
         if (settings is null) throw new InvalidDataException("AI 设置文件无效");
         Validate(settings.Endpoint, settings.Model);
         return settings;
     }
 
-    public static void Save(AiSettings settings)
+    public static void Save(AiSettings settings) => Save("course", settings);
+
+    public static void Save(string consumer, AiSettings settings)
     {
+        AiConsumerRegistry.Require(consumer);
         Validate(settings.Endpoint, settings.Model);
-        Directory.CreateDirectory(Path.GetDirectoryName(PathOnDisk)!);
-        var temporary = PathOnDisk + ".tmp";
+        var path = ConsumerPath(consumer);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var temporary = path + ".tmp";
         File.WriteAllText(temporary, JsonSerializer.Serialize(settings));
-        File.Move(temporary, PathOnDisk, true);
+        File.Move(temporary, path, true);
     }
 
     public static void Validate(string endpoint, string model)
@@ -194,7 +208,7 @@ internal static class AiAnswerService
         if (previousWrongAnswers is { Count: > 0 })
             userPrompt += "\n页面已明确判定以下组合错误，请重新推理并给出不同的组合：" +
                 JsonSerializer.Serialize(previousWrongAnswers);
-        var content = await CompleteAsync(settings, systemPrompt, userPrompt, cancellationToken);
+        var content = await AiAgentService.CompleteAsync("course", settings, systemPrompt, userPrompt, cancellationToken);
         var answers = ParseAnswers(content, snapshot);
         if (previousWrongAnswers is { Count: > 0 } &&
             previousWrongAnswers.Any(previous => answers.SequenceEqual(previous)))

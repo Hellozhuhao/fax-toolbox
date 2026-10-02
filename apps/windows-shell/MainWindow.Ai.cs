@@ -16,6 +16,7 @@ public partial class MainWindow
     private CancellationTokenSource? aiAnswerCancellation;
     private CancellationTokenSource? aiBalanceCancellation;
     private bool aiTestInProgress;
+    private string selectedAiConsumer = "course";
 
     private void PublishAiStatus(string detail)
     {
@@ -27,19 +28,30 @@ public partial class MainWindow
         }));
     }
 
+    private void SelectAiConsumer(string consumer)
+    {
+        AiConsumerRegistry.Require(consumer);
+        selectedAiConsumer = consumer;
+        PublishAiConfiguration();
+        _ = RefreshAiBalanceAsync();
+    }
+
     private void ConfigureAi()
     {
         if (smokeMode) return;
         try
         {
-            var dialog = new AiSettingsDialog(this, aiRuntime?.LoadSettings());
+            var dialog = new AiSettingsDialog(this, aiRuntime?.LoadSettings(selectedAiConsumer), selectedAiConsumer);
             if (dialog.ShowDialog() == true && dialog.Settings is not null)
             {
-                aiAnswerCancellation?.Cancel();
-                CancelHomeworkReview();
-                if (activeModule == "homework") PublishHomeworkStatus("AI 配置已更新，请重新开始校对。");
+                if (selectedAiConsumer == "course") aiAnswerCancellation?.Cancel();
+                if (selectedAiConsumer == "homework")
+                {
+                    CancelHomeworkReview();
+                    if (activeModule == "homework") PublishHomeworkStatus("AI 配置已更新，请重新开始校对。");
+                }
                 PublishAiConfiguration();
-                PublishAiStatus($"已保存 {dialog.Settings.Model}。下次答题将使用此配置。");
+                PublishAiTestStatus("idle", $"已保存 {AiConsumerRegistry.Require(selectedAiConsumer).Name} 的 {dialog.Settings.Model} 配置。");
                 _ = RefreshAiBalanceAsync();
             }
         }
@@ -54,11 +66,20 @@ public partial class MainWindow
         if (ShellView.CoreWebView2 is null) return;
         try
         {
-            var settings = aiRuntime?.LoadSettings();
+            var settings = aiRuntime?.LoadSettings(selectedAiConsumer);
             var preset = AiProviderPresets.Match(settings);
+            var consumers = AiConsumerRegistry.All.Select(consumer =>
+            {
+                var configured = aiRuntime?.LoadSettings(consumer.Id);
+                return new { id = consumer.Id, name = consumer.Name,
+                    configured = configured is not null,
+                    provider = AiProviderPresets.Match(configured).Name,
+                    model = configured?.Model ?? "" };
+            }).ToArray();
             ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
             {
                 v = 1, kind = "ai.config", configured = settings is not null,
+                consumer = selectedAiConsumer, consumers,
                 provider = preset.Name, model = settings?.Model ?? "",
                 endpoint = settings?.Endpoint ?? "", hasKey = !string.IsNullOrEmpty(settings?.EncryptedKey),
                 balanceSupported = aiRuntime?.SupportsBalance(settings) == true
@@ -73,26 +94,27 @@ public partial class MainWindow
         }
     }
 
-    private void PublishAiTestStatus(string state, string detail)
+    private void PublishAiTestStatus(string state, string detail, string? consumer = null)
     {
         if (ShellView.CoreWebView2 is null) return;
         ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
         {
-            v = 1, kind = "ai.test.status", state, detail
+            v = 1, kind = "ai.test.status", consumer = consumer ?? selectedAiConsumer, state, detail
         }));
     }
 
-    private void PublishAiBalance(string state, string detail)
+    private void PublishAiBalance(string state, string detail, string? consumer = null)
     {
         if (ShellView.CoreWebView2 is null) return;
         ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
         {
-            v = 1, kind = "ai.balance", state, detail
+            v = 1, kind = "ai.balance", consumer = consumer ?? selectedAiConsumer, state, detail
         }));
     }
 
     private async Task RefreshAiBalanceAsync()
     {
+        var consumer = selectedAiConsumer;
         if (smokeMode)
         {
             PublishAiBalance("unavailable", "测试环境不查询账户余额。");
@@ -103,36 +125,36 @@ public partial class MainWindow
         aiBalanceCancellation = cancellation;
         try
         {
-            var settings = aiRuntime?.LoadSettings();
+            var settings = aiRuntime?.LoadSettings(consumer);
             if (settings is null)
             {
-                PublishAiBalance("unavailable", "保存 AI 配置后可查看余额。");
+                PublishAiBalance("unavailable", "保存 AI 配置后可查看余额。", consumer);
                 return;
             }
             if (aiRuntime?.SupportsBalance(settings) != true)
             {
-                PublishAiBalance("unavailable", "当前服务商尚无已适配的余额查询接口。");
+                PublishAiBalance("unavailable", "当前服务商尚无已适配的余额查询接口。", consumer);
                 return;
             }
-            PublishAiBalance("loading", "正在查询 API 余额…");
+            PublishAiBalance("loading", "正在查询 API 余额…", consumer);
             var balance = await aiRuntime.QueryBalanceAsync(settings, cancellation.Token);
             if (!ReferenceEquals(aiBalanceCancellation, cancellation)) return;
             var totals = string.Join(" · ", balance.Entries.Select(entry =>
                 (entry.Currency == "CNY" ? "¥" : "$") +
                 entry.Total.ToString("0.00", CultureInfo.InvariantCulture)));
             PublishAiBalance("success", $"API 余额：{(totals.Length > 0 ? totals : "未返回金额")} · " +
-                (balance.IsAvailable ? "可用" : "不可用") + $" · {DateTime.Now:HH:mm} 更新");
+                (balance.IsAvailable ? "可用" : "不可用") + $" · {DateTime.Now:HH:mm} 更新", consumer);
         }
         catch (OperationCanceledException) when (!ReferenceEquals(aiBalanceCancellation, cancellation)) { }
         catch (OperationCanceledException)
         {
-            PublishAiBalance("error", "余额查询超时，请稍后刷新。");
+            PublishAiBalance("error", "余额查询超时，请稍后刷新。", consumer);
         }
         catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
             System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException or NotSupportedException)
         {
             if (ReferenceEquals(aiBalanceCancellation, cancellation))
-                PublishAiBalance("error", error.Message);
+                PublishAiBalance("error", error.Message, consumer);
         }
         finally
         {
@@ -143,24 +165,25 @@ public partial class MainWindow
     private async Task TestAiConnectionAsync()
     {
         if (smokeMode || aiTestInProgress) return;
+        var consumer = selectedAiConsumer;
         aiTestInProgress = true;
-        PublishAiTestStatus("testing", "正在发送一道简单测试题；不会读取当前课程。最长等待 20 秒。");
+        PublishAiTestStatus("testing", "正在发送一道简单测试题；不会读取当前网页。最长等待 20 秒。", consumer);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var watch = Stopwatch.StartNew();
         try
         {
-            var settings = aiRuntime?.LoadSettings() ?? throw new InvalidDataException("尚未配置 AI 服务。请先选择服务商并保存 API Key。");
+            var settings = aiRuntime?.LoadSettings(consumer) ?? throw new InvalidDataException("尚未配置当前模块的 AI 服务。请先选择服务商并保存 API Key。");
             await aiRuntime!.TestConnectionAsync(settings, timeout.Token);
-            PublishAiTestStatus("success", $"连接成功，模型响应格式有效（{watch.Elapsed.TotalSeconds:F1} 秒）。");
+            PublishAiTestStatus("success", $"连接成功，模型响应格式有效（{watch.Elapsed.TotalSeconds:F1} 秒）。", consumer);
         }
         catch (OperationCanceledException)
         {
-            PublishAiTestStatus("error", "连接测试超过 20 秒。请检查服务商状态和网络，或稍后重试。");
+            PublishAiTestStatus("error", "连接测试超过 20 秒。请检查服务商状态和网络，或稍后重试。", consumer);
         }
         catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
             System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException)
         {
-            PublishAiTestStatus("error", error.Message);
+            PublishAiTestStatus("error", error.Message, consumer);
         }
         finally { aiTestInProgress = false; }
     }
@@ -181,7 +204,7 @@ public partial class MainWindow
         try
         {
             Trace("AI answer attempt started");
-            var settings = smokeAi ? null : aiRuntime?.LoadSettings();
+            var settings = smokeAi ? null : aiRuntime?.LoadSettings("course");
             if (!smokeAi && settings is null)
             {
                 PublishAiStatus("尚未配置 AI 服务；请在左侧设置接口、模型和 API Key。");

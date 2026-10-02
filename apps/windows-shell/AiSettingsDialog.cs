@@ -11,6 +11,7 @@ namespace FaxToolbox.Windows;
 internal sealed class AiSettingsDialog : Window
 {
     private readonly AiSettings? previous;
+    private readonly AiConsumer consumer;
     private readonly PasswordBox key = new();
     private readonly TextBox endpoint = new();
     private readonly TextBox model = new();
@@ -24,8 +25,9 @@ internal sealed class AiSettingsDialog : Window
 
     private static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
 
-    public AiSettingsDialog(Window owner, AiSettings? previousSettings)
+    public AiSettingsDialog(Window owner, AiSettings? previousSettings, string consumerId = "course")
     {
+        consumer = AiConsumerRegistry.Require(consumerId);
         previous = previousSettings;
         selected = AiProviderPresets.Match(previous);
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
@@ -35,7 +37,7 @@ internal sealed class AiSettingsDialog : Window
         subtle = Brush(dark ? "#A3A3AD" : "#74716E");
         border = Brush(dark ? "#35363E" : "#E6E4E1");
         accent = Brush(dark ? "#7858EB" : "#D66B49");
-        Owner = owner; FontFamily = owner.FontFamily; Title = "配置 AI 服务";
+        Owner = owner; FontFamily = owner.FontFamily; Title = "配置 " + consumer.Name;
         Width = 620; Height = 625; MinWidth = 540; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize; ShowInTaskbar = false;
@@ -56,7 +58,7 @@ internal sealed class AiSettingsDialog : Window
         heading.ColumnDefinitions.Add(new ColumnDefinition());
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var title = new StackPanel();
-        title.Children.Add(new TextBlock { Text = "AI 答题服务", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = text });
+        title.Children.Add(new TextBlock { Text = consumer.Name + " · 模型配置", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = text });
         title.Children.Add(new TextBlock { Text = "选择服务商，填写自己的 API Key。", FontSize = 12, Foreground = subtle, Margin = new Thickness(0, 5, 0, 0) });
         heading.Children.Add(title);
         var close = PlainButton("✕"); close.Width = 32; close.Height = 32; close.Click += (_, _) => Close();
@@ -179,7 +181,7 @@ internal sealed class AiSettingsDialog : Window
             var encrypted = key.Password.Length > 0 ? VaultCrypto.Protect(key.Password) :
                 sameConfiguration ? previous!.EncryptedKey : "";
             var settings = new AiSettings(url, name, encrypted);
-            AiSettings.Save(settings); Settings = settings; key.Clear(); DialogResult = true;
+            AiSettings.Save(consumer.Id, settings); Settings = settings; key.Clear(); DialogResult = true;
         }
         catch (Exception error) when (error is InvalidDataException or UriFormatException)
         { MessageBox.Show(this, error.Message, "AI 答题设置", MessageBoxButton.OK, MessageBoxImage.Information); }

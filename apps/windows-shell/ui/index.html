@@ -72,14 +72,15 @@
 
     <section id="view-ai" class="view" hidden>
       <div class="eyebrow">CORE SERVICE / AI</div><h2>AI 服务</h2>
-      <p class="lead">一处管理模型与连接；学习通答题和作业校对各自拥有独立的请求状态。</p>
+      <p class="lead">按工具分别配置模型与密钥；新增工具可接入同一套 AI 运行接口。</p>
       <div class="ai-service-grid">
-        <article class="card ai-service-primary"><div class="service-heading"><span class="service-glyph">AI</span><div><span class="eyebrow">MODEL CONNECTION</span><h3>模型连接</h3></div></div>
+        <article class="card ai-service-primary"><div class="service-heading"><span class="service-glyph">AI</span><div><span class="eyebrow">AGENT / MODEL</span><h3 id="ai-config-heading">学习通答题配置</h3></div></div>
+          <div class="ai-consumer-switch" role="group" aria-label="选择 AI 配置"><button class="selected" type="button" data-ai-consumer="course">学习通答题</button><button type="button" data-ai-consumer="homework">作业校对</button></div>
           <p id="ai-config-summary" class="ai-config-summary">正在读取 AI 配置…</p>
           <div class="ai-balance-row"><span id="ai-balance" aria-live="polite">API 余额：正在读取…</span><button id="ai-balance-refresh" class="secondary" type="button" disabled>刷新</button></div>
           <div class="ai-actions"><button id="ai-configure" type="button">管理配置</button><button id="ai-test" class="secondary" type="button">测试连接</button></div>
           <p id="ai-test-result" class="muted" aria-live="polite"></p></article>
-        <div class="ai-consumers"><article class="card ai-consumer"><span class="eyebrow">CONSUMER / COURSE</span><h3>学习通答题</h3><p id="ai-course-state">等待请求</p><small>仅处理当前学习通标签的可见题目。</small></article><article class="card ai-consumer"><span class="eyebrow">CONSUMER / HOMEWORK</span><h3>作业校对</h3><p id="ai-homework-state">等待请求</p><small>只读取作业题目，结果留在作业模块。</small></article></div>
+        <div class="ai-consumers"><article class="card ai-consumer"><span class="eyebrow">CONSUMER / COURSE</span><h3>学习通答题</h3><p id="ai-course-state">等待请求</p><small id="ai-course-config">正在读取配置…</small></article><article class="card ai-consumer"><span class="eyebrow">CONSUMER / HOMEWORK</span><h3>作业校对</h3><p id="ai-homework-state">等待请求</p><small id="ai-homework-config">正在读取配置…</small></article></div>
       </div><div class="card ai-service-log"><h3>最近一次模型响应</h3><p id="ai-result" class="muted" aria-live="polite">当前没有 AI 答题请求。</p></div>
     </section>
 

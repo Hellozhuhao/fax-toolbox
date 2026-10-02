@@ -119,6 +119,7 @@ kbd{font:10px "PingFang SC","PingFang TC","Microsoft YaHei UI","Segoe UI",sans-s
 .control-explain{font-size:11px;line-height:1.5;color:var(--subtle);margin:10px 0 0}
 .course-control .status{border-top:1px solid var(--border);padding-top:10px;margin-top:12px}.course-control .status strong{margin:0;font-size:14px}.course-control .status p{margin:4px 0 0}
 .ai-config-summary{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:11px;line-height:1.55;color:var(--text);margin:10px 0}
+.ai-consumer-switch{display:flex;gap:8px;margin:14px 0 10px}.ai-consumer-switch button{width:auto;min-height:34px;margin:0;padding:6px 15px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:18px;font-size:11px}.ai-consumer-switch button.selected{background:var(--accent);color:#fff;border-color:var(--accent)}
 .ai-balance-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 11px;font-size:11px;color:var(--text)}.ai-balance-row span{min-width:0;overflow-wrap:anywhere}.ai-balance-row button{flex:none;width:auto;min-height:30px;padding:2px 10px;font-size:11px}
 .ai-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ai-actions button,.ai-card .ai-actions button{width:100%;margin:0;padding:4px 8px;min-height:38px;font-size:11px}
 #ai-test-result,#settings-ai-test-result{min-height:1em;margin:9px 0 0}

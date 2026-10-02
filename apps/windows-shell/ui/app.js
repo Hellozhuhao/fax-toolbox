@@ -188,21 +188,30 @@
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
-    const detail = message.error || (!message.configured ? '尚未配置 AI 服务。请选择服务商并保存 API Key。' :
+    const detail = message.error || (!message.configured ? '此工具尚未配置模型。请选择服务商并保存 API Key。' :
       `服务商：${message.provider}  ·  模型：${message.model}\n接口：${message.endpoint}\nAPI Key：${message.hasKey ? '已加密保存' : '未填写'}`);
+    const consumer = message.consumer || 'course';
+    $('ai-config-heading').textContent = consumer === 'homework' ? '作业校对配置' : '学习通答题配置';
+    for (const button of document.querySelectorAll('[data-ai-consumer]')) button.classList.toggle('selected', button.dataset.aiConsumer === consumer);
+    for (const item of message.consumers || []) {
+      const target = $('ai-' + item.id + '-config');
+      if (target) target.textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置模型';
+      if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置学习通 AI';
+      if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置作业 AI';
+    }
     $('ai-config-summary').textContent = detail;
     balanceAvailable = !!(message.configured && message.hasKey && message.balanceSupported);
-    $('course-ai-summary').textContent = message.configured ? `${message.provider} · ${message.model}` : detail;
-    $('homework-ai-summary').textContent = message.configured ? `${message.provider} · ${message.model}` : detail;
     $('ai-balance-refresh').disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiBalance(message) {
+    if (message.consumer && message.consumer !== document.querySelector('[data-ai-consumer].selected')?.dataset.aiConsumer) return;
     const detail = message.detail || 'API 余额暂不可用。';
     $('ai-balance').textContent = detail;
     balanceLoading = message.state === 'loading';
     $('ai-balance-refresh').disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiTest(message) {
+    if (message.consumer && message.consumer !== document.querySelector('[data-ai-consumer].selected')?.dataset.aiConsumer) return;
     const detail = message.detail || '';
     $('ai-test-result').textContent = detail;
     $('ai-test').disabled = message.state === 'testing';
@@ -351,6 +360,10 @@
   $('course-stop').addEventListener('click', () => send('course.stop'));
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));
   $('ai-configure').addEventListener('click', () => send('ai.configure'));
+  for (const button of document.querySelectorAll('[data-ai-consumer]')) button.addEventListener('click', () => {
+    $('ai-test-result').textContent = '';
+    send('ai.select', {consumer: button.dataset.aiConsumer});
+  });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
   $('vault-add').addEventListener('click', () => send('vault.save'));

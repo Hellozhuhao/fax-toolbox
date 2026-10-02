@@ -25,8 +25,10 @@ impl AiModule {
             return Err(Fault("BAD_REQUEST", "invalid AI scope"));
         }
         let consumer = text(params, "consumer")?;
-        if consumer != "course" && consumer != "homework" {
-            return Err(Fault("BAD_REQUEST", "unknown AI consumer"));
+        if consumer.is_empty() || consumer.len() > 32 ||
+            !consumer.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-') ||
+            !consumer.as_bytes()[0].is_ascii_lowercase() {
+            return Err(Fault("BAD_REQUEST", "invalid AI consumer"));
         }
         Ok((scope.to_owned(), consumer.to_owned()))
     }
@@ -48,8 +50,13 @@ impl ModuleHandler for AiModule {
                 let request_id = Self::request_id(params)?;
                 let generation = positive(params, "generation")?;
                 let operation = text(params, "operation")?;
-                let valid = matches!((key.1.as_str(), operation),
-                    ("course", "answer") | ("homework", "review" | "explain"));
+                let valid = match key.1.as_str() {
+                    "course" => operation == "answer",
+                    "homework" => matches!(operation, "review" | "explain"),
+                    _ => !operation.is_empty() && operation.len() <= 32 &&
+                        operation.bytes().all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-') &&
+                        operation.as_bytes()[0].is_ascii_lowercase(),
+                };
                 if !valid { return Err(Fault("BAD_REQUEST", "operation is not allowed for consumer")); }
                 if let Some(previous) = self.active.get(&key) {
                     if generation <= previous.generation {
@@ -116,5 +123,18 @@ mod tests {
         let request = json!({"scopeId": A, "consumer": "course", "requestId": R1,
             "generation": 1, "operation": "review"});
         assert_eq!(module.handle("ai.begin", &request).unwrap_err().0, "BAD_REQUEST");
+    }
+
+    #[test]
+    fn future_consumer_has_isolated_lease_and_validated_identity() {
+        let mut module = AiModule::default();
+        let future = json!({"scopeId": A, "consumer": "future-tool", "requestId": R1,
+            "generation": 1, "operation": "summarize"});
+        assert_eq!(module.handle("ai.begin", &future).unwrap()["state"], "RUNNING");
+        assert_eq!(module.handle("ai.state", &json!({"scopeId": A,
+            "consumer": "course"})).unwrap()["active"], false);
+        assert_eq!(module.handle("ai.begin", &json!({"scopeId": A,
+            "consumer": "../other", "requestId": R1, "generation": 1,
+            "operation": "summarize"})).unwrap_err().0, "BAD_REQUEST");
     }
 }

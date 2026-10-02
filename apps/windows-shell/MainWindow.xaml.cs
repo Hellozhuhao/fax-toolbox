@@ -348,6 +348,17 @@ public partial class MainWindow : Window
                     "document.getElementById('ai-balance').textContent");
                 if ((JsonSerializer.Deserialize<string>(balance) ?? "").Contains("正在读取", StringComparison.Ordinal))
                 { FailSmoke("AI balance status was not rendered"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.querySelector('[data-ai-consumer=homework]').click()");
+                var selectedConsumer = "";
+                for (var attempt = 0; attempt < 20 && selectedConsumer != "作业校对配置"; attempt++)
+                {
+                    selectedConsumer = JsonSerializer.Deserialize<string>(await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('ai-config-heading').textContent")) ?? "";
+                    if (selectedConsumer != "作业校对配置") await Task.Delay(100);
+                }
+                if (selectedConsumer != "作业校对配置")
+                { FailSmoke("AI consumer switch did not update its configuration panel"); return; }
                 PassSmoke();
             }
             else if (homeworkSmokeMode)
@@ -498,6 +509,7 @@ public partial class MainWindow : Window
                 case "course.jump": await JumpToChapterAsync(message.GetProperty("chapterId").GetString() ?? ""); break;
                 case "answers.save": await SaveAnswersAsync(message); break;
                 case "ai.configure": ConfigureAi(); break;
+                case "ai.select": SelectAiConsumer(message.GetProperty("consumer").GetString() ?? ""); break;
                 case "ai.get-config": PublishAiConfiguration(); break;
                 case "ai.test": await TestAiConnectionAsync(); break;
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
