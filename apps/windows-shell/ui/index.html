@@ -73,7 +73,7 @@
     <section id="view-ai" class="view" hidden>
       <div class="agent-layout">
         <section class="card agent-workspace" aria-label="Agent 工作区">
-          <div class="agent-workspace-heading"><div><h3>新任务</h3><small id="agent-root">未选择项目文件夹</small></div><div class="agent-heading-actions"><button id="agent-folder" class="secondary" type="button">打开文件夹</button><button id="agent-clear" class="secondary" type="button" title="清空当前对话">新对话</button></div></div>
+          <div class="agent-workspace-heading"><div><h3 id="agent-task-title">新任务</h3><small id="agent-root">未选择项目文件夹</small></div><div class="agent-heading-actions"><button id="agent-folder" class="secondary" type="button">打开文件夹</button><button id="agent-clear" class="secondary" type="button" title="清空当前对话">新对话</button></div></div>
           <div id="agent-timeline" class="agent-timeline" role="log" aria-live="polite"><div class="agent-empty">描述任务，Agent 会列出步骤并记录操作。</div></div>
           <div id="agent-approval" class="agent-approval" hidden><strong id="agent-approval-title">等待确认</strong><pre id="agent-approval-detail"></pre><div><button id="agent-approve" type="button">执行</button><button id="agent-reject" class="secondary" type="button">拒绝</button></div></div>
           <form id="agent-form" class="agent-composer"><textarea id="agent-prompt" rows="3" maxlength="4000" placeholder="让 Agent 处理工具箱任务或项目文件…" aria-label="给 Agent 的任务"></textarea><div><span id="agent-state" aria-live="polite"></span><button id="agent-send" type="submit">发送</button><button id="agent-cancel" class="secondary" type="button" hidden>停止</button></div></form>

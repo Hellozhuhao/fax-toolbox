@@ -349,6 +349,7 @@ public partial class MainWindow
         try
         {
             target.CancelAiRequest("标签已关闭，AI 请求已取消。");
+            target.CancelAgent();
             target.CancelHomeworkReview();
             target.homeworkExplanationWindow?.Close();
             if (target.courseSessionId is not null && target.courseState != "STOPPED")

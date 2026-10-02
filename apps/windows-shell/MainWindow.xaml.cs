@@ -365,6 +365,19 @@ public partial class MainWindow : Window
                     if (await replace != "已修改 note.txt" || File.ReadAllText(documentPath) != "after")
                     { FailSmoke("Agent approved edit was not applied"); return; }
                 }
+                using (var command = JsonDocument.Parse("{\"program\":\"git\",\"args\":[\"status\",\"--short\"]}"))
+                {
+                    Trace("Agent command smoke beginning");
+                    var run = RunAgentCommandAsync(command.RootElement, CancellationToken.None);
+                    Trace("Agent command smoke awaiting prompt");
+                    for (var attempt = 0; attempt < 20 && agentApproval is null; attempt++) await Task.Delay(50);
+                    if (agentApproval is null) { FailSmoke("Agent project command skipped approval"); return; }
+                    Trace("Agent command smoke approving");
+                    agentApproval.TrySetResult(true);
+                    Trace("Agent command smoke waiting for result");
+                    if (!(await run).Contains("退出码：", StringComparison.Ordinal))
+                    { FailSmoke("Agent project command did not return an exit status"); return; }
+                }
                 PassSmoke();
             }
             else if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
@@ -770,6 +783,7 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        CancelAgent();
         homeworkClosed = true;
         CancelHomeworkReview();
         if (!smokeMode || tabSmokeMode)

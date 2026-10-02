@@ -236,7 +236,7 @@
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
     }
     if (message.kind === 'agent.root') $('agent-root').textContent = message.detail || '未选择项目文件夹';
-    if (message.kind === 'agent.clear') { const timeline = $('agent-timeline'); timeline.replaceChildren(); const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); $('agent-prompt').value = ''; }
+    if (message.kind === 'agent.clear') { const timeline = $('agent-timeline'); timeline.replaceChildren(); const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); $('agent-prompt').value = ''; $('agent-task-title').textContent = '新任务'; }
     if (message.kind === 'agent.approval') { agentApprovalId = message.extra?.id || ''; $('agent-approval-title').textContent = message.detail || '等待确认'; $('agent-approval-detail').textContent = message.extra?.preview || ''; $('agent-approval').hidden = false; }
     if (message.kind === 'agent.approval.clear') { agentApprovalId = ''; $('agent-approval').hidden = true; }
     if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); }
@@ -396,7 +396,7 @@
   $('agent-cancel').addEventListener('click', () => send('agent.cancel'));
   $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
-  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if (!prompt || agentBusy) return; $('agent-prompt').value = ''; send('agent.send', {prompt}); });
+  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if (!prompt || agentBusy) return; if ($('agent-task-title').textContent === '新任务') $('agent-task-title').textContent = prompt.slice(0, 28); $('agent-prompt').value = ''; send('agent.send', {prompt}); });
   $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
