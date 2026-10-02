@@ -46,7 +46,7 @@ if ($Test) {
     & dotnet run --project $aiTests --no-restore
     if ($LASTEXITCODE -ne 0) { throw 'AI agent tests failed' }
     $executable = Join-Path $root 'apps\windows-shell\bin\Debug\net10.0-windows\FaxToolbox.Windows.exe'
-    foreach ($mode in @('--smoke', '--ai-dialog-smoke', '--course-smoke', '--course-video-smoke', '--course-video-quiz-smoke', '--course-sticky-quiz-smoke', '--course-generic-quiz-smoke', '--course-overlay-quiz-smoke', '--course-diagnostics-smoke', '--course-session-smoke', '--course-result-smoke', '--course-catalog-result-smoke', '--course-manual-next-smoke', '--course-document-smoke', '--course-challenge-smoke', '--course-pause-smoke', '--course-login-smoke', '--course-catalog-smoke', '--course-ai-smoke', '--course-controls-smoke', '--course-retry-smoke', '--tabs-smoke', '--homework-smoke')) {
+    foreach ($mode in @('--smoke', '--ai-dialog-smoke', '--agent-smoke', '--course-smoke', '--course-video-smoke', '--course-video-quiz-smoke', '--course-sticky-quiz-smoke', '--course-generic-quiz-smoke', '--course-overlay-quiz-smoke', '--course-diagnostics-smoke', '--course-session-smoke', '--course-result-smoke', '--course-catalog-result-smoke', '--course-manual-next-smoke', '--course-document-smoke', '--course-challenge-smoke', '--course-pause-smoke', '--course-login-smoke', '--course-catalog-smoke', '--course-ai-smoke', '--course-controls-smoke', '--course-retry-smoke', '--tabs-smoke', '--homework-smoke')) {
         $output = Join-Path $root ('.cache\windows-' + $mode.TrimStart('-') + '.txt')
         Remove-Item -LiteralPath $output, "$output.trace" -ErrorAction SilentlyContinue
         $process = Start-Process -FilePath $executable -ArgumentList @($mode, $output) -WindowStyle Hidden -PassThru

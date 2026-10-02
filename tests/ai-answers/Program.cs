@@ -52,7 +52,8 @@ if (AiProviderPresets.All.Select(item => item.Id).Distinct().Count() != AiProvid
     throw new Exception("provider IDs must be unique");
 if (AiProviderPresets.Match(null).Id != "deepseek")
     throw new Exception("first-time configuration should start with a provider preset");
-if (AiConsumerRegistry.All.Count != 2 || AiConsumerRegistry.Require("course").Name != "学习通答题")
+if (AiConsumerRegistry.All.Count != 3 || AiConsumerRegistry.Require("course").Name != "学习通答题" ||
+    !AiConsumerRegistry.Require("agent").Operations.Contains("chat"))
     throw new Exception("AI consumer registration failed");
 AiConsumerRegistry.Register(new AiConsumer("future-tool", "新工具", new HashSet<string> { "summarize" }));
 AiConsumerRegistry.RequireOperation("future-tool", "summarize");

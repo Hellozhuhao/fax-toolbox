@@ -399,6 +399,30 @@ button[aria-disabled="true"] { background-image: none; }
 .ai-consumer{margin:0;min-height:116px}
 .ai-consumer h3{margin:7px 0 4px}.ai-consumer p{margin:0 0 5px;font-weight:700;font-size:13px;overflow-wrap:anywhere}
 .ai-consumer small{color:var(--subtle);line-height:1.5}
+.ai-consumer[data-ai-consumer]{cursor:pointer;transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.ai-consumer[data-ai-consumer]:hover{transform:translateY(-2px)}
+.ai-consumer[data-ai-consumer].selected{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent),0 8px 24px #00000012}
+.ai-consumer[data-ai-consumer]:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.agent-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(270px,.75fr);gap:16px;margin-top:18px;align-items:start}
+.agent-side{display:grid;gap:14px}.agent-side .ai-consumers{grid-template-columns:1fr;gap:8px}
+.agent-side .ai-consumer{min-height:0;padding:14px 17px}.agent-side .ai-consumer h3{margin:0 0 4px}.agent-side .ai-consumer p{margin:0 0 3px}
+.agent-workspace{padding:0;min-width:0;overflow:hidden;display:flex;flex-direction:column;min-height:0;height:clamp(420px,62vh,680px)}
+.agent-workspace-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 21px;border-bottom:1px solid var(--border)}
+.agent-workspace-heading h3{margin:0 0 4px}.agent-workspace-heading small{display:block;max-width:390px;color:var(--subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-heading-actions{display:flex;gap:7px;flex:none}.agent-heading-actions button{width:auto;min-height:34px;padding:5px 12px;margin:0}
+.agent-timeline{flex:1;min-height:0;overflow:auto;padding:18px 21px;display:flex;flex-direction:column;gap:14px}
+.agent-empty{margin:auto;text-align:center;color:var(--subtle);font-size:14px}
+.agent-entry{max-width:92%;padding:11px 14px;border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow-wrap:anywhere}
+.agent-entry small{display:block;margin-bottom:5px;color:var(--subtle);font-size:10px;font-weight:750}.agent-entry p{margin:0;white-space:pre-wrap;line-height:1.6;font-size:13px}
+.agent-entry.agent-user{align-self:flex-end;background:color-mix(in srgb,var(--accent) 11%,var(--panel))}.agent-entry.agent-assistant{align-self:flex-start;background:var(--panel)}
+.agent-entry.agent-step,.agent-entry.agent-tool,.agent-entry.agent-status{align-self:stretch;max-width:100%;padding:6px 11px;background:transparent;box-shadow:none}.agent-entry.agent-error{border-color:var(--accent);color:var(--accent)}
+.agent-approval{margin:0 18px 12px;padding:14px;border:1px solid var(--accent);border-radius:15px;background:var(--surface)}.agent-approval[hidden]{display:none}.agent-approval pre{max-height:180px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 Consolas,monospace}.agent-approval div{display:flex;gap:8px}.agent-approval button{width:auto;margin:0;padding:6px 18px}
+.agent-composer{padding:14px 18px 18px;border-top:1px solid var(--border)}.agent-composer textarea{width:100%;min-height:76px;resize:vertical;box-sizing:border-box;border-radius:13px;padding:12px;font:inherit;background:var(--surface);color:var(--text);border:1px solid var(--border)}
+.agent-composer>div{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px}.agent-composer #agent-state{margin-right:auto;color:var(--subtle);font-size:12px}.agent-composer button{width:auto;margin:0;padding:7px 20px}
+.agent-side .ai-service-primary{padding:18px}.agent-side .ai-actions{gap:7px}.agent-side .ai-actions button{min-height:38px}.agent-side .ai-config-summary{font-size:12px}
+.agent-side .ai-balance-row{gap:5px;flex-wrap:wrap}
+.agent-side .ai-balance-row[hidden]{display:none}
+.agent-layout+.ai-service-log{margin-top:16px}
 .ai-service-log{margin-top:2px}.ai-service-log p{font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere}
 .activity-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:18px 0}
 .activity-overview .card{min-height:104px;padding:18px;margin:0}.activity-overview span,.activity-overview small{display:block;color:var(--subtle);font-size:11px}
@@ -439,4 +463,6 @@ button[aria-disabled="true"] { background-image: none; }
 .developer-only[hidden]{display:none!important}
 [data-developer-tool][hidden],.nav-flyout [hidden],.palette [hidden]{display:none!important}
 @media(max-width:930px){.ai-service-grid{grid-template-columns:1fr}.ai-consumers{grid-template-columns:repeat(2,minmax(0,1fr))}.diagnostics-tools{align-items:flex-start;flex-direction:column}}
+@media(max-width:1050px){.agent-layout{grid-template-columns:1fr}.agent-side{grid-template-columns:1fr}.agent-side .ai-consumers{grid-template-columns:repeat(3,minmax(0,1fr))}.agent-workspace{height:clamp(420px,62vh,620px)}}
+@media(max-width:620px){.agent-side .ai-consumers{grid-template-columns:1fr}.agent-workspace-heading{align-items:flex-start;flex-direction:column}.agent-workspace{height:clamp(400px,65vh,560px)}.agent-heading-actions{width:100%}}
 @media(max-width:620px){.activity-overview{grid-template-columns:1fr}.ai-consumers,.settings-layout{grid-template-columns:1fr}.settings-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.command-meta{display:none}}

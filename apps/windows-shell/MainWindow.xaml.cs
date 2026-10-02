@@ -99,7 +99,7 @@ public partial class MainWindow : Window
             "--course-pause-smoke" or "--course-login-smoke" or "--course-catalog-smoke" or
             "--course-ai-smoke" or "--course-controls-smoke" or "--course-retry-smoke" or "--tabs-smoke" or "--homework-smoke";
         courseLiveSmokeMode = args.Length == 3 && args[1] == "--course-live-smoke";
-        smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" || courseSmokeMode || courseLiveSmokeMode);
+        smokeMode = args.Length == 3 && (args[1] is "--smoke" or "--ai-dialog-smoke" or "--agent-smoke" || courseSmokeMode || courseLiveSmokeMode);
         smokeOutput = smokeMode ? args[2] : null;
         smokeDataDirectory = tabSmokeMode ? tabsSmokeDataDirectory ??=
                 Path.Combine(Path.GetTempPath(), "FaxToolbox-tabs-smoke-" + Guid.NewGuid().ToString("N")) :
@@ -321,7 +321,52 @@ public partial class MainWindow : Window
                 await using var output = File.Create(preview);
                 await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
             }
-            if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
+            if (smokeMode && Environment.GetCommandLineArgs()[1] == "--agent-smoke")
+            {
+                agentProjectRoot = root;
+                try { ResolveAgentPath("..\\outside.txt", false); FailSmoke("Agent accepted a path outside the project"); return; }
+                catch (InvalidDataException) { }
+                try { ResolveAgentPath(".git\\config", false); FailSmoke("Agent accepted a protected path"); return; }
+                catch (InvalidDataException) { }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openAi()");
+                var ready = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "!document.getElementById('view-ai').hidden && !!document.getElementById('agent-prompt') && document.querySelectorAll('[data-ai-consumer]').length===3");
+                if (ready != "true") { FailSmoke("Agent workspace or model selectors were not rendered"); return; }
+                var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
+                await using (var output = File.Create(agentPreview))
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.applyThemeFromHost('dark')");
+                await Task.Delay(450);
+                var darkAgentPreview = Path.Combine(root, ".cache", "agent-workspace-dark-preview.png");
+                await using (var output = File.Create(darkAgentPreview))
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                PublishAgent("event", "Agent 可用", new { type = "assistant" });
+                var rendered = "";
+                for (var attempt = 0; attempt < 20 && rendered != "Agent 可用"; attempt++)
+                {
+                    rendered = JsonSerializer.Deserialize<string>(await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('.agent-assistant p')?.textContent || ''")) ?? "";
+                    if (rendered != "Agent 可用") await Task.Delay(100);
+                }
+                if (rendered != "Agent 可用") { FailSmoke("Agent messages were not rendered"); return; }
+                var project = Path.Combine(smokeDataDirectory!, "agent-project");
+                Directory.CreateDirectory(project);
+                agentProjectRoot = project;
+                var documentPath = Path.Combine(project, "note.txt");
+                File.WriteAllText(documentPath, "before");
+                using (var edit = JsonDocument.Parse("{\"path\":\"note.txt\",\"old_text\":\"before\",\"new_text\":\"after\"}"))
+                {
+                    var replace = ReplaceAgentTextAsync(edit.RootElement, CancellationToken.None);
+                    for (var attempt = 0; attempt < 20 && agentApproval is null; attempt++) await Task.Delay(50);
+                    if (agentApproval is null || File.ReadAllText(documentPath) != "before")
+                    { FailSmoke("Agent changed a file before approval"); return; }
+                    agentApproval.TrySetResult(true);
+                    if (await replace != "已修改 note.txt" || File.ReadAllText(documentPath) != "after")
+                    { FailSmoke("Agent approved edit was not applied"); return; }
+                }
+                PassSmoke();
+            }
+            else if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
             {
                 var dialog = new AiSettingsDialog(this, null);
                 dialog.Show();
@@ -367,7 +412,7 @@ public partial class MainWindow : Window
             }
             else if (courseSmokeMode || courseLiveSmokeMode)
             {
-                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('module-course').click()");
             }
             else if (smokeMode)
             {
@@ -513,6 +558,12 @@ public partial class MainWindow : Window
                 case "ai.get-config": PublishAiConfiguration(); break;
                 case "ai.test": await TestAiConnectionAsync(); break;
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
+                case "agent.folder": SelectAgentFolder(); break;
+                case "agent.send": await SendAgentAsync(message); break;
+                case "agent.cancel": CancelAgent(); break;
+                case "agent.clear": ClearAgent(); break;
+                case "agent.approve": ResolveAgentApproval(message, true); break;
+                case "agent.reject": ResolveAgentApproval(message, false); break;
                 case "diagnostics.inspect": await InspectCurrentPageAsync(); break;
                 case "diagnostics.devtools": if (developerMode) OpenPageDevTools(); break;
                 case "diagnostics.export": await ExportDiagnosticsAsync(); break;

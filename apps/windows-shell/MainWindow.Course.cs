@@ -587,7 +587,7 @@ public partial class MainWindow
         if (second.Visibility != Visibility.Visible)
         { FailSmoke("new tab did not become clickable immediately"); return; }
         if (!await WaitForTabUiAsync(second)) { FailSmoke("second home tab did not load"); return; }
-        await second.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('open-course-card').click()");
+        await second.ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('module-course').click()");
         if (!await WaitForTabCourseAsync(second) ||
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))

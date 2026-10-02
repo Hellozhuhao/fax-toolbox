@@ -16,7 +16,7 @@ public partial class MainWindow
     private CancellationTokenSource? aiAnswerCancellation;
     private CancellationTokenSource? aiBalanceCancellation;
     private bool aiTestInProgress;
-    private string selectedAiConsumer = "course";
+    private string selectedAiConsumer = "agent";
 
     private void PublishAiStatus(string detail)
     {

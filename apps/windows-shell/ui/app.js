@@ -18,7 +18,8 @@
   let activityFilter = 'all';
   let developerMode = false;
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
-  const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'AI 服务', activity: '状态', settings: '设置', vault: '密码箱'};
+  const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'Agent', activity: '状态', settings: '设置', vault: '密码箱'};
+  $('home-tool-count').textContent = String(document.querySelectorAll('#view-home .module-card:not([hidden])').length);
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
   function show(view, record = true) {
@@ -82,8 +83,8 @@
     show('homework'); send('homework.activate');
   }
   function openAi() {
-    activeModule = 'ai'; $('workspace-module').textContent = 'AI 服务';
-    $('workspace-detail').textContent = '模型连接和请求状态由 AI 服务统一管理。';
+    activeModule = 'ai'; $('workspace-module').textContent = 'Agent';
+    $('workspace-detail').textContent = '处理项目任务，并管理各模块的模型连接。';
     show('ai'); send('ai.activate'); send('ai.get-config');
   }
   function goBack() {
@@ -117,7 +118,6 @@
   function renderCourse(message) {
     courseState = message.state || courseState; courseReady = !!message.ready;
     $('course-state').textContent = stateName(courseState); $('course-detail').textContent = message.detail || '';
-    $('home-course').textContent = stateName(courseState);
     logActivity('学习通刷课', stateName(courseState), message.detail || '状态已更新');
     if (message.url) $('course-url').textContent = message.url;
     $('course-open').textContent = message.url ? '返回学习通页面' : '打开学习通首页';
@@ -188,11 +188,11 @@
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
-    const detail = message.error || (!message.configured ? '此工具尚未配置模型。请选择服务商并保存 API Key。' :
-      `服务商：${message.provider}  ·  模型：${message.model}\n接口：${message.endpoint}\nAPI Key：${message.hasKey ? '已加密保存' : '未填写'}`);
+    const detail = message.error || (!message.configured ? '尚未配置模型' :
+      `${message.provider} · ${message.model}\nAPI Key ${message.hasKey ? '已保存' : '未填写'}`);
     const consumer = message.consumer || 'course';
-    $('ai-config-heading').textContent = consumer === 'homework' ? '作业校对配置' : '学习通答题配置';
-    for (const button of document.querySelectorAll('[data-ai-consumer]')) button.classList.toggle('selected', button.dataset.aiConsumer === consumer);
+    $('ai-config-heading').textContent = consumer === 'agent' ? 'Agent 配置' : consumer === 'homework' ? '作业校对配置' : '学习通答题配置';
+    for (const item of document.querySelectorAll('[data-ai-consumer]')) { item.classList.toggle('selected', item.dataset.aiConsumer === consumer); item.setAttribute('aria-pressed', String(item.dataset.aiConsumer === consumer)); }
     for (const item of message.consumers || []) {
       const target = $('ai-' + item.id + '-config');
       if (target) target.textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置模型';
@@ -201,6 +201,7 @@
     }
     $('ai-config-summary').textContent = detail;
     balanceAvailable = !!(message.configured && message.hasKey && message.balanceSupported);
+    document.querySelector('.agent-side .ai-balance-row').hidden = !balanceAvailable;
     $('ai-balance-refresh').disabled = !balanceAvailable || balanceLoading;
   }
   function renderAiBalance(message) {
@@ -215,6 +216,30 @@
     const detail = message.detail || '';
     $('ai-test-result').textContent = detail;
     $('ai-test').disabled = message.state === 'testing';
+  }
+  let agentBusy = false;
+  let agentApprovalId = '';
+  function addAgentEvent(type, detail) {
+    const timeline = $('agent-timeline');
+    timeline.querySelector('.agent-empty')?.remove();
+    const entry = document.createElement('div'); entry.className = 'agent-entry agent-' + (['user', 'assistant', 'step', 'tool', 'error', 'status'].includes(type) ? type : 'status');
+    const label = document.createElement('small'); label.textContent = ({user: '你', assistant: 'Agent', step: '步骤', tool: '工具', error: '错误', status: '状态'})[type] || '状态';
+    const body = document.createElement('p'); body.textContent = detail || '';
+    entry.append(label, body); timeline.append(entry); timeline.scrollTop = timeline.scrollHeight;
+  }
+  function renderAgentMessage(message) {
+    if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
+    if (message.kind === 'agent.state') {
+      agentBusy = !!message.extra?.busy; $('agent-state').textContent = agentBusy ? (message.detail || '正在处理') : '';
+      $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
+      $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
+      $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
+    }
+    if (message.kind === 'agent.root') $('agent-root').textContent = message.detail || '未选择项目文件夹';
+    if (message.kind === 'agent.clear') { const timeline = $('agent-timeline'); timeline.replaceChildren(); const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); $('agent-prompt').value = ''; }
+    if (message.kind === 'agent.approval') { agentApprovalId = message.extra?.id || ''; $('agent-approval-title').textContent = message.detail || '等待确认'; $('agent-approval-detail').textContent = message.extra?.preview || ''; $('agent-approval').hidden = false; }
+    if (message.kind === 'agent.approval.clear') { agentApprovalId = ''; $('agent-approval').hidden = true; }
+    if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); }
   }
   function renderHomeworkStatus(message) {
     $('homework-page').textContent = message.url || '尚未打开';
@@ -308,6 +333,7 @@
     if (message.kind === 'ai.config') renderAiConfig(message);
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
+    if (message.kind.startsWith('agent.')) renderAgentMessage(message);
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => {
     if (item.dataset.view === 'workspace') showWorkspace();
@@ -316,7 +342,7 @@
     else if (item.dataset.view === 'ai') openAi();
     else show(item.dataset.view);
   });
-  $('open-course-card').addEventListener('click', openCourse);
+  $('open-tools-card').addEventListener('click', () => show('modules'));
   for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : openDemo());
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
@@ -360,10 +386,18 @@
   $('course-stop').addEventListener('click', () => send('course.stop'));
   $('answers-save').addEventListener('click', () => send('answers.save', {chapter: $('answers-chapter').value.trim(), answers: $('answers-text').value}));
   $('ai-configure').addEventListener('click', () => send('ai.configure'));
-  for (const button of document.querySelectorAll('[data-ai-consumer]')) button.addEventListener('click', () => {
-    $('ai-test-result').textContent = '';
-    send('ai.select', {consumer: button.dataset.aiConsumer});
-  });
+  for (const item of document.querySelectorAll('[data-ai-consumer]')) {
+    const select = () => { $('ai-test-result').textContent = ''; send('ai.select', {consumer: item.dataset.aiConsumer}); };
+    item.addEventListener('click', select);
+    item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
+  }
+  $('agent-folder').addEventListener('click', () => send('agent.folder'));
+  $('agent-clear').addEventListener('click', () => send('agent.clear'));
+  $('agent-cancel').addEventListener('click', () => send('agent.cancel'));
+  $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
+  $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
+  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if (!prompt || agentBusy) return; $('agent-prompt').value = ''; send('agent.send', {prompt}); });
+  $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
   $('vault-add').addEventListener('click', () => send('vault.save'));

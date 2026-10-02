@@ -14,6 +14,7 @@ internal static class AiConsumerRegistry
 {
     private static readonly ConcurrentDictionary<string, AiConsumer> Consumers = new(StringComparer.Ordinal)
     {
+        ["agent"] = new("agent", "Agent", new HashSet<string>(["chat"], StringComparer.Ordinal)),
         ["course"] = new("course", "学习通答题", new HashSet<string>(["answer"], StringComparer.Ordinal)),
         ["homework"] = new("homework", "作业校对", new HashSet<string>(["review", "explain"], StringComparer.Ordinal))
     };
