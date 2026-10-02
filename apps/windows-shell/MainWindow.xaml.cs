@@ -333,6 +333,7 @@ public partial class MainWindow : Window
                     "!document.getElementById('view-ai').hidden && !!document.getElementById('agent-prompt') && document.querySelectorAll('[data-ai-consumer]').length===3");
                 if (ready != "true") { FailSmoke("Agent workspace or model selectors were not rendered"); return; }
                 var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
+                Directory.CreateDirectory(Path.GetDirectoryName(agentPreview)!);
                 await using (var output = File.Create(agentPreview))
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
                 await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.applyThemeFromHost('dark')");
