@@ -77,7 +77,7 @@ if (AiPricingCatalog.Resolve(new AiSettings("https://custom.example/chat/complet
 if (AiPricingCatalog.ParseDeepSeek("deepseek-flash 百万tokens输入（缓存命中） 空闲时段 0.02元 高峰时段 0.04元 百万tokens输入（缓存未命中） 空闲时段 1元 高峰时段 2元 百万tokens输出 空闲时段 4元 高峰时段 8元") is not { Length: 2 } liveDeepSeek ||
     liveDeepSeek[1].OutputPerMillion != 8m)
     throw new Exception("Official DeepSeek price refresh could not parse its table");
-if (AiPricingCatalog.ParseQwen("qwen-plus 模型价格 华北2（北京） 输入<=128k 输入 0.8 每百万tokens 输出 2 每百万tokens 输入（缓存命中） 0.16 每百万tokens 128k<输入<=256k 输入 2.4 每百万tokens 输出 20 每百万tokens 输入（缓存命中） 0.48 每百万tokens 256k<输入<=1m 输入 4.8 每百万tokens 输出 48 每百万tokens 输入（缓存命中） 0.96 每百万tokens 新加坡") is not { Length: 3 } liveQwen ||
+if (AiPricingCatalog.ParseQwen("qwen-plus 模型价格 华北 2（北京） 输入<=128k 输入 0.8 每百万 tokens 输出 2 每百万 tokens 输入（缓存命中） 0.16 每百万 tokens 128k<输入<=256k 输入 2.4 每百万 tokens 输出 20 每百万 tokens 输入（缓存命中） 0.48 每百万 tokens 256k<输入<=1m 输入 4.8 每百万 tokens 输出 48 每百万 tokens 输入（缓存命中） 0.96 每百万 tokens 新加坡") is not { Length: 3 } liveQwen ||
     liveQwen[2].OutputPerMillion != 48m)
     throw new Exception("Official Qwen price refresh could not parse its tiers");
 if (AiPricingCatalog.ParseSiliconFlow("Qwen/Qwen3.6-27B 视觉输入 输入: ￥1.8 / M Tokens 输出: ￥14.4 / M Tokens") is not { Length: 1 } liveSilicon ||
