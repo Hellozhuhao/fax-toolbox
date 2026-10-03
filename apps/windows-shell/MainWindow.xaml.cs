@@ -341,6 +341,14 @@ public partial class MainWindow : Window
                     (() => {
                       const workspace = document.querySelector('.agent-workspace').getBoundingClientRect();
                       if (workspace.height < innerHeight * .68) return false;
+                      const sidebar = document.querySelector('.agent-side').getBoundingClientRect();
+                      const session = document.querySelector('.agent-session-row').getBoundingClientRect();
+                      const composer = document.getElementById('agent-form').getBoundingClientRect();
+                      if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
+                      document.getElementById('agent-inspector-toggle').click();
+                      if (document.getElementById('agent-inspector').hidden) return false;
+                      document.getElementById('agent-inspector-close').click();
+                      if (!document.getElementById('agent-inspector').hidden) return false;
                       if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return false;
                       const labels = [...document.querySelectorAll('#toolbox-context-menu button')].map(item => item.textContent);
                       if (!labels.includes('粘贴') || !labels.includes('新建会话')) return false;
@@ -358,6 +366,18 @@ public partial class MainWindow : Window
                 var darkAgentPreview = Path.Combine(root, ".cache", "agent-workspace-dark-preview.png");
                 await using (var output = File.Create(darkAgentPreview))
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('.sidebar .nav-item[data-view=\"modules\"]').click()");
+                    await using (var output = File.Create(Path.Combine(root, ".cache", "ui-tools-preview.png")))
+                        await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('.sidebar .nav-item[data-view=\"settings\"]').click()");
+                    await using (var output = File.Create(Path.Combine(root, ".cache", "ui-settings-preview.png")))
+                        await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openAi()");
+                }
                 await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (async () => {
                       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2;
@@ -430,6 +450,11 @@ public partial class MainWindow : Window
                 var nextSession = currentAgentSession.Id;
                 if (nextSession == originalSession || agentSessions.Count != 2 || agentHistory.Count != 0)
                 { FailSmoke("Agent new conversation did not isolate history"); return; }
+                using (var rename = JsonDocument.Parse("{\"sessionId\":\"" + nextSession +
+                    "\",\"title\":\"重命名任务\"}"))
+                    RenameAgentSession(rename.RootElement);
+                if (currentAgentSession.Title != "重命名任务")
+                { FailSmoke("Agent session rename was not saved"); return; }
                 using (var select = JsonDocument.Parse("{\"sessionId\":\"" + originalSession + "\"}"))
                     SelectAgentSession(select.RootElement);
                 if (currentAgentSession.Id != originalSession ||
@@ -661,6 +686,7 @@ public partial class MainWindow : Window
                 case "agent.cancel": CancelAgent(); break;
                 case "agent.clear": NewAgentSession(); break;
                 case "agent.session.select": SelectAgentSession(message); break;
+                case "agent.session.rename": RenameAgentSession(message); break;
                 case "agent.session.delete": DeleteAgentSession(message); break;
                 case "agent.approve": ResolveAgentApproval(message, true); break;
                 case "agent.reject": ResolveAgentApproval(message, false); break;

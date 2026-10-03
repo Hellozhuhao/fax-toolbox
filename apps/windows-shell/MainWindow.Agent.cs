@@ -130,7 +130,7 @@ public partial class MainWindow
             currentAgentSession = agentSessions.OrderByDescending(item => item.UpdatedAt).First();
         PublishAgent("sessions", extra: new { activeId = currentAgentSession.Id,
             sessions = agentSessions.OrderByDescending(item => item.UpdatedAt)
-                .Select(item => new { id = item.Id, title = item.Title, updatedAt = item.UpdatedAt }).ToArray() });
+                .Select(item => new { id = item.Id, title = item.Title, root = item.ProjectRoot, updatedAt = item.UpdatedAt }).ToArray() });
         PublishAgent("snapshot", extra: new { title = currentAgentSession.Title,
             root = agentProjectRoot, events = currentAgentSession.Events
                 .Select(item => new { type = item.Type, text = item.Text }).ToArray(),
@@ -164,6 +164,20 @@ public partial class MainWindow
         if (chosen is null) return;
         currentAgentSession = chosen;
         PublishAgentSessions();
+    }
+
+    private void RenameAgentSession(JsonElement message)
+    {
+        if (agentCancellation is not null) return;
+        var id = AgentString(message, "sessionId");
+        var title = AgentString(message, "title").Trim();
+        if (title.Length is < 1 or > 100 || title.Any(char.IsControl)) return;
+        var target = agentSessions.FirstOrDefault(item => item.Id == id);
+        if (target is null) return;
+        target.Title = title;
+        target.UpdatedAt = DateTimeOffset.UtcNow;
+        PersistAgentSessions();
+        RefreshAgentSessionLists();
     }
 
     private void DeleteAgentSession(JsonElement message)
@@ -214,6 +228,7 @@ public partial class MainWindow
         currentAgentSession.UpdatedAt = DateTimeOffset.UtcNow;
         PersistAgentSessions();
         PublishAgent("root", agentProjectRoot);
+        RefreshAgentSessionLists();
     }
 
     private void CancelAgent()
