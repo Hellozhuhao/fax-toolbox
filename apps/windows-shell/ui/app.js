@@ -25,6 +25,7 @@
   function show(view, record = true) {
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
     currentView = view;
+    if (view !== 'ai') { document.querySelector('.agent-side')?.classList.remove('mobile-open'); $('agent-sidebar-toggle')?.setAttribute('aria-expanded', 'false'); }
     for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'ai', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
     const navigation = ['course', 'homework', 'demo', 'ai', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
@@ -230,19 +231,50 @@
   let agentImagesSupported = true;
   let activeAgentSessionId = '';
   const agentDrafts = new Map();
+  let agentSessionSearch = '';
+  function filterAgentSessions() {
+    for (const group of $('agent-session-list').querySelectorAll('.agent-session-group')) {
+      let visible = 0;
+      for (const row of group.querySelectorAll('.agent-session-row')) {
+        row.hidden = !!agentSessionSearch && !row.querySelector('.agent-session-select').textContent.toLocaleLowerCase().includes(agentSessionSearch);
+        if (!row.hidden) visible++;
+      }
+      group.hidden = visible === 0;
+    }
+  }
+  function renameAgentSession(row) {
+    if (agentBusy || row.querySelector('input')) return;
+    const select = row.querySelector('.agent-session-select');
+    const original = select.textContent;
+    const input = document.createElement('input'); input.type = 'text'; input.maxLength = 100;
+    input.className = 'agent-session-rename'; input.value = original;
+    select.hidden = true; row.insertBefore(input, select); input.focus(); input.select();
+    let finished = false;
+    const finish = save => { if (finished) return; finished = true; const title = input.value.trim(); input.remove(); select.hidden = false; if (save && title && title !== original) send('agent.session.rename', {sessionId: row.dataset.sessionId, title}); };
+    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
+    input.addEventListener('blur', () => finish(true));
+  }
   function renderAgentSessions(data) {
     const list = $('agent-session-list'); list.replaceChildren();
+    const groups = new Map();
     for (const session of data.sessions || []) {
+      const project = session.root || '';
+      if (!groups.has(project)) {
+        const group = document.createElement('section'); group.className = 'agent-session-group';
+        const heading = document.createElement('h4'); heading.textContent = project ? project.split(/[\\/]/).filter(Boolean).pop() : '最近'; heading.title = project;
+        group.append(heading); list.append(group); groups.set(project, group);
+      }
       const row = document.createElement('div'); row.className = 'agent-session-row'; row.dataset.sessionId = session.id;
       const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
       select.textContent = session.title || '新任务'; select.title = select.textContent;
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
-      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); });
+      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); document.querySelector('.agent-side').classList.remove('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'false'); });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
       remove.textContent = '×'; remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
       remove.addEventListener('click', () => { if (!agentBusy && confirm('删除这个 Agent 会话及其记录？')) send('agent.session.delete', {sessionId: session.id}); });
-      row.append(select, remove); list.append(row);
+      row.append(select, remove); groups.get(project).append(row);
     }
+    filterAgentSessions();
   }
   function renderAgentUsage(data) {
     const input = Number(data.input || 0), output = Number(data.output || 0);
@@ -289,13 +321,58 @@
     } catch (error) { $('agent-state').textContent = error.message || '图片无法读取'; }
     finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; $('agent-image-file').value = ''; }
   }
+  function renderAgentMarkdown(container, source) {
+    const lines = String(source || '').split(/\r?\n/);
+    let paragraph = [], list = null, listKind = '', code = null;
+    const inline = (target, value) => {
+      for (const part of value.split(/(`[^`]+`|\*\*[^*]+\*\*)/g)) {
+        if (!part) continue;
+        if (part.startsWith('`') && part.endsWith('`')) { const node = document.createElement('code'); node.textContent = part.slice(1, -1); target.append(node); }
+        else if (part.startsWith('**') && part.endsWith('**')) { const node = document.createElement('strong'); node.textContent = part.slice(2, -2); target.append(node); }
+        else target.append(document.createTextNode(part));
+      }
+    };
+    const flushParagraph = () => { if (!paragraph.length) return; const node = document.createElement('p'); inline(node, paragraph.join('\n')); container.append(node); paragraph = []; };
+    const closeList = () => { list = null; listKind = ''; };
+    for (const line of lines) {
+      if (line.trim().startsWith('```')) {
+        flushParagraph(); closeList();
+        if (code) { container.append(code); code = null; }
+        else { code = document.createElement('pre'); const child = document.createElement('code'); code.append(child); }
+        continue;
+      }
+      if (code) { code.firstChild.textContent += (code.firstChild.textContent ? '\n' : '') + line; continue; }
+      if (!line.trim()) { flushParagraph(); closeList(); continue; }
+      const heading = /^(#{1,3})\s+(.+)$/.exec(line);
+      if (heading) { flushParagraph(); closeList(); const node = document.createElement('h' + Math.min(heading[1].length + 3, 6)); inline(node, heading[2]); container.append(node); continue; }
+      const item = /^\s*(?:([-*])|(\d+)[.)])\s+(.+)$/.exec(line);
+      if (item) { flushParagraph(); const kind = item[2] ? 'ol' : 'ul'; if (!list || listKind !== kind) { list = document.createElement(kind); container.append(list); listKind = kind; } const node = document.createElement('li'); inline(node, item[3]); list.append(node); continue; }
+      closeList(); paragraph.push(line);
+    }
+    flushParagraph(); if (code) container.append(code);
+  }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
     timeline.querySelector('.agent-empty')?.remove();
+    if (type === 'step') {
+      const operation = document.createElement('details'); operation.className = 'agent-operation'; operation.dataset.awaitingOutput = 'true';
+      const summary = document.createElement('summary'); summary.textContent = detail || '执行工具';
+      operation.append(summary); timeline.append(operation); timeline.scrollTop = timeline.scrollHeight; return;
+    }
+    if (type === 'tool') {
+      const operations = [...timeline.querySelectorAll('.agent-operation[data-awaiting-output]')];
+      const operation = operations.at(-1);
+      if (operation) {
+        const output = document.createElement('pre'); output.textContent = detail || ''; operation.append(output);
+        delete operation.dataset.awaitingOutput; timeline.scrollTop = timeline.scrollHeight; return;
+      }
+    }
     const entry = document.createElement('div'); entry.className = 'agent-entry agent-' + (['user', 'assistant', 'step', 'tool', 'error', 'status'].includes(type) ? type : 'status');
     const label = document.createElement('small'); label.textContent = ({user: '你', assistant: 'Agent', step: '步骤', tool: '工具', error: '错误', status: '状态'})[type] || '状态';
-    const body = document.createElement('p'); body.textContent = detail || '';
-    entry.append(label, body); timeline.append(entry); timeline.scrollTop = timeline.scrollHeight;
+    entry.append(label);
+    if (type === 'assistant') renderAgentMarkdown(entry, detail);
+    else { const body = document.createElement('p'); body.textContent = detail || ''; entry.append(body); }
+    timeline.append(entry); timeline.scrollTop = timeline.scrollHeight;
   }
   function renderAgentMessage(message) {
     if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
@@ -312,7 +389,7 @@
       $('agent-root').textContent = data.root || '未选择项目文件夹';
       const timeline = $('agent-timeline'); timeline.replaceChildren();
       for (const entry of data.events || []) addAgentEvent(entry.type, entry.text);
-      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; empty.textContent = '描述任务，Agent 会列出步骤并记录操作。'; timeline.append(empty); }
+      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = '开始一个任务'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';
       agentImages = draft?.images || []; renderAgentImages();
@@ -442,6 +519,12 @@
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
+  for (const card of document.querySelectorAll('#view-modules .library-card')) {
+    card.tabIndex = 0; card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', '打开' + (card.querySelector('h3')?.textContent || '工具'));
+    card.addEventListener('click', event => { if (!event.target.closest('button')) card.querySelector('button')?.click(); });
+    card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.querySelector('button')?.click(); } });
+  }
   window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, showHome: () => show('home'),
     goBack, applyThemeFromHost: theme => setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
@@ -468,6 +551,7 @@
     const session = target.closest('.agent-session-row');
     if (currentView === 'ai' && session) {
       add('切换到此会话', () => session.querySelector('.agent-session-select')?.click(), !agentBusy);
+      add('重命名会话', () => renameAgentSession(session), !agentBusy);
       add('删除此会话', () => session.querySelector('.agent-session-delete')?.click(), !agentBusy);
     }
     const vaultRow = target.closest('.vault-row');
@@ -554,6 +638,11 @@
     item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
+  $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
+  $('agent-inspector-toggle').addEventListener('click', () => { const panel = $('agent-inspector'); panel.hidden = !panel.hidden; $('agent-inspector-toggle').setAttribute('aria-expanded', String(!panel.hidden)); });
+  $('agent-inspector-close').addEventListener('click', () => { $('agent-inspector').hidden = true; $('agent-inspector-toggle').setAttribute('aria-expanded', 'false'); });
+  $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
+  $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
   $('agent-image-file').addEventListener('change', event => addAgentImages([...event.target.files]));
   $('agent-prompt').addEventListener('paste', event => { const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); addAgentImages(files); } });
   $('agent-clear').addEventListener('click', () => send('agent.clear'));
@@ -562,6 +651,7 @@
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
   $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if ((!prompt && !agentImages.length) || agentBusy || agentPreparingImages) return; const images = agentImages; agentImages = []; renderAgentImages(); $('agent-prompt').value = ''; agentDrafts.delete(activeAgentSessionId); send('agent.send', {prompt, images}); });
   $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
+  document.addEventListener('keydown', event => { if (currentView === 'ai' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); $('agent-clear').click(); $('agent-prompt').focus(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
   $('vault-add').addEventListener('click', () => send('vault.save'));
