@@ -389,7 +389,7 @@
       $('agent-root').textContent = data.root || '未选择项目文件夹';
       const timeline = $('agent-timeline'); timeline.replaceChildren();
       for (const entry of data.events || []) addAgentEvent(entry.type, entry.text);
-      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = '开始一个任务'; empty.append(title); timeline.append(empty); }
+      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = '描述任务，Agent 会列出步骤并记录操作。'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';
       agentImages = draft?.images || []; renderAgentImages();
@@ -519,12 +519,6 @@
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
-  for (const card of document.querySelectorAll('#view-modules .library-card')) {
-    card.tabIndex = 0; card.setAttribute('role', 'button');
-    card.setAttribute('aria-label', '打开' + (card.querySelector('h3')?.textContent || '工具'));
-    card.addEventListener('click', event => { if (!event.target.closest('button')) card.querySelector('button')?.click(); });
-    card.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); card.querySelector('button')?.click(); } });
-  }
   window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, showHome: () => show('home'),
     goBack, applyThemeFromHost: theme => setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
