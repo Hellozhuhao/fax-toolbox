@@ -142,7 +142,7 @@
     agentSide.replaceChildren(rail, sideContent);
     const composerActions = $('agent-form').lastElementChild;
     const runSettings = document.createElement('div'); runSettings.className = 'agent-run-settings';
-    runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes"><label><input type="radio" name="agent-mode" value="chat" checked>Chat</label><label><input type="radio" name="agent-mode" value="code">Code</label></div><label for="agent-model-select">模型</label><select id="agent-model-select"></select><label for="agent-effort">思考 <strong id="agent-effort-label">标准</strong></label><input id="agent-effort" type="range" min="0" max="2" step="1" value="1"><span id="agent-model-error" class="muted"></span></div>';
+    runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes" role="radiogroup" aria-label="Agent 模式"><label><input type="radio" name="agent-mode" value="chat" checked><span>Chat</span></label><label><input type="radio" name="agent-mode" value="code"><span>Code</span></label></div><div class="agent-run-label">模型</div><div id="agent-model-list" class="agent-model-list" aria-label="模型选择"></div><label for="agent-effort">思考深度 <strong id="agent-effort-label">标准</strong></label><div class="agent-effort-slider"><input id="agent-effort" type="range" min="0" max="2" step="1" value="1" aria-label="思考深度"></div><span id="agent-model-error" class="muted"></span></div>';
     composerActions.insertBefore(runSettings, $('agent-send'));
     const selectAgentCategory = key => {
       selectAgentPanel(key);
@@ -438,22 +438,52 @@
     $('ai-test-result').textContent = detail;
     $('ai-test').disabled = message.state === 'testing';
   }
+  let agentInstalledModels = [];
+  function agentModelNames(name) {
+    if (name === 'fax-toolbox-qwen3:8k') return ['Qwen3 8B · 长上下文', '本地模型 · 8K 上下文'];
+    if (name === 'huihui_ai/qwen3-abliterated:8b-v2') return ['Qwen3 8B · 默认配置', '本地模型 · 原始上下文'];
+    const title = name.replace(/^hf\.co\//i, '').split('/').pop().replace(/[-_]/g, ' ');
+    return [title || '未配置模型', name];
+  }
+  function renderAgentModelList() {
+    const list = $('agent-model-list');
+    list.replaceChildren();
+    const models = agentProvider === 'ollama' ? agentInstalledModels.slice() : [];
+    if (agentModel && !models.some(item => item.name === agentModel)) models.unshift({name: agentModel});
+    for (const model of models) {
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = 'agent-model-choice'; button.dataset.agentModel = model.name;
+      const selected = model.name === agentModel;
+      button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
+      const [title, detail] = agentModelNames(model.name);
+      const copy = document.createElement('span'); copy.className = 'agent-model-copy';
+      const heading = document.createElement('strong'); heading.textContent = title;
+      const subtitle = document.createElement('small'); subtitle.textContent = detail;
+      copy.append(heading, subtitle); button.append(copy);
+      if (model.size) {
+        const size = document.createElement('span'); size.className = 'agent-model-size';
+        size.textContent = `${(model.size / 1024 ** 3).toFixed(1)} GB`;
+        button.append(size);
+      }
+      list.append(button);
+    }
+    const configure = document.createElement('button'); configure.type = 'button';
+    configure.className = 'agent-model-configure'; configure.textContent = '管理模型连接';
+    list.append(configure);
+  }
   function updateAgentRunOptions() {
     const effortNames = {quick: '快速', normal: '标准', deep: '深入'};
-    const shortModel = agentModel.length > 22 ? agentModel.slice(0, 20) + '…' : agentModel || '选择模型';
+    const shortModel = agentModel ? agentModelNames(agentModel)[0] : '选择模型';
     $('agent-run-toggle').textContent = `${agentMode === 'code' ? 'Code' : 'Chat'} · ${shortModel} · ${effortNames[agentEffort] || '标准'}`;
     $('agent-effort').value = String({quick: 0, normal: 1, deep: 2}[agentEffort] ?? 1);
     $('agent-effort-label').textContent = effortNames[agentEffort] || '标准';
+    $('agent-effort').setAttribute('aria-valuetext', effortNames[agentEffort] || '标准');
     for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.checked = radio.value === agentMode;
     $('agent-prompt-scope').textContent = `${agentModel || '当前模型'} · ${agentMode === 'code' ? 'Code' : 'Chat'}`;
     $('agent-prompt').placeholder = agentMode === 'code' ? '描述要处理的任务…' : '输入消息…';
     const empty = $('agent-timeline').querySelector('.agent-empty strong');
     if (empty) empty.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话';
-    const modelSelect = $('agent-model-select');
-    if (![...modelSelect.options].some(option => option.value === agentModel)) {
-      const option = new Option(agentModel || '未配置', agentModel || '', true, true); modelSelect.insertBefore(option, modelSelect.firstChild);
-    }
-    modelSelect.value = agentModel;
+    renderAgentModelList();
   }
   let agentBusy = false;
   let agentApprovalId = '';
@@ -711,14 +741,8 @@
       $('agent-memory-count').textContent = (message.extra?.archived || 0) ? `· 已整理 ${message.extra.archived} 条` : '';
     }
     if (message.kind === 'agent.models') {
-      const select = $('agent-model-select'); select.replaceChildren();
-      for (const model of message.extra?.models || []) {
-        const label = model.size ? `${model.name} · ${(model.size / 1024 ** 3).toFixed(1)} GB` : model.name;
-        const option = new Option(label, model.name); select.append(option);
-      }
-      if (agentModel && ![...select.options].some(option => option.value === agentModel)) select.prepend(new Option(agentModel, agentModel));
-      select.append(new Option('管理模型配置…', '__configure'));
-      select.value = agentModel || '__configure';
+      agentInstalledModels = Array.isArray(message.extra?.models) ? message.extra.models : [];
+      renderAgentModelList();
       $('agent-model-error').textContent = message.extra?.error || '';
     }
     if (message.kind === 'agent.sessions') {
@@ -1099,10 +1123,12 @@
   $('agent-effort').addEventListener('change', () => {
     if (!agentBusy) send('agent.options', {mode: agentMode, effort: agentEffort});
   });
-  $('agent-model-select').addEventListener('change', event => {
-    const model = event.target.value;
-    if (model === '__configure') send('agent.configure');
-    else if (!agentBusy && model && model !== agentModel) send('agent.model', {model});
+  $('agent-model-list').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button || agentBusy) return;
+    if (button.classList.contains('agent-model-configure')) send('agent.configure');
+    else if (button.dataset.agentModel && button.dataset.agentModel !== agentModel)
+      send('agent.model', {model: button.dataset.agentModel});
     $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
   });
   $('agent-background').addEventListener('change', event => send('agent.background', {text: event.target.value}));

@@ -387,6 +387,47 @@ public partial class MainWindow : Window
                         """);
                     FailSmoke("Agent conversation layout or context menu failed: " + layoutDetail); return;
                 }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
+                ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    v = 1, kind = "agent.models", extra = new { models = new[]
+                    {
+                        new { name = "fax-toolbox-qwen3:8k", size = 5_027_792_703L, family = "qwen3" },
+                        new { name = "huihui_ai/qwen3-abliterated:8b-v2", size = 5_027_793_060L, family = "qwen3" }
+                    } }
+                }));
+                await Task.Delay(100);
+                var runControls = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const panel = document.getElementById('agent-run-panel');
+                      const range = document.getElementById('agent-effort');
+                      const labels = [...panel.querySelectorAll('.agent-run-modes label')];
+                      const rect = range.getBoundingClientRect();
+                      const frame = panel.getBoundingClientRect();
+                      const style = getComputedStyle(range);
+                      if (panel.hidden || labels.length !== 2 || labels[0].getBoundingClientRect().width < 80 ||
+                          labels[1].getBoundingClientRect().width < 80 ||
+                          Math.abs(labels[0].getBoundingClientRect().top - labels[1].getBoundingClientRect().top) > 1 ||
+                          style.paddingLeft !== '0px' || style.paddingRight !== '0px' ||
+                          rect.left < frame.left || rect.right > frame.right ||
+                          panel.querySelectorAll('.agent-model-choice').length < 2 ||
+                          !panel.querySelector('.agent-model-choice.selected') ||
+                          !panel.textContent.includes('Qwen3 8B · 默认配置')) return false;
+                      range.value = '0'; range.dispatchEvent(new Event('input', {bubbles: true}));
+                      if (document.getElementById('agent-effort-label').textContent !== '快速') return false;
+                      range.value = '2'; range.dispatchEvent(new Event('input', {bubbles: true}));
+                      if (document.getElementById('agent-effort-label').textContent !== '深入') return false;
+                      range.value = '1'; range.dispatchEvent(new Event('input', {bubbles: true}));
+                      return true;
+                    })()
+                    """);
+                if (runControls != "true") { FailSmoke("Agent model and effort controls are misaligned"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-run-controls-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
                 var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(agentPreview)!);
                 await using (var output = File.Create(agentPreview))
