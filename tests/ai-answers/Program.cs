@@ -71,6 +71,9 @@ using (var openAiUsage = JsonDocument.Parse("{\"usage\":{\"prompt_tokens\":100,\
 using (var absentUsage = JsonDocument.Parse("{\"choices\":[]}"))
     if (AiAnswerService.ParseUsage(absentUsage.RootElement) is not null)
         throw new Exception("Missing provider usage must not be estimated");
+using (var localThinking = JsonDocument.Parse("{\"reasoning\":\"先分析问题\"}"))
+    if (AiAnswerService.ParseReasoning(localThinking.RootElement) != "先分析问题")
+        throw new Exception("Ollama reasoning was not read");
 var metered = new AiUsage(1000, 200, 750);
 var fridayPeak = new DateTimeOffset(2026, 10, 2, 8, 0, 0, TimeSpan.Zero);
 var sundayOffPeak = new DateTimeOffset(2026, 10, 4, 8, 0, 0, TimeSpan.Zero);
@@ -146,6 +149,20 @@ if (!balance.IsAvailable || balance.Entries.Length != 1 || balance.Entries[0].To
     AiBalanceService.Supports(new AiSettings(AiProviderPresets.All[1].Endpoint, "qwen-plus", "")))
     throw new Exception("AI balance parsing or provider support is wrong");
 Console.WriteLine("PASS AI response validation");
+if (args.Contains("--live-local", StringComparer.Ordinal))
+{
+    var local = AiProviderPresets.All.First(item => item.Id == "ollama");
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+    var reply = await AiAnswerService.CompleteWithUsageAsync(
+        new AiSettings(local.Endpoint, local.Model, ""),
+        "只返回包含 content 字段的 JSON 对象，content 是简体中文。",
+        "你好，请用一句话介绍自己。", timeout.Token);
+    using var parsed = JsonDocument.Parse(reply.Text);
+    if (string.IsNullOrWhiteSpace(parsed.RootElement.GetProperty("content").GetString()) ||
+        reply.Usage is null)
+        throw new Exception("Local model did not return structured Chinese chat and usage");
+    Console.WriteLine("PASS local Ollama Chinese response and usage");
+}
 if (args.Contains("--live", StringComparer.Ordinal))
 {
     var settings = AiSettings.Load() ?? throw new Exception("No saved AI provider configuration");
