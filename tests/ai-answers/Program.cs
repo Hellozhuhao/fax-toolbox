@@ -124,17 +124,38 @@ if (packedContext.Length > 5200 || !packedContext.Contains("用户：继续我�
     !packedContext.Contains("工具结果：") || !packedContext.Contains("最近记录：") ||
     packedContext.Contains("较早记录："))
     throw new Exception("Local context did not prioritize current request and recent tool output");
-if (AgentResponseParser.Parse("{\"type\":\"answer\",\"content\":\"你好\"}", true).Content != "你好" ||
-    AgentResponseParser.Parse("{\"message\":\"你好\"}", true).Content != "你好" ||
-    AgentResponseParser.Parse("{\"type\":\"tool\",\"name\":\"module_status\",\"args\":{}}", true).Type != "tool")
-    throw new Exception("Local Agent response normalization failed");
-try { AgentResponseParser.Parse("{\"type\":\"tool\",\"name\":\"module_status\"}", true);
-    throw new Exception("Incomplete tool call was accepted"); }
-catch (InvalidDataException) { }
 using (var localPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
     new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "你好")))
     if (localPayload.RootElement.GetProperty("response_format").GetProperty("type").GetString() != "json_object")
-        throw new Exception("Local model JSON response mode is missing");
+        throw new Exception("Structured module JSON response mode is missing");
+using (var chatPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "你好",
+    structured: false, reasoningEffort: "none")))
+    if (chatPayload.RootElement.TryGetProperty("response_format", out _) ||
+        chatPayload.RootElement.GetProperty("reasoning_effort").GetString() != "none")
+        throw new Exception("Chat incorrectly forced JSON or lost effort control");
+using (var codePayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "查看模块",
+    structured: false, tools: AgentToolSchemas.All)))
+    if (codePayload.RootElement.TryGetProperty("response_format", out _) ||
+        codePayload.RootElement.GetProperty("tools").GetArrayLength() != 11)
+        throw new Exception("Code did not expose native tool calls");
+using (var toolMessage = JsonDocument.Parse("{\"tool_calls\":[{\"function\":{\"name\":\"module_status\",\"arguments\":\"{}\"}}]}"))
+    if (AiAnswerService.ParseToolCalls(toolMessage.RootElement)[0].Name != "module_status")
+        throw new Exception("Native tool call parsing failed");
+var chatInstructions = AgentPromptCatalog.Build(new AiSettings(localPreset.Endpoint, localPreset.Model, ""),
+    "chat", "deep", "", [], false, "帮我润色一篇文章");
+if (!chatInstructions.Contains("写作任务") || !chatInstructions.Contains("不要输出 JSON"))
+    throw new Exception("Writing chat prompt did not stay text-first");
+if (!AgentPromptCatalog.Build(new AiSettings(localPreset.Endpoint, localPreset.Model, ""),
+    "chat", "normal", "", [], false, "帮我写一篇随笔").Contains("写作任务"))
+    throw new Exception("Common Chinese writing request was not recognized");
+if (AgentMemoryPlanner.ChooseCount([new string('甲', 2000), new string('乙', 2000),
+    "最近一", "最近二", "最近三", "最近四"], "system", "", "", "当前问题", 8192, 6600) < 1)
+    throw new Exception("Memory compression did not trigger near 80% context");
+if (AgentMemoryPlanner.ChooseCount([new string('a', 2800), new string('b', 2800),
+    "最近一", "最近二", "最近三", "最近四"], "system", "", "", "当前问题", 8192, 0, 5200) < 1)
+    throw new Exception("Memory compression did not trigger before the character budget truncates history");
 if (AiProviderPresets.All.Select(item => item.Id).Distinct().Count() != AiProviderPresets.All.Length)
     throw new Exception("provider IDs must be unique");
 if (AiProviderPresets.Match(null).Id != "deepseek")
@@ -170,7 +191,7 @@ if (args.Contains("--live-local", StringComparer.Ordinal))
     var local = AiProviderPresets.All.First(item => item.Id == "ollama");
     var localModel = Environment.GetEnvironmentVariable("FAX_TOOLBOX_LOCAL_MODEL") ?? local.Model;
     var localSettings = new AiSettings(local.Endpoint, localModel, "");
-    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
     var reply = await AiAnswerService.CompleteWithUsageAsync(
         localSettings,
         "只返回包含 content 字段的 JSON 对象，content 是简体中文。",
@@ -180,12 +201,16 @@ if (args.Contains("--live-local", StringComparer.Ordinal))
         reply.Usage is null)
         throw new Exception("Local model did not return structured Chinese chat and usage");
     var agentReply = await AiAgentService.CompleteWithUsageAsync("agent", localSettings,
-        "你是通用中文 Agent。普通对话直接回答。每次只返回一个 JSON 对象，不要 Markdown。" +
-        "最终回答格式：{\"type\":\"final\",\"content\":\"中文回答\"}。" +
-        "调用工具格式：{\"type\":\"tool\",\"name\":\"工具名\",\"args\":{},\"note\":\"说明\"}。",
-        "用户：你好", timeout.Token);
-    if (AgentResponseParser.Parse(agentReply.Text, true) is not { Type: "final", Content: { Length: > 0 } })
-        throw new Exception("Local Agent did not answer a simple greeting");
+        AgentPromptCatalog.Build(localSettings, "chat", "quick", "", [], false, "你好"),
+        "用户：你好", timeout.Token, structured: false, reasoningEffort: "none");
+    if (string.IsNullOrWhiteSpace(agentReply.Text) || agentReply.Text.TrimStart().StartsWith('{'))
+        throw new Exception("Local Chat did not return natural text");
+    var codeReply = await AiAnswerService.CompleteWithUsageAsync(localSettings,
+        "你是项目 Agent。用户要求查看状态时，必须调用 module_status 函数；不要直接回答。",
+        "请调用 module_status 查看当前模块状态。", timeout.Token,
+        structured: false, reasoningEffort: "none", tools: AgentToolSchemas.All);
+    if (codeReply.ToolCalls is not { Count: > 0 } || codeReply.ToolCalls[0].Name != "module_status")
+        throw new Exception("Local Code mode did not use the native tool call");
     Console.WriteLine("PASS local Ollama Chinese response and usage");
 }
 if (args.Contains("--live", StringComparer.Ordinal))

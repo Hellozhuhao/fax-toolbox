@@ -346,7 +346,11 @@ public partial class MainWindow : Window
                       const composer = document.getElementById('agent-form').getBoundingClientRect();
                       if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
                       const rail = document.querySelector('.agent-section-rail');
-                      if (rail.querySelectorAll('button').length !== 6 ||
+                      if (rail.querySelectorAll('button').length !== 8 ||
+                          !document.getElementById('agent-background') ||
+                          !document.getElementById('agent-memory-pool') ||
+                          !document.getElementById('agent-system-prompt') ||
+                          !document.getElementById('agent-run-toggle') ||
                           document.querySelector('.agent-side').dataset.activePanel !== 'sessions' ||
                           document.getElementById('agent-inspector-toggle')) return false;
                       rail.querySelector('[data-agent-section="usage"]').click();
@@ -478,6 +482,19 @@ public partial class MainWindow : Window
                         await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
                     await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openAi()");
                 }
+                // Exercise the image tray even when the installed Agent model is text-only.
+                // The synthetic config changes only this disposable smoke-test WebView.
+                if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('agent-image-file').disabled") == "true")
+                {
+                    ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                    {
+                        v = 1, kind = "ai.config", configured = true, consumer = "agent",
+                        consumers = new[] { new { id = "agent", configured = true,
+                            provider = "视觉测试", model = "测试模型", supportsImages = true } }
+                    }));
+                    await Task.Delay(150);
+                }
                 await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (async () => {
                       const canvas = document.createElement('canvas'); canvas.width = canvas.height = 2;
@@ -497,7 +514,13 @@ public partial class MainWindow : Window
                         "document.querySelectorAll('#agent-attachments .agent-image img').length === 1") == "true";
                     if (!attached) await Task.Delay(100);
                 }
-                if (!attached) { FailSmoke("Agent image attachment was not rendered"); return; }
+                if (!attached)
+                {
+                    var imageState = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "JSON.stringify({state:document.getElementById('agent-state').textContent,disabled:document.getElementById('agent-image-file').disabled,images:document.querySelectorAll('#agent-attachments .agent-image').length})");
+                    FailSmoke("Agent image attachment was not rendered: " + imageState); return;
+                }
+                PublishAiConfiguration();
                 PublishAgent("usage", extra: new { input = 100, output = 20, cached = (long?)25,
                     calls = 1, cost = .00042m, currency = "CNY" });
                 var metered = false;
@@ -840,6 +863,13 @@ public partial class MainWindow : Window
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
                 case "agent.folder": SelectAgentFolder(); break;
                 case "agent.send": await SendAgentAsync(message); break;
+                case "agent.options": UpdateAgentOptions(message); break;
+                case "agent.background": UpdateAgentBackground(message, false); break;
+                case "agent.memory": UpdateAgentBackground(message, true); break;
+                case "agent.system": UpdateAgentSystemPrompt(message); break;
+                case "agent.models": await PublishAgentModelsAsync(); break;
+                case "agent.model": await SelectAgentModelAsync(message); break;
+                case "agent.configure": SelectAiConsumer("agent"); ConfigureAi(); PublishAgentOptions(); break;
                 case "agent.cancel": CancelAgent(); break;
                 case "agent.clear": NewAgentSession(); break;
                 case "agent.session.select": SelectAgentSession(message); break;

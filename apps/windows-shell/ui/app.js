@@ -15,6 +15,7 @@
   const viewHistory = [];
   let currentView = '';
   let restoringAgentSnapshot = false;
+  let agentMode = 'chat', agentEffort = 'normal', agentProvider = '', agentModel = '';
   const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const activity = [];
   let activityFilter = 'all';
@@ -89,11 +90,17 @@
 
     const agentSide = document.querySelector('.agent-side');
     const agentSettings = agentSide.querySelector('.agent-sidebar-settings');
+    const memoryPanel = document.createElement('section'); memoryPanel.className = 'agent-text-panel';
+    memoryPanel.innerHTML = '<label for="agent-background">会话背景</label><textarea id="agent-background" maxlength="1500" rows="6" placeholder="这段对话需要长期记住的背景"></textarea><label for="agent-memory-pool">记忆池 <small id="agent-memory-count"></small></label><textarea id="agent-memory-pool" maxlength="2200" rows="10" placeholder="对话接近上下文上限时自动整理"></textarea>';
+    const promptPanel = document.createElement('section'); promptPanel.className = 'agent-text-panel';
+    promptPanel.innerHTML = '<label for="agent-system-prompt">自定义系统提示词</label><small id="agent-prompt-scope"></small><textarea id="agent-system-prompt" maxlength="3000" rows="12" placeholder="留空使用当前模型与模式的默认提示词"></textarea>';
     const inspector = $('agent-inspector');
     const inspectorDetails = [...inspector.querySelectorAll('.agent-detail')];
     const selectAgentPanel = focusedMenu(agentSide, [
       {key: 'sessions', label: '会话', nodes: [agentSide.querySelector('.agent-sessions')]},
       {key: 'model', label: '模型连接', nodes: [agentSettings.querySelector('.agent-config-panel')]},
+      {key: 'prompts', label: '提示词', nodes: [promptPanel]},
+      {key: 'memory', label: '记忆池', nodes: [memoryPanel]},
       {key: 'modules', label: '模块配置', nodes: [agentSettings.querySelector('.agent-configuration')]},
       {key: 'usage', label: '用量', nodes: [inspectorDetails[0]]},
       {key: 'tools', label: '可用工具', nodes: [inspectorDetails[1]]},
@@ -117,6 +124,8 @@
     const railItems = [
       ['sessions', '会话', '<path d="M4 5h16v12H8l-4 3z"/>'],
       ['model', '模型', '<path d="m12 2 2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z"/>'],
+      ['prompts', '提示词', '<path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/>'],
+      ['memory', '记忆池', '<path d="M5 4h14v16H5zM9 4v16M12 9h4M12 13h4"/>'],
       ['modules', '模块配置', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'],
       ['usage', '用量', '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'],
       ['tools', '可用工具', '<path d="M14 5a5 5 0 0 0-6 6L3 16l5 5 5-5a5 5 0 0 0 6-6l-3 3-4-4z"/>'],
@@ -131,6 +140,10 @@
     const sideContent = document.createElement('div'); sideContent.className = 'agent-side-content';
     sideContent.append(agentHeader, newChat, $('agent-folder'), agentPanels);
     agentSide.replaceChildren(rail, sideContent);
+    const composerActions = $('agent-form').lastElementChild;
+    const runSettings = document.createElement('div'); runSettings.className = 'agent-run-settings';
+    runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes"><label><input type="radio" name="agent-mode" value="chat" checked>Chat</label><label><input type="radio" name="agent-mode" value="code">Code</label></div><label for="agent-model-select">模型</label><select id="agent-model-select"></select><label for="agent-effort">思考 <strong id="agent-effort-label">标准</strong></label><input id="agent-effort" type="range" min="0" max="2" step="1" value="1"><span id="agent-model-error" class="muted"></span></div>';
+    composerActions.insertBefore(runSettings, $('agent-send'));
     const selectAgentCategory = key => {
       selectAgentPanel(key);
       const label = railItems.find(item => item[0] === key)?.[1];
@@ -400,6 +413,7 @@
       if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置学习通 AI';
       if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置作业 AI';
       if (item.id === 'agent') {
+        if (item.configured) { agentModel = item.model || ''; agentProvider = item.provider === '本地模型' ? 'ollama' : item.provider || ''; updateAgentRunOptions(); }
         agentImagesSupported = item.supportsImages !== false;
         $('agent-image-file').disabled = !agentImagesSupported;
         $('agent-image-add').classList.toggle('disabled', !agentImagesSupported);
@@ -423,6 +437,23 @@
     const detail = message.detail || '';
     $('ai-test-result').textContent = detail;
     $('ai-test').disabled = message.state === 'testing';
+  }
+  function updateAgentRunOptions() {
+    const effortNames = {quick: '快速', normal: '标准', deep: '深入'};
+    const shortModel = agentModel.length > 22 ? agentModel.slice(0, 20) + '…' : agentModel || '选择模型';
+    $('agent-run-toggle').textContent = `${agentMode === 'code' ? 'Code' : 'Chat'} · ${shortModel} · ${effortNames[agentEffort] || '标准'}`;
+    $('agent-effort').value = String({quick: 0, normal: 1, deep: 2}[agentEffort] ?? 1);
+    $('agent-effort-label').textContent = effortNames[agentEffort] || '标准';
+    for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.checked = radio.value === agentMode;
+    $('agent-prompt-scope').textContent = `${agentModel || '当前模型'} · ${agentMode === 'code' ? 'Code' : 'Chat'}`;
+    $('agent-prompt').placeholder = agentMode === 'code' ? '描述要处理的任务…' : '输入消息…';
+    const empty = $('agent-timeline').querySelector('.agent-empty strong');
+    if (empty) empty.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话';
+    const modelSelect = $('agent-model-select');
+    if (![...modelSelect.options].some(option => option.value === agentModel)) {
+      const option = new Option(agentModel || '未配置', agentModel || '', true, true); modelSelect.insertBefore(option, modelSelect.firstChild);
+    }
+    modelSelect.value = agentModel;
   }
   let agentBusy = false;
   let agentApprovalId = '';
@@ -607,7 +638,7 @@
       const operation = document.createElement('details'); operation.className = 'agent-operation'; operation.dataset.awaitingOutput = 'true';
       if (!restoringAgentSnapshot) animateNew(operation);
       const summary = document.createElement('summary');
-      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = ['create_file', 'replace_text'].includes(toolName) ? '✎' : toolName === 'open_module' ? '↗' : '◌';
+      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = ['create_file', 'replace_text'].includes(toolName) ? '✎' : toolName === 'open_module' ? '↗' : ['search_files', 'read_file'].includes(toolName) ? '⌕' : '≡';
       const title = document.createElement('strong'); title.className = 'agent-operation-title';
       title.textContent = known ? ({plan: '任务计划', module_status: '模块状态', open_module: '打开模块', project_overview: '项目概览', list_files: '列出文件', read_file: '读取文件', search_files: '搜索文件', create_file: '创建文件', replace_text: '修改文件', run_command: '运行命令', module_action: '模块操作'})[toolName] : (detail || '执行工具');
       summary.append(icon, title);
@@ -649,7 +680,8 @@
       const reasoning = document.createElement('details'); reasoning.className = 'agent-reasoning';
       if (!restoringAgentSnapshot) animateNew(reasoning);
       const summary = document.createElement('summary');
-      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = '◌';
+      const icon = document.createElement('span'); icon.className = 'agent-operation-icon';
+      icon.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6m-5.5 3h5M12 2.5a6.5 6.5 0 0 0-3.6 11.9c.9.6 1.4 1.4 1.5 2.1h4.2c.1-.7.6-1.5 1.5-2.1A6.5 6.5 0 0 0 12 2.5z"/></svg>';
       const title = document.createElement('span'); title.textContent = '思考';
       summary.append(icon, title);
       const body = document.createElement('p'); body.textContent = detail || '';
@@ -665,6 +697,30 @@
   }
   function renderAgentMessage(message) {
     if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
+    if (message.kind === 'agent.options') {
+      agentMode = message.extra?.mode === 'code' ? 'code' : 'chat';
+      agentEffort = ['quick', 'normal', 'deep'].includes(message.extra?.effort) ? message.extra.effort : 'normal';
+      agentProvider = message.extra?.provider || agentProvider;
+      agentModel = message.extra?.model || '';
+      if (document.activeElement !== $('agent-system-prompt')) $('agent-system-prompt').value = message.extra?.systemPrompt || '';
+      updateAgentRunOptions();
+    }
+    if (message.kind === 'agent.memory') {
+      if (document.activeElement !== $('agent-background')) $('agent-background').value = message.extra?.background || '';
+      if (document.activeElement !== $('agent-memory-pool')) $('agent-memory-pool').value = message.extra?.summary || '';
+      $('agent-memory-count').textContent = (message.extra?.archived || 0) ? `· 已整理 ${message.extra.archived} 条` : '';
+    }
+    if (message.kind === 'agent.models') {
+      const select = $('agent-model-select'); select.replaceChildren();
+      for (const model of message.extra?.models || []) {
+        const label = model.size ? `${model.name} · ${(model.size / 1024 ** 3).toFixed(1)} GB` : model.name;
+        const option = new Option(label, model.name); select.append(option);
+      }
+      if (agentModel && ![...select.options].some(option => option.value === agentModel)) select.prepend(new Option(agentModel, agentModel));
+      select.append(new Option('管理模型配置…', '__configure'));
+      select.value = agentModel || '__configure';
+      $('agent-model-error').textContent = message.extra?.error || '';
+    }
     if (message.kind === 'agent.sessions') {
       const nextId = message.extra?.activeId || '';
       if (nextId !== activeAgentSessionId && activeAgentSessionId)
@@ -676,11 +732,17 @@
       const data = message.extra || {};
       $('agent-task-title').textContent = data.title || '新任务';
       $('agent-root').textContent = data.root || '未选择项目文件夹';
+      agentMode = data.mode === 'code' ? 'code' : 'chat';
+      agentEffort = ['quick', 'normal', 'deep'].includes(data.effort) ? data.effort : 'normal';
+      $('agent-background').value = data.background || '';
+      $('agent-memory-pool').value = data.memory || '';
+      $('agent-memory-count').textContent = data.archived ? `· 已整理 ${data.archived} 条` : '';
+      updateAgentRunOptions();
       const timeline = $('agent-timeline'); timeline.replaceChildren();
       restoringAgentSnapshot = true;
       try { for (const entry of data.events || []) addAgentEvent(entry.type, entry.text); }
       finally { restoringAgentSnapshot = false; }
-      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = '描述任务，Agent 会列出步骤并记录操作。'; empty.append(title); timeline.append(empty); }
+      if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';
       agentImages = draft?.images || []; renderAgentImages();
@@ -1016,6 +1078,36 @@
     item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
+  $('agent-run-toggle').addEventListener('click', () => {
+    const panel = $('agent-run-panel'); panel.hidden = !panel.hidden;
+    $('agent-run-toggle').setAttribute('aria-expanded', String(!panel.hidden));
+    if (!panel.hidden && agentProvider === 'ollama') send('agent.models');
+    else if (!panel.hidden) renderAgentMessage({kind: 'agent.models', extra: {models: []}});
+  });
+  document.addEventListener('click', event => {
+    if (!event.target.closest('.agent-run-settings')) {
+      $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
+    }
+  });
+  for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.addEventListener('change', () => {
+    if (!radio.checked || agentBusy) return;
+    agentMode = radio.value; updateAgentRunOptions(); send('agent.options', {mode: agentMode, effort: agentEffort});
+  });
+  $('agent-effort').addEventListener('input', event => {
+    agentEffort = ['quick', 'normal', 'deep'][Number(event.target.value)] || 'normal'; updateAgentRunOptions();
+  });
+  $('agent-effort').addEventListener('change', () => {
+    if (!agentBusy) send('agent.options', {mode: agentMode, effort: agentEffort});
+  });
+  $('agent-model-select').addEventListener('change', event => {
+    const model = event.target.value;
+    if (model === '__configure') send('agent.configure');
+    else if (!agentBusy && model && model !== agentModel) send('agent.model', {model});
+    $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
+  });
+  $('agent-background').addEventListener('change', event => send('agent.background', {text: event.target.value}));
+  $('agent-memory-pool').addEventListener('change', event => send('agent.memory', {text: event.target.value}));
+  $('agent-system-prompt').addEventListener('change', event => send('agent.system', {text: event.target.value}));
   $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
   $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
   $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
