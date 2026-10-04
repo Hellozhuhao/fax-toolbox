@@ -487,7 +487,8 @@ public partial class MainWindow
         foreach (var entry in agentHistory.TakeLast(12))
             transcript.Append(entry.Role).Append("：").AppendLine(entry.Text);
         transcript.Append("用户：").AppendLine(prompt);
-        transcript.Append("项目文件夹：").AppendLine(agentProjectRoot is null ? "未选择" : "已选择（路径由工具处理）");
+        if (agentProjectRoot is not null)
+            transcript.AppendLine("项目文件夹：已选择（路径由工具处理）");
         for (var step = 0; step < 8; step++)
         {
             cancellation.ThrowIfCancellationRequested();

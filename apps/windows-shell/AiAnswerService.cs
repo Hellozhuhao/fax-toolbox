@@ -350,9 +350,7 @@ internal static class AiAnswerService
         var content = answerContent.GetString();
         if (string.IsNullOrWhiteSpace(content))
             throw new InvalidDataException("AI 未返回答案，请人工检查");
-        var reasoning = message.TryGetProperty("reasoning_content", out var reasoningValue) &&
-            reasoningValue.ValueKind == JsonValueKind.String ? reasoningValue.GetString() : null;
-        return new AiCompletionResult(content, ParseUsage(result.RootElement), reasoning);
+        return new AiCompletionResult(content, ParseUsage(result.RootElement), ParseReasoning(message));
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
         {
@@ -363,6 +361,14 @@ internal static class AiAnswerService
         {
             throw new HttpRequestException("本地 Ollama 未启动，请先启动 Ollama。", error);
         }
+    }
+
+    internal static string? ParseReasoning(JsonElement message)
+    {
+        foreach (var key in new[] { "reasoning_content", "reasoning" })
+            if (message.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+                return value.GetString();
+        return null;
     }
 
     public static async Task TestConnectionAsync(AiSettings settings, CancellationToken cancellationToken)
