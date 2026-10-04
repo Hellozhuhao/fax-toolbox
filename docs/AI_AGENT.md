@@ -29,7 +29,7 @@ AI 页面包含独立的 Agent 对话与步骤记录。Agent 的模型配置属�
 下次启动继续使用；图片本身不写入会话文件。
 
 输入框支持最多四张图片和粘贴截图，图片先在本机缩放并转为 JPEG，再传给当前 Agent
-模型。预设的 `qwen-plus` 和本地 Huihui Qwen3 8B 是文字模型，因此图片入口在这些配置下禁用。
+模型。旧预设 `qwen-plus` 和本地 Huihui Qwen3 8B 是文字模型，因此图片入口在这些配置下禁用。
 Chat 模式直接输出自然语言文本，不附带工具；Code 模式使用兼容 Chat Completions 的原生
 `tools`/`tool_calls` 接口，最终回答也是自然语言文本。只有学习通答题和作业校对需要程序读取的
 严格 JSON。工具输出一律当作不可信数据。
@@ -38,8 +38,16 @@ Chat 模式直接输出自然语言文本，不附带工具；Code 模式使用�
 左侧“提示词”可修改当前模型与模式的附加系统提示词；学习通和作业校对的附加提示词在各自
 模型配置中编辑。自定义提示词按接口、模型和功能分别加密保存于
 `%LOCALAPPDATA%\FaxToolbox\agent-prompts.dat`。会话背景由用户设置，随该会话保存。
-快速、标准、深入档位可在输入框旁切换；本地 Ollama 连接会把档位映射为接口支持的
-`reasoning_effort` 值。模型是否实际进行推理取决于所选模型。
+快速、标准、深入档位可在输入框旁切换；本地 Ollama 和阿里百炼 Qwen 3.8
+会把档位映射为接口支持的 `reasoning_effort` 值。Qwen 3.8 分别使用 none、low、medium，
+避免模型默认的高思考开销。模型是否实际进行推理取决于所选模型。
+
+## 国内云端模型
+
+在 Agent 的“管理模型连接”中选择“阿里百炼”，默认使用北京地域接口的 Qwen 3.8 Flash。
+同一密钥可切换 Qwen 3.8 Max 处理要求更高的任务；原有 `qwen-plus` 配置仍可使用。
+Flash 按 2026-10-04 的北京地域公开原价，每百万 token 输入 ¥0.8、输出 ¥2.7；
+Max 为 ¥12、¥36。云端模型仍会遵守服务商的内容规则，不能承诺完全不限制回答。
 
 ## Venice 云端模型
 
@@ -95,6 +103,7 @@ Agent 输入框旁也提供已安装模型的快速切换。
 
 - [DeepSeek Flash](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)：按请求开始时的 UTC 星期与时段切换高峰/空闲单价；输入缓存另计。
 - [阿里百炼 qwen-plus](https://help.aliyun.com/zh/model-studio/qwen-plus)：预设接口位于北京，按单次输入长度选择非思考模式阶梯价；缓存输入另计。
+- [阿里百炼 Qwen 3.8 Flash](https://help.aliyun.com/zh/model-studio/qwen3-8-flash) 与 [Qwen 3.8 Max](https://help.aliyun.com/zh/model-studio/qwen3-8-max)：使用北京地域公开的人民币输入、缓存输入、输出价。
 - [硅基流动 Qwen3.6-27B](https://www.siliconflow.cn/models)：使用页面公开的人民币输入/输出价；页面未给缓存单价，估算时缓存输入按普通输入价计算。
 - [OpenAI GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini)：使用标准即时请求的美元输入、缓存输入、输出价。
 - [Venice Qwen 3.6 Plus](https://venice.ai/models/qwen-3-6-plus) 与 [Venice Uncensored 1.2](https://venice.ai/models/venice-uncensored-1-2)：按各自官方模型页的美元单价估算。若 Uncensored 1.2 未列缓存输入单价，按普通输入价计算。

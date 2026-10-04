@@ -402,7 +402,7 @@
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
-    const modelLabel = name => name === 'qwen-3-6-plus' || name === 'venice-uncensored-1-2' ? agentModelNames(name)[0] : name;
+    const modelLabel = name => ['qwen3.8-flash', 'qwen3.8-max', 'qwen-plus', 'qwen-3-6-plus', 'venice-uncensored-1-2'].includes(name) ? agentModelNames(name)[0] : name;
     const detail = message.error || (!message.configured ? '尚未配置模型' :
       `${message.provider} · ${modelLabel(message.model)}${message.requiresKey ? `\nAPI Key ${message.hasKey ? '已保存' : '未填写'}` : ''}`);
     const consumer = message.consumer || 'course';
@@ -445,6 +445,9 @@
     if (name === 'huihui_ai/qwen3-abliterated:8b-v2') return ['Qwen3 8B · 默认配置', '本地模型 · 原始上下文'];
     if (name === 'qwen-3-6-plus') return ['Qwen 3.6 Plus', 'Venice · 中文写作'];
     if (name === 'venice-uncensored-1-2') return ['Venice Uncensored 1.2', 'Venice · 自由创作'];
+    if (name === 'qwen3.8-flash') return ['Qwen 3.8 Flash', '阿里百炼 · 性价比优先'];
+    if (name === 'qwen3.8-max') return ['Qwen 3.8 Max', '阿里百炼 · 质量优先'];
+    if (name === 'qwen-plus') return ['Qwen Plus', '阿里百炼 · 旧版配置'];
     const title = name.replace(/^hf\.co\//i, '').split('/').pop().replace(/[-_]/g, ' ');
     return [title || '未配置模型', name];
   }
@@ -452,7 +455,8 @@
     const list = $('agent-model-list');
     list.replaceChildren();
     const models = agentProvider === 'ollama' ? agentInstalledModels.slice() :
-      agentProvider === 'venice' ? [{name: 'qwen-3-6-plus'}, {name: 'venice-uncensored-1-2'}] : [];
+      agentProvider === 'venice' ? [{name: 'qwen-3-6-plus'}, {name: 'venice-uncensored-1-2'}] :
+      agentProvider === 'qwen' ? [{name: 'qwen3.8-flash'}, {name: 'qwen3.8-max'}, {name: 'qwen-plus'}] : [];
     if (agentModel && !models.some(item => item.name === agentModel)) models.unshift({name: agentModel});
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';

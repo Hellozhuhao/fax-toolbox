@@ -27,8 +27,13 @@ internal sealed class AiSettingsDialog : Window
     private readonly Dictionary<string, TextBox> promptEditors = [];
     private readonly StackPanel customFields = new();
     private readonly StackPanel modelFields = new();
-    private readonly StackPanel veniceModelChoices = new();
-    private readonly Dictionary<string, Button> veniceModelButtons = [];
+    private readonly StackPanel presetModelChoices = new();
+    private readonly Dictionary<string, Button> presetModelButtons = [];
+    private readonly Dictionary<string, string> selectedPresetModels = new()
+    {
+        ["qwen"] = AiProviderPresets.QwenModels[0].Id,
+        ["venice"] = AiProviderPresets.VeniceModels[0].Id
+    };
     private readonly StackPanel keyFields = new();
     private readonly TextBlock summary = new();
     private readonly TextBlock keyHint = new();
@@ -36,7 +41,6 @@ internal sealed class AiSettingsDialog : Window
     private readonly Dictionary<string, Button> providerButtons = [];
     private readonly SolidColorBrush background, surface, text, subtle, border, accent;
     private AiProviderPreset selected;
-    private string selectedVeniceModel = AiProviderPresets.VeniceModels[0].Id;
     private Border modelInputFrame = null!;
     private bool localModelsLoaded;
     private string promptLoadedKey = "";
@@ -49,7 +53,7 @@ internal sealed class AiSettingsDialog : Window
         consumer = AiConsumerRegistry.Require(consumerId);
         previous = previousSettings;
         selected = AiProviderPresets.Match(previous);
-        if (selected.Id == "venice") selectedVeniceModel = previous!.Model;
+        if (selected.Id is "qwen" or "venice") selectedPresetModels[selected.Id] = previous!.Model;
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
         background = Brush(dark ? "#202126" : "#F5F5F3");
         surface = Brush(dark ? "#17181C" : "#FFFFFF");
@@ -116,7 +120,7 @@ internal sealed class AiSettingsDialog : Window
         modelFields.Children.Add(Label("模型名称")); model.Text = previous?.Model ?? "";
         StyleInput(model); modelInputFrame = InputFrame(model, new Thickness(0, 8, 0, 15));
         modelFields.Children.Add(modelInputFrame);
-        foreach (var option in AiProviderPresets.VeniceModels)
+        foreach (var option in AiProviderPresets.QwenModels.Concat(AiProviderPresets.VeniceModels))
         {
             var card = PlainButton("");
             card.Padding = new Thickness(13, 11, 13, 11);
@@ -127,11 +131,11 @@ internal sealed class AiSettingsDialog : Window
             contents.Children.Add(new TextBlock { Text = option.Hint, FontSize = 11, Foreground = subtle,
                 Margin = new Thickness(0, 3, 0, 0) });
             card.Content = contents;
-            card.Click += (_, _) => SelectVeniceModel(option.Id);
-            veniceModelButtons.Add(option.Id, card);
-            veniceModelChoices.Children.Add(card);
+            card.Click += (_, _) => SelectPresetModel(option.Id);
+            presetModelButtons.Add(option.Id, card);
+            presetModelChoices.Children.Add(card);
         }
-        modelFields.Children.Add(veniceModelChoices);
+        modelFields.Children.Add(presetModelChoices);
         body.Children.Add(modelFields);
         keyFields.Children.Add(Label("API Key"));
         key.Background = surface; key.Foreground = text; key.BorderThickness = new Thickness(0);
@@ -266,10 +270,13 @@ internal sealed class AiSettingsDialog : Window
             button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
-        modelFields.Visibility = preset.Id is "custom" or "ollama" or "venice" ? Visibility.Visible : Visibility.Collapsed;
-        modelInputFrame.Visibility = preset.Id == "venice" ? Visibility.Collapsed : Visibility.Visible;
-        veniceModelChoices.Visibility = preset.Id == "venice" ? Visibility.Visible : Visibility.Collapsed;
-        if (preset.Id == "venice") SelectVeniceModel(selectedVeniceModel);
+        modelFields.Visibility = preset.Id is "custom" or "ollama" or "venice" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
+        modelInputFrame.Visibility = preset.Id is "venice" or "qwen" ? Visibility.Collapsed : Visibility.Visible;
+        presetModelChoices.Visibility = preset.Id is "venice" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var (id, button) in presetModelButtons)
+            button.Visibility = AiProviderPresets.ModelsFor(preset.Id).Any(option => option.Id == id) ?
+                Visibility.Visible : Visibility.Collapsed;
+        if (preset.Id is "venice" or "qwen") SelectPresetModel(selectedPresetModels[preset.Id]);
         if (preset.Id == "ollama" && changedProvider)
             model.Text = previous is not null && AiProviderPresets.Match(previous).Id == "ollama" ?
                 previous.Model : preset.Model;
@@ -281,6 +288,7 @@ internal sealed class AiSettingsDialog : Window
         summary.Text = preset.Id == "custom" ? "填写兼容 Chat Completions 的 HTTPS 接口地址和模型名称。" :
             preset.Id == "ollama" ? "通过本机 Ollama 运行；填写已下载的模型名称。" :
             preset.Id == "venice" ? "选择云端模型，填写 Venice API Key。" :
+            preset.Id == "qwen" ? "选择北京地域模型，填写百炼 API Key。" :
             $"默认模型：{preset.Model}\n接口：{preset.Endpoint}";
         var existing = previous is not null &&
             string.Equals(previous.Endpoint, preset.Id == "custom" ? endpoint.Text.Trim() : preset.Endpoint, StringComparison.OrdinalIgnoreCase);
@@ -290,11 +298,11 @@ internal sealed class AiSettingsDialog : Window
         RefreshPromptFields();
     }
 
-    private void SelectVeniceModel(string id)
+    private void SelectPresetModel(string id)
     {
-        if (!AiProviderPresets.VeniceModels.Any(option => option.Id == id)) return;
-        selectedVeniceModel = id;
-        foreach (var (optionId, button) in veniceModelButtons)
+        if (!AiProviderPresets.ModelsFor(selected.Id).Any(option => option.Id == id)) return;
+        selectedPresetModels[selected.Id] = id;
+        foreach (var (optionId, button) in presetModelButtons)
         {
             var active = optionId == id;
             button.BorderBrush = active ? accent : border;
@@ -308,7 +316,7 @@ internal sealed class AiSettingsDialog : Window
     {
         if (promptEditors.Count == 0) return;
         var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
-        var name = selected.Id == "venice" ? selectedVeniceModel :
+        var name = selected.Id is "venice" or "qwen" ? selectedPresetModels[selected.Id] :
             selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
         var keyName = url + "\n" + name;
         if (promptLoadedKey == keyName) return;
@@ -322,7 +330,7 @@ internal sealed class AiSettingsDialog : Window
         try
         {
             var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
-            var name = selected.Id == "venice" ? selectedVeniceModel :
+            var name = selected.Id is "venice" or "qwen" ? selectedPresetModels[selected.Id] :
                 selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
             var sameService = previous is not null &&
                 string.Equals(previous.Endpoint, url, StringComparison.OrdinalIgnoreCase);

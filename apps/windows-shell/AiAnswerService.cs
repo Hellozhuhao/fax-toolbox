@@ -282,6 +282,8 @@ internal static class AiAnswerService
         }
         if (provider == "ollama" && reasoningEffort is not null)
             body["reasoning_effort"] = reasoningEffort;
+        if (provider == "qwen" && settings.Model.StartsWith("qwen3.8-", StringComparison.Ordinal))
+            body["reasoning_effort"] = reasoningEffort ?? "low";
         if (provider == "ollama" && structured)
             body["response_format"] = new { type = "json_object" };
         if (structured && new Uri(settings.Endpoint).Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
