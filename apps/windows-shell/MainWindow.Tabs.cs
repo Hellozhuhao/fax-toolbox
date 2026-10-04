@@ -145,14 +145,24 @@ public partial class MainWindow
             if (view.Closing) continue;
             view.Closing = true;
             view.Shell.IsHitTestVisible = false;
-            var shrink = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150));
-            shrink.Completed += (_, _) =>
+            void RemoveTab()
             {
                 TaskTabsPanel.Children.Remove(view.Shell);
                 taskTabVisuals.Remove(stale);
+            }
+            if (!SystemParameters.MenuAnimation || smokeMode) { RemoveTab(); continue; }
+            var fade = new DoubleAnimation(0, TimeSpan.FromMilliseconds(150))
+            {
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseIn }
             };
-            view.Shell.BeginAnimation(WidthProperty, shrink);
-            view.Shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0, TimeSpan.FromMilliseconds(120)));
+            fade.Completed += (_, _) => RemoveTab();
+            view.Shell.BeginAnimation(OpacityProperty, fade);
+            if (view.Shell.RenderTransform is ScaleTransform closingScale)
+            {
+                var settle = new DoubleAnimation(.96, TimeSpan.FromMilliseconds(150));
+                closingScale.BeginAnimation(ScaleTransform.ScaleXProperty, settle);
+                closingScale.BeginAnimation(ScaleTransform.ScaleYProperty, settle);
+            }
         }
         for (var index = 0; index < windows.Length; index++)
         {
@@ -162,10 +172,18 @@ public partial class MainWindow
                 view = CreateTaskTabVisual(window);
                 taskTabVisuals.Add(window, view);
                 TaskTabsPanel.Children.Insert(Math.Min(index, TaskTabsPanel.Children.Count), view.Shell);
-                view.Shell.BeginAnimation(WidthProperty, new DoubleAnimation(0, 164,
-                    TimeSpan.FromMilliseconds(180)) { EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut } });
-                view.Shell.BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1,
-                    TimeSpan.FromMilliseconds(180)));
+                if (SystemParameters.MenuAnimation && !smokeMode)
+                {
+                    var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+                    var duration = TimeSpan.FromMilliseconds(190);
+                    var scale = (ScaleTransform)view.Shell.RenderTransform;
+                    scale.BeginAnimation(ScaleTransform.ScaleXProperty,
+                        new DoubleAnimation(.96, 1, duration) { EasingFunction = ease });
+                    scale.BeginAnimation(ScaleTransform.ScaleYProperty,
+                        new DoubleAnimation(.96, 1, duration) { EasingFunction = ease });
+                    view.Shell.BeginAnimation(OpacityProperty,
+                        new DoubleAnimation(0, 1, duration) { EasingFunction = ease });
+                }
             }
             var selected = ReferenceEquals(window, this);
             var label = window.assignedModule switch
@@ -221,6 +239,7 @@ public partial class MainWindow
         var shell = new Border
         {
             Child = grid, Width = 164, Height = 37, Opacity = 1,
+            RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1, 1),
             CornerRadius = new CornerRadius(13, 13, 5, 5),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 5, 0), ClipToBounds = true

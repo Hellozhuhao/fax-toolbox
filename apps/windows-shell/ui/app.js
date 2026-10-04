@@ -14,6 +14,8 @@
   let balanceLoading = false;
   const viewHistory = [];
   let currentView = '';
+  let restoringAgentSnapshot = false;
+  const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const activity = [];
   let activityFilter = 'all';
   let developerMode = false;
@@ -22,11 +24,29 @@
   $('home-tool-count').textContent = String(document.querySelectorAll('#view-home .module-card:not([hidden])').length);
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
+  function animateNew(element) {
+    if (motionReduced.matches) return;
+    element.classList.add('motion-new');
+    element.addEventListener('animationend', () => element.classList.remove('motion-new'), {once: true});
+  }
   function show(view, record = true) {
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
+    const previousView = currentView;
     currentView = view;
     if (view !== 'ai') { document.querySelector('.agent-side')?.classList.remove('mobile-open'); $('agent-sidebar-toggle')?.setAttribute('aria-expanded', 'false'); }
-    for (const name of ['home', 'modules', 'workspace', 'demo', 'course', 'homework', 'ai', 'activity', 'settings', 'vault']) $('view-' + name).hidden = name !== view;
+    // Touch only the outgoing and incoming surfaces so cached views do not
+    // repeatedly invalidate layout while WebView2 is painting another tab.
+    if (previousView !== view) {
+      if (previousView) {
+        const outgoing = $('view-' + previousView);
+        outgoing.hidden = true;
+        outgoing.classList.remove('motion-enter');
+        if (previousView === 'ai') outgoing.querySelectorAll('.motion-new').forEach(item => item.classList.remove('motion-new'));
+      }
+      const incoming = $('view-' + view);
+      incoming.hidden = false;
+      if (previousView && !motionReduced.matches) incoming.classList.add('motion-enter');
+    }
     const navigation = ['course', 'homework', 'demo', 'ai', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
@@ -47,8 +67,21 @@
   function logActivity(source, title, detail) {
     const time = new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     if (activity[0]?.title === title && activity[0]?.detail === detail) return;
-    activity.unshift({source, title, detail, time}); activity.length = Math.min(activity.length, 200);
-    if (currentView === 'activity') renderActivity();
+    const entry = {source, title, detail, time};
+    activity.unshift(entry);
+    const evicted = activity.length > 200 ? activity.pop() : null;
+    if (currentView !== 'activity') return;
+    updateActivitySummary();
+    const matches = item => activityFilter === 'all' || activityCategory(item.source) === activityFilter;
+    const list = $('activity-list');
+    if (evicted && matches(evicted)) list.lastElementChild?.remove();
+    if (matches(entry)) {
+      list.querySelector('.activity-empty')?.remove();
+      const row = createActivityRow(entry);
+      animateNew(row);
+      list.prepend(row);
+    }
+    if (!list.childElementCount) appendActivityEmpty(list);
   }
   function activityCategory(source) {
     if (/学习|课程/.test(source)) return 'course';
@@ -56,21 +89,31 @@
     if (/AI|模型/.test(source)) return 'ai';
     return 'system';
   }
-  function renderActivity() {
+  function updateActivitySummary() {
     $('activity-total').textContent = String(activity.length);
     $('activity-source').textContent = activity[0]?.source || '—';
     $('activity-updated').textContent = activity[0]?.time || '暂无记录';
     $('activity-running').textContent = String((courseState === 'RUNNING' ? 1 : 0) + (homeworkBrowsing ? 1 : 0));
-    const list = $('activity-list'); list.replaceChildren();
+  }
+  function appendActivityEmpty(list) {
+    const empty = document.createElement('p'); empty.className = 'activity-empty'; empty.textContent = '当前筛选条件下没有日志。'; list.append(empty);
+  }
+  function createActivityRow(item) {
+    const row = document.createElement('div'); row.className = 'activity-row';
+    const heading = document.createElement('strong'); heading.textContent = item.title;
+    const meta = document.createElement('span'); meta.textContent = item.source + ' · ' + item.time;
+    const note = document.createElement('p'); note.textContent = item.detail;
+    row.append(heading, meta, note);
+    return row;
+  }
+  function renderActivity() {
+    updateActivitySummary();
+    const list = $('activity-list');
     const entries = activity.filter(item => activityFilter === 'all' || activityCategory(item.source) === activityFilter);
-    if (!entries.length) { const empty = document.createElement('p'); empty.className = 'activity-empty'; empty.textContent = '当前筛选条件下没有日志。'; list.append(empty); return; }
-    for (const item of entries) {
-      const row = document.createElement('div'); row.className = 'activity-row';
-      const heading = document.createElement('strong'); heading.textContent = item.title;
-      const meta = document.createElement('span'); meta.textContent = item.source + ' · ' + item.time;
-      const note = document.createElement('p'); note.textContent = item.detail;
-      row.append(heading, meta, note); list.append(row);
-    }
+    if (!entries.length) { list.replaceChildren(); appendActivityEmpty(list); return; }
+    const fragment = document.createDocumentFragment();
+    for (const item of entries) fragment.append(createActivityRow(item));
+    list.replaceChildren(fragment);
   }
   function openCourse() {
     activeModule = 'course'; $('workspace-module').textContent = '学习通刷课';
@@ -285,10 +328,11 @@
     $('agent-usage').textContent = `${data.calls || 0} 次请求 · 输入 ${input.toLocaleString()} token · 输出 ${output.toLocaleString()} token · 缓存命中 ${rate}`;
     $('agent-cost').textContent = data.cost == null ? '本会话暂无费用估算' : `估算费用：${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(6)} ${data.currency || ''}`;
   }
-  function renderAgentImages() {
+  function renderAgentImages(animateFrom = Number.POSITIVE_INFINITY) {
     const tray = $('agent-attachments'); tray.replaceChildren(); tray.hidden = agentImages.length === 0;
     agentImages.forEach((dataUrl, index) => {
       const item = document.createElement('div'); item.className = 'agent-image';
+      if (index >= animateFrom) animateNew(item);
       const preview = document.createElement('img'); preview.src = dataUrl; preview.alt = '待发送图片 ' + (index + 1);
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除图片';
       remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
@@ -299,6 +343,7 @@
     if (agentBusy || agentPreparingImages) return;
     if (!agentImagesSupported) { $('agent-state').textContent = '当前模型仅支持文字'; return; }
     if (agentImages.length + files.length > 4) { $('agent-state').textContent = '最多添加 4 张图片'; return; }
+    const initialImageCount = agentImages.length;
     agentPreparingImages = true; $('agent-send').disabled = true; $('agent-state').textContent = '正在准备图片…';
     try {
       for (const file of files) {
@@ -317,7 +362,7 @@
         if (encoded.length >= 2_700_000) throw new Error('图片仍然过大，请选择较小的图片');
         agentImages.push(encoded);
       }
-      renderAgentImages(); $('agent-state').textContent = '';
+      renderAgentImages(initialImageCount); $('agent-state').textContent = '';
     } catch (error) { $('agent-state').textContent = error.message || '图片无法读取'; }
     finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; $('agent-image-file').value = ''; }
   }
@@ -356,6 +401,7 @@
     timeline.querySelector('.agent-empty')?.remove();
     if (type === 'step') {
       const operation = document.createElement('details'); operation.className = 'agent-operation'; operation.dataset.awaitingOutput = 'true';
+      if (!restoringAgentSnapshot) animateNew(operation);
       const summary = document.createElement('summary'); summary.textContent = detail || '执行工具';
       operation.append(summary); timeline.append(operation); timeline.scrollTop = timeline.scrollHeight; return;
     }
@@ -368,6 +414,7 @@
       }
     }
     const entry = document.createElement('div'); entry.className = 'agent-entry agent-' + (['user', 'assistant', 'step', 'tool', 'error', 'status'].includes(type) ? type : 'status');
+    if (!restoringAgentSnapshot) animateNew(entry);
     const label = document.createElement('small'); label.textContent = ({user: '你', assistant: 'Agent', step: '步骤', tool: '工具', error: '错误', status: '状态'})[type] || '状态';
     entry.append(label);
     if (type === 'assistant') renderAgentMarkdown(entry, detail);
@@ -388,7 +435,9 @@
       $('agent-task-title').textContent = data.title || '新任务';
       $('agent-root').textContent = data.root || '未选择项目文件夹';
       const timeline = $('agent-timeline'); timeline.replaceChildren();
-      for (const entry of data.events || []) addAgentEvent(entry.type, entry.text);
+      restoringAgentSnapshot = true;
+      try { for (const entry of data.events || []) addAgentEvent(entry.type, entry.text); }
+      finally { restoringAgentSnapshot = false; }
       if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = '描述任务，Agent 会列出步骤并记录操作。'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';
@@ -652,8 +701,14 @@
   $('settings-vault').addEventListener('click', () => show('vault'));
   $('settings-open-ai').addEventListener('click', openAi);
   for (const item of document.querySelectorAll('[data-settings-panel]')) item.addEventListener('click', () => {
+    const current = document.querySelector('.settings-detail [data-panel]:not([hidden])');
     for (const button of document.querySelectorAll('[data-settings-panel]')) button.classList.toggle('selected', button === item);
-    for (const panel of document.querySelectorAll('[data-panel]')) panel.hidden = panel.dataset.panel !== item.dataset.settingsPanel;
+    for (const panel of document.querySelectorAll('[data-panel]')) {
+      panel.classList.remove('motion-new');
+      panel.hidden = panel.dataset.panel !== item.dataset.settingsPanel;
+    }
+    const next = document.querySelector('.settings-detail [data-panel]:not([hidden])');
+    if (current !== next && next) animateNew(next);
   });
   for (const item of document.querySelectorAll('[data-activity-filter]')) item.addEventListener('click', () => {
     activityFilter = item.dataset.activityFilter;
