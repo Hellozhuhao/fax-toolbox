@@ -38,6 +38,7 @@ internal static class AiPricingCatalog
             "qwen" => QwenPlusBeijing(current, usage.InputTokens),
             "siliconflow" => current.SiliconFlow,
             "openai" => current.OpenAi,
+            "ollama" => new AiTokenPricing("CNY", 0m, 0m, 0m),
             _ => settings.Pricing
         };
     }

@@ -48,6 +48,16 @@ try { AiSettings.Validate("http://example.com/v1/chat/completions", "model");
     throw new Exception("insecure endpoint was accepted"); }
 catch (InvalidDataException) { }
 AiSettings.Validate("https://example.com/v1/chat/completions", "model");
+AiSettings.Validate("http://127.0.0.1:11434/v1/chat/completions", "huihui_ai/qwen3-abliterated:8b-v2");
+foreach (var endpoint in new[] {
+    "http://example.com:11434/v1/chat/completions",
+    "http://127.0.0.1:8080/v1/chat/completions",
+    "http://127.0.0.1:11434.evil.test/v1/chat/completions"
+})
+{
+    try { AiSettings.Validate(endpoint, "model"); throw new Exception("nonlocal HTTP endpoint was accepted"); }
+    catch (InvalidDataException) { }
+}
 using (var deepSeekUsage = JsonDocument.Parse("{\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":200,\"prompt_cache_hit_tokens\":750}}"))
 {
     var usage = AiAnswerService.ParseUsage(deepSeekUsage.RootElement);
@@ -74,6 +84,9 @@ if (AiPricingCatalog.Resolve(new AiSettings("https://api.openai.com/v1/chat/comp
 if (AiPricingCatalog.Resolve(new AiSettings("https://custom.example/chat/completions", "my-model", ""),
     metered, fridayPeak) is not null)
     throw new Exception("Unknown model was assigned a made-up price");
+if (AiPricingCatalog.Resolve(new AiSettings(AiProviderPresets.All.First(item => item.Id == "ollama").Endpoint,
+    "huihui_ai/qwen3-abliterated:8b-v2", ""), metered, fridayPeak)?.OutputPerMillion != 0m)
+    throw new Exception("Local inference was assigned a provider fee");
 if (AiPricingCatalog.ParseDeepSeek("deepseek-flash 百万tokens输入（缓存命中） 空闲时段 0.02元 高峰时段 0.04元 百万tokens输入（缓存未命中） 空闲时段 1元 高峰时段 2元 百万tokens输出 空闲时段 4元 高峰时段 8元") is not { Length: 2 } liveDeepSeek ||
     liveDeepSeek[1].OutputPerMillion != 8m)
     throw new Exception("Official DeepSeek price refresh could not parse its table");
@@ -93,6 +106,16 @@ using (var imageDocument = JsonDocument.Parse(imagePayload))
     if (imageDocument.RootElement.GetProperty("messages")[1].GetProperty("content")[2]
         .GetProperty("type").GetString() != "image_url")
         throw new Exception("Agent image was not sent as a vision input");
+var localPreset = AiProviderPresets.All.First(item => item.Id == "ollama");
+if (AiProviderPresets.Match(new AiSettings(localPreset.Endpoint, "another-local-model", "")).Id != "ollama")
+    throw new Exception("Local model configuration lost its provider selection");
+if (AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, localPreset.Model, "")) ||
+    !AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, "qwen3.5:4b", "")))
+    throw new Exception("Local model image capability was classified incorrectly");
+using (var localPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "你好")))
+    if (localPayload.RootElement.GetProperty("response_format").GetProperty("type").GetString() != "json_object")
+        throw new Exception("Local model JSON response mode is missing");
 if (AiProviderPresets.All.Select(item => item.Id).Distinct().Count() != AiProviderPresets.All.Length)
     throw new Exception("provider IDs must be unique");
 if (AiProviderPresets.Match(null).Id != "deepseek")

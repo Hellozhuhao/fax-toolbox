@@ -1,4 +1,5 @@
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -72,13 +73,18 @@ internal sealed record AiSettings(string Endpoint, string Model, string Encrypte
 
     public static void Validate(string endpoint, string model)
     {
+        var isLocalOllama = Uri.TryCreate(endpoint, UriKind.Absolute, out var localUri) &&
+            localUri.Scheme == Uri.UriSchemeHttp && localUri.Port == 11434 &&
+            IPAddress.TryParse(localUri.Host.Trim('[', ']'), out var address) &&
+            IPAddress.IsLoopback(address);
         if (!Uri.TryCreate(endpoint, UriKind.Absolute, out var uri) ||
-            uri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(uri.UserInfo) ||
+            (uri.Scheme != Uri.UriSchemeHttps && !isLocalOllama) ||
+            !string.IsNullOrEmpty(uri.UserInfo) ||
             !string.IsNullOrEmpty(uri.Fragment) || !string.IsNullOrEmpty(uri.Query) ||
             uri.HostNameType == UriHostNameType.Unknown ||
             !uri.AbsolutePath.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase) ||
             endpoint.Length > 2048)
-            throw new InvalidDataException("接口地址必须是 HTTPS 的完整 /chat/completions 地址");
+            throw new InvalidDataException("接口地址须为 HTTPS，或本机 Ollama 的 /chat/completions 地址");
         if (string.IsNullOrWhiteSpace(model) || model.Length > 128 || model.Any(char.IsControl))
             throw new InvalidDataException("模型名称无效");
     }
@@ -264,6 +270,9 @@ internal static class AiAnswerService
             },
             ["stream"] = false
         };
+        var provider = AiProviderPresets.Match(settings).Id;
+        if (provider == "ollama")
+            body["response_format"] = new { type = "json_object" };
         if (new Uri(settings.Endpoint).Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
         {
             // Quiz answers need short JSON, not the provider's default thinking mode.
@@ -314,7 +323,11 @@ internal static class AiAnswerService
         using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             timeoutSource.Token);
         if (!response.IsSuccessStatusCode)
+        {
+            if (AiProviderPresets.Match(settings).Id == "ollama" && (int)response.StatusCode == 404)
+                throw new HttpRequestException("本地模型尚未下载，请先运行 ollama pull " + settings.Model);
             throw new HttpRequestException(DescribeHttpError((int)response.StatusCode));
+        }
         await using var stream = await response.Content.ReadAsStreamAsync(timeoutSource.Token);
         using var buffer = new MemoryStream();
         var block = new byte[8192];
@@ -344,6 +357,11 @@ internal static class AiAnswerService
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
         {
             throw new TimeoutException("模型请求等待超时，请检查连接或稍后重试。");
+        }
+        catch (HttpRequestException error) when (AiProviderPresets.Match(settings).Id == "ollama" &&
+            error.InnerException is System.Net.Sockets.SocketException)
+        {
+            throw new HttpRequestException("本地 Ollama 未启动，请先启动 Ollama。", error);
         }
     }
 

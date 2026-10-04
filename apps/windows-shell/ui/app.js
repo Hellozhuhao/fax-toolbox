@@ -390,7 +390,7 @@
   }
   function renderAiConfig(message) {
     const detail = message.error || (!message.configured ? '尚未配置模型' :
-      `${message.provider} · ${message.model}\nAPI Key ${message.hasKey ? '已保存' : '未填写'}`);
+      `${message.provider} · ${message.model}${message.requiresKey ? `\nAPI Key ${message.hasKey ? '已保存' : '未填写'}` : ''}`);
     const consumer = message.consumer || 'course';
     $('ai-config-heading').textContent = consumer === 'agent' ? 'Agent 配置' : consumer === 'homework' ? '作业校对配置' : '学习通答题配置';
     for (const item of document.querySelectorAll('[data-ai-consumer]')) { item.classList.toggle('selected', item.dataset.aiConsumer === consumer); item.setAttribute('aria-pressed', String(item.dataset.aiConsumer === consumer)); }
@@ -400,10 +400,10 @@
       if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置学习通 AI';
       if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置作业 AI';
       if (item.id === 'agent') {
-        agentImagesSupported = !(item.provider === '阿里百炼' && item.model === 'qwen-plus');
+        agentImagesSupported = item.supportsImages !== false;
         $('agent-image-file').disabled = !agentImagesSupported;
         $('agent-image-add').classList.toggle('disabled', !agentImagesSupported);
-        $('agent-image-add').title = agentImagesSupported ? '添加图片，也可直接粘贴截图' : '当前 qwen-plus 预设仅支持文字';
+        $('agent-image-add').title = agentImagesSupported ? '添加图片，也可直接粘贴截图' : '当前模型仅支持文字';
       }
     }
     $('ai-config-summary').textContent = detail;
