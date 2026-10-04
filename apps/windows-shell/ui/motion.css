@@ -61,6 +61,12 @@ button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
 .palette-backdrop:not([hidden]) .palette {
   animation: toolbox-panel-in var(--motion-standard) var(--motion-ease) backwards;
 }
+.toolbox-confirm[open] {
+  animation: toolbox-panel-in var(--motion-standard) var(--motion-ease) backwards;
+}
+.toolbox-confirm[open]::backdrop {
+  animation: toolbox-backdrop-in 160ms ease-out backwards;
+}
 .toolbox-context-menu:not([hidden]) {
   animation: toolbox-panel-in 180ms var(--motion-ease) backwards;
 }
@@ -101,6 +107,8 @@ button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
   .content .view.motion-enter:not([hidden]),
   .palette-backdrop:not([hidden]),
   .palette-backdrop:not([hidden]) .palette,
+  .toolbox-confirm[open],
+  .toolbox-confirm[open]::backdrop,
   .toolbox-context-menu:not([hidden]),
   .developer-toast:not([hidden]),
   #view-ai .agent-inspector:not([hidden]),

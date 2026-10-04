@@ -369,7 +369,20 @@ public partial class MainWindow : Window
                       return !toolGroup.classList.contains('flyout-open');
                     })()
                     """);
-                if (conversationLayout != "true") { FailSmoke("Agent conversation layout or context menu failed"); return; }
+                if (conversationLayout != "true")
+                {
+                    var layoutDetail = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                        JSON.stringify({workspace:document.querySelector('.agent-workspace').getBoundingClientRect().height,
+                          sidebar:document.querySelector('.agent-side').getBoundingClientRect().width,
+                          session:document.querySelector('.agent-session-row').getBoundingClientRect().height,
+                          composer:document.getElementById('agent-form').getBoundingClientRect().width,
+                          rail:document.querySelectorAll('.agent-section-rail button').length,
+                          active:document.querySelector('.agent-side').dataset.activePanel,
+                          menu:document.getElementById('toolbox-context-menu').hidden,
+                          labels:[...document.querySelectorAll('#toolbox-context-menu button')].map(item=>item.textContent)})
+                        """);
+                    FailSmoke("Agent conversation layout or context menu failed: " + layoutDetail); return;
+                }
                 var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(agentPreview)!);
                 await using (var output = File.Create(agentPreview))
@@ -379,6 +392,71 @@ public partial class MainWindow : Window
                 var darkAgentPreview = Path.Combine(root, ".cache", "agent-workspace-dark-preview.png");
                 await using (var output = File.Create(darkAgentPreview))
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                var sessionMenu = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      if (!window.FaxToolboxContextMenu.openFor('.agent-session-row')) return false;
+                      const menu = document.getElementById('toolbox-context-menu');
+                      const labels = [...menu.querySelectorAll('button')].map(button => button.querySelector('.toolbox-context-label')?.textContent);
+                      for (const label of ['重命名', '置顶', '标记为未读', '归档', '永久删除', '项目', '分区', '分享', '复制', '分叉', '打开方式', '在新窗口中打开'])
+                        if (!labels.includes(label)) return false;
+                      const section = [...menu.querySelectorAll('button')].find(button => button.querySelector('.toolbox-context-label')?.textContent === '分区');
+                      section?.click();
+                      const submenu = document.getElementById('toolbox-context-submenu');
+                      return !submenu.hidden && [...submenu.querySelectorAll('button')].some(button => button.textContent.includes('新建分区'));
+                    })()
+                    """);
+                if (sessionMenu != "true") { FailSmoke("Agent session context menu was not rendered"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('toolbox-context-submenu').hidden = true");
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await Task.Delay(200);
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-session-menu-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}))");
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      window.FaxToolboxContextMenu.openFor('.agent-session-row');
+                      [...document.querySelectorAll('#toolbox-context-menu button')]
+                        .find(button => button.querySelector('.toolbox-context-label')?.textContent === '置顶')?.click();
+                    })()
+                    """);
+                for (var attempt = 0; attempt < 20 && !currentAgentSession.Pinned; attempt++) await Task.Delay(100);
+                if (!currentAgentSession.Pinned) { FailSmoke("Agent session pin action failed"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      window.FaxToolboxContextMenu.openFor('.agent-session-row');
+                      [...document.querySelectorAll('#toolbox-context-menu button')]
+                        .find(button => button.querySelector('.toolbox-context-label')?.textContent === '分区')?.click();
+                      [...document.querySelectorAll('#toolbox-context-submenu button')]
+                        .find(button => button.textContent.includes('新建分区'))?.click();
+                      document.getElementById('toolbox-confirm-input').value = '工作';
+                      document.getElementById('toolbox-confirm-accept').click();
+                    })()
+                    """);
+                for (var attempt = 0; attempt < 20 && currentAgentSession.Section != "工作"; attempt++) await Task.Delay(100);
+                if (currentAgentSession.Section != "工作") { FailSmoke("Agent section creation failed"); return; }
+                var confirmationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const remove = document.querySelector('.agent-session-delete');
+                      const dialog = document.getElementById('toolbox-confirm');
+                      remove.click();
+                      if (!dialog.open || document.getElementById('toolbox-confirm-title').textContent !== '删除会话' ||
+                          document.activeElement !== document.getElementById('toolbox-confirm-cancel')) return false;
+                      document.getElementById('toolbox-confirm-cancel').click();
+                      if (dialog.open || !remove.isConnected) return false;
+                      remove.click();
+                      return dialog.open && document.getElementById('toolbox-confirm-message').textContent.includes('无法撤销');
+                    })()
+                    """);
+                if (confirmationLayout != "true") { FailSmoke("Agent delete confirmation layout or cancellation failed"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await Task.Delay(280);
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-delete-confirm-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('toolbox-confirm-cancel').click()");
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                 {
                     await ShellView.CoreWebView2.ExecuteScriptAsync(
@@ -526,10 +604,32 @@ public partial class MainWindow : Window
                     !storedSessions.Any(item => item.Id == originalSession &&
                         item.Events.Any(entry => entry.Text == "Agent 可用")))
                 { FailSmoke("Agent sessions were not saved for the next launch"); return; }
-                using (var remove = JsonDocument.Parse("{\"sessionId\":\"" + nextSession + "\"}"))
-                    DeleteAgentSession(remove.RootElement);
+                var deleteFromUi = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const row = [...document.querySelectorAll('.agent-session-row')]
+                        .find(item => item.dataset.sessionId === SESSION_ID);
+                      if (!row) return false;
+                      row.querySelector('.agent-session-delete').click();
+                      const dialog = document.getElementById('toolbox-confirm');
+                      if (!dialog.open) return false;
+                      document.getElementById('toolbox-confirm-accept').click();
+                      return !dialog.open;
+                    })()
+                    """.Replace("SESSION_ID", JsonSerializer.Serialize(nextSession), StringComparison.Ordinal));
+                if (deleteFromUi != "true") { FailSmoke("Agent delete confirmation did not submit"); return; }
+                for (var attempt = 0; attempt < 20 && agentSessions.Count != 1; attempt++) await Task.Delay(100);
                 if (agentSessions.Count != 1 || agentSessions[0].Id != originalSession)
                 { FailSmoke("Agent session deletion affected the active conversation"); return; }
+                using (var fork = JsonDocument.Parse("{\"sessionId\":\"" + originalSession + "\"}"))
+                    ForkAgentSession(fork.RootElement);
+                var forkId = currentAgentSession.Id;
+                if (agentSessions.Count != 2 || forkId == originalSession ||
+                    !currentAgentSession.Events.Any(entry => entry.Text == "Agent 可用"))
+                { FailSmoke("Agent session fork did not preserve conversation history"); return; }
+                using (var archive = JsonDocument.Parse("{\"sessionId\":\"" + forkId + "\"}"))
+                    UpdateAgentSession(archive.RootElement, "archive");
+                if (!agentSessions.Single(item => item.Id == forkId).Archived || currentAgentSession.Id != originalSession)
+                { FailSmoke("Agent archive did not move the conversation out of the active list"); return; }
                 PassSmoke();
             }
             else if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
@@ -745,6 +845,16 @@ public partial class MainWindow : Window
                 case "agent.session.select": SelectAgentSession(message); break;
                 case "agent.session.rename": RenameAgentSession(message); break;
                 case "agent.session.delete": DeleteAgentSession(message); break;
+                case "agent.session.pin": UpdateAgentSession(message, "pin"); break;
+                case "agent.session.unread": UpdateAgentSession(message, "unread"); break;
+                case "agent.session.archive": UpdateAgentSession(message, "archive"); break;
+                case "agent.session.section": UpdateAgentSession(message, "section"); break;
+                case "agent.session.project": MoveAgentSessionProject(message); break;
+                case "agent.session.project.clear": UpdateAgentSession(message, "project.clear"); break;
+                case "agent.session.fork": ForkAgentSession(message); break;
+                case "agent.session.copy": CopyAgentSession(message); break;
+                case "agent.session.export": ExportAgentSession(message); break;
+                case "agent.session.open": await OpenAgentSessionAsync(message); break;
                 case "agent.approve": ResolveAgentApproval(message, true); break;
                 case "agent.reject": ResolveAgentApproval(message, false); break;
                 case "diagnostics.inspect": await InspectCurrentPageAsync(); break;

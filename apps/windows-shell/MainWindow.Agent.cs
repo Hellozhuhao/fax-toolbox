@@ -21,6 +21,10 @@ public partial class MainWindow
         public string Title { get; set; } = "新任务";
         public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
         public string? ProjectRoot { get; set; }
+        public string? Section { get; set; }
+        public bool Pinned { get; set; }
+        public bool Unread { get; set; }
+        public bool Archived { get; set; }
         public List<AgentHistoryEntry> History { get; set; } = [];
         public List<AgentTimelineEntry> Events { get; set; } = [];
         public long InputTokens { get; set; }
@@ -82,7 +86,7 @@ public partial class MainWindow
             if (SharedAgentSessions.TryGetValue(path, out var shared))
             {
                 agentSessions = shared;
-                currentAgentSession = agentSessions.OrderByDescending(item => item.UpdatedAt).First();
+                currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
                 return;
             }
             try
@@ -101,7 +105,7 @@ public partial class MainWindow
                 System.Security.Cryptography.CryptographicException or FormatException)
             { Trace("Agent sessions could not be restored: " + error.Message); }
             if (agentSessions.Count == 0) agentSessions.Add(new AgentSession());
-            currentAgentSession = agentSessions.OrderByDescending(item => item.UpdatedAt).First();
+            currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
             SharedAgentSessions[path] = agentSessions;
         }
     }
@@ -127,10 +131,11 @@ public partial class MainWindow
     private void PublishAgentSessions()
     {
         if (!agentSessions.Contains(currentAgentSession))
-            currentAgentSession = agentSessions.OrderByDescending(item => item.UpdatedAt).First();
+            currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
         PublishAgent("sessions", extra: new { activeId = currentAgentSession.Id,
-            sessions = agentSessions.OrderByDescending(item => item.UpdatedAt)
-                .Select(item => new { id = item.Id, title = item.Title, root = item.ProjectRoot, updatedAt = item.UpdatedAt }).ToArray() });
+            sessions = agentSessions.OrderBy(item => item.Archived).ThenByDescending(item => item.Pinned).ThenByDescending(item => item.UpdatedAt)
+                .Select(item => new { id = item.Id, title = item.Title, root = item.ProjectRoot, section = item.Section,
+                    pinned = item.Pinned, unread = item.Unread, archived = item.Archived, updatedAt = item.UpdatedAt }).ToArray() });
         PublishAgent("snapshot", extra: new { title = currentAgentSession.Title,
             root = agentProjectRoot, events = currentAgentSession.Events
                 .Select(item => new { type = item.Type, text = item.Text }).ToArray(),
@@ -142,6 +147,7 @@ public partial class MainWindow
 
     private void RefreshAgentSessionLists()
     {
+        if (smokeMode && !tabSmokeMode) { PublishAgentSessions(); return; }
         foreach (var window in TaskWindows.Where(window => !window.closingTask &&
             ReferenceEquals(window.agentSessions, agentSessions)))
             window.PublishAgentSessions();
@@ -163,6 +169,7 @@ public partial class MainWindow
         var chosen = agentSessions.FirstOrDefault(item => item.Id == id);
         if (chosen is null) return;
         currentAgentSession = chosen;
+        if (chosen.Unread) { chosen.Unread = false; PersistAgentSessions(); RefreshAgentSessionLists(); }
         PublishAgentSessions();
     }
 
@@ -192,9 +199,119 @@ public partial class MainWindow
         agentSessions.Remove(target);
         if (agentSessions.Count == 0) agentSessions.Add(new AgentSession());
         if (ReferenceEquals(target, currentAgentSession))
-            currentAgentSession = agentSessions.OrderByDescending(item => item.UpdatedAt).First();
+            currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
         PersistAgentSessions();
         RefreshAgentSessionLists();
+    }
+
+    private void UpdateAgentSession(JsonElement message, string action)
+    {
+        if (agentCancellation is not null) return;
+        var target = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (target is null) return;
+        switch (action)
+        {
+            case "pin": target.Pinned = !target.Pinned; break;
+            case "unread": target.Unread = !target.Unread; break;
+            case "archive":
+                target.Archived = !target.Archived;
+                if (target.Archived && ReferenceEquals(target, currentAgentSession))
+                {
+                    currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault()
+                        ?? new AgentSession();
+                    if (!agentSessions.Contains(currentAgentSession)) agentSessions.Add(currentAgentSession);
+                }
+                break;
+            case "section":
+                var section = AgentString(message, "section").Trim();
+                if (section.Length > 40 || section.Any(char.IsControl)) return;
+                target.Section = section.Length == 0 ? null : section;
+                break;
+            case "project.clear": target.ProjectRoot = null; break;
+            default: return;
+        }
+        PersistAgentSessions();
+        RefreshAgentSessionLists();
+    }
+
+    private void MoveAgentSessionProject(JsonElement message)
+    {
+        if (agentCancellation is not null || smokeMode) return;
+        var target = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (target is null) return;
+        var picker = new OpenFolderDialog { Title = "选择 Agent 项目文件夹" };
+        if (picker.ShowDialog(this) != true) return;
+        target.ProjectRoot = Path.GetFullPath(picker.FolderName);
+        PersistAgentSessions();
+        RefreshAgentSessionLists();
+    }
+
+    private void ForkAgentSession(JsonElement message)
+    {
+        if (agentCancellation is not null || agentSessions.Count >= 100) return;
+        var source = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (source is null) return;
+        var fork = new AgentSession { Title = (source.Title.Length > 91 ? source.Title[..91] : source.Title) + "（副本）",
+            ProjectRoot = source.ProjectRoot, Section = source.Section,
+            History = [.. source.History], Events = [.. source.Events] };
+        agentSessions.Add(fork);
+        currentAgentSession = fork;
+        PersistAgentSessions();
+        RefreshAgentSessionLists();
+    }
+
+    private string AgentSessionMarkdown(AgentSession session)
+    {
+        var builder = new StringBuilder("# ").AppendLine(session.Title).AppendLine();
+        foreach (var entry in session.Events)
+        {
+            if (entry.Type is not ("user" or "assistant" or "reasoning" or "step" or "tool")) continue;
+            builder.Append("## ").AppendLine(entry.Type switch { "user" => "用户", "assistant" => "Agent", "reasoning" => "思考过程", "step" => "操作", _ => "工具结果" });
+            builder.AppendLine().AppendLine(entry.Text).AppendLine();
+        }
+        return builder.ToString();
+    }
+
+    private void CopyAgentSession(JsonElement message)
+    {
+        var session = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (session is null) return;
+        var kind = AgentString(message, "kind");
+        var text = kind switch { "title" => session.Title, "id" => session.Id, "conversation" => AgentSessionMarkdown(session), _ => "" };
+        if (text.Length is > 0 and <= 1_000_000) System.Windows.Clipboard.SetText(text);
+    }
+
+    private void ExportAgentSession(JsonElement message)
+    {
+        var session = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (session is null) return;
+        var picker = new SaveFileDialog { Filter = "Markdown 文档 (*.md)|*.md", DefaultExt = ".md",
+            FileName = Regex.Replace(session.Title, "[\\\\/:*?\"<>|]", "_") + ".md", Title = "导出 Agent 会话" };
+        if (picker.ShowDialog(this) == true) File.WriteAllText(picker.FileName, AgentSessionMarkdown(session), Encoding.UTF8);
+    }
+
+    private async Task OpenAgentSessionAsync(JsonElement message)
+    {
+        if ((smokeMode && !tabSmokeMode) || agentCancellation is not null) return;
+        var session = agentSessions.FirstOrDefault(item => item.Id == AgentString(message, "sessionId"));
+        if (session is null) return;
+        var mode = AgentString(message, "mode");
+        if (mode is not ("tab" or "window")) return;
+        var window = CreateTaskWindow("ai");
+        if (!await window.taskWindowReady.Task) { window.closingAsTab = true; window.Close(); return; }
+        window.currentAgentSession = session;
+        window.PublishAgentSessions();
+        if (mode == "tab") { await ActivateTaskWindowAsync(window); return; }
+        window.detachedWindow = true;
+        var bounds = WindowState == System.Windows.WindowState.Normal ?
+            new System.Windows.Rect(Left, Top, Width, Height) : RestoreBounds;
+        window.ShowInTaskbar = true;
+        window.ShowActivated = true;
+        window.Left = bounds.Left + 32;
+        window.Top = bounds.Top + 32;
+        window.Width = bounds.Width;
+        window.Height = bounds.Height;
+        window.Activate();
     }
 
     private void PublishAgent(string kind, string? detail = null, object? extra = null)
