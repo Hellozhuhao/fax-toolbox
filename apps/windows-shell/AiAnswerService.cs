@@ -100,7 +100,15 @@ internal sealed record AiImageInput(int QuestionNumber, string Marker, string Da
 
 internal static class AiAnswerService
 {
-    private static readonly HttpClient Client = new(new SocketsHttpHandler
+    private static readonly HttpClient ProxyClient = new(new SocketsHttpHandler
+    {
+        UseProxy = true,
+        AllowAutoRedirect = false
+    })
+    {
+        Timeout = System.Threading.Timeout.InfiniteTimeSpan
+    };
+    private static readonly HttpClient DirectClient = new(new SocketsHttpHandler
     {
         UseProxy = false,
         AllowAutoRedirect = false
@@ -334,7 +342,9 @@ internal static class AiAnswerService
         timeoutSource.CancelAfter(timeout ?? TimeSpan.FromSeconds(60));
         try
         {
-        using var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
+        var provider = AiProviderPresets.Match(settings).Id;
+        var client = provider is "venice" or "openai" or "custom" ? ProxyClient : DirectClient;
+        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             timeoutSource.Token);
         if (!response.IsSuccessStatusCode)
         {
@@ -374,6 +384,11 @@ internal static class AiAnswerService
             error.InnerException is System.Net.Sockets.SocketException)
         {
             throw new HttpRequestException("本地 Ollama 未启动，请先启动 Ollama。", error);
+        }
+        catch (HttpRequestException error) when (error.GetBaseException() is System.Net.Sockets.SocketException)
+        {
+            throw new HttpRequestException("无法连接 " + new Uri(settings.Endpoint).Host +
+                "；请检查网络或系统代理，也可以切换国内云端模型。", error);
         }
     }
 

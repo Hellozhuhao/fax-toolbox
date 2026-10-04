@@ -5,6 +5,8 @@ AI 服务接入 [Microsoft Agent Framework](https://github.com/microsoft/agent-f
 `AiAgentService` 实现 `IChatClient` 适配，沿用现有兼容 Chat Completions 的 HTTPS
 传输、请求超时、图片输入和结果校验。学习通和作业校对的模型调用不共享对话。
 本地 Ollama 连接只允许通过回环 IP 的 `11434` 端口使用 HTTP。
+Venice、OpenAI 和自定义云端 HTTPS 连接遵循系统或环境代理设置；国内预设与本地 Ollama 直连。
+模型响应不会自动跟随重定向。
 
 ## 模块边界
 
