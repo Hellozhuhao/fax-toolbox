@@ -168,19 +168,28 @@ public partial class MainWindow
     {
         if (smokeMode || aiTestInProgress) return;
         var consumer = selectedAiConsumer;
+        AiSettings? settings;
+        try { settings = aiRuntime?.LoadSettings(consumer); }
+        catch (Exception error) when (error is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
+        {
+            PublishAiTestStatus("error", error.Message, consumer);
+            return;
+        }
+        var local = settings is not null && AiProviderPresets.Match(settings).Id == "ollama";
+        var waitSeconds = local ? 90 : 20;
         aiTestInProgress = true;
-        PublishAiTestStatus("testing", "正在发送一道简单测试题；不会读取当前网页。最长等待 20 秒。", consumer);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        PublishAiTestStatus("testing", $"正在测试模型连接，最长等待 {waitSeconds} 秒。", consumer);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(waitSeconds));
         var watch = Stopwatch.StartNew();
         try
         {
-            var settings = aiRuntime?.LoadSettings(consumer) ?? throw new InvalidDataException("尚未配置当前模块的 AI 服务。请先选择服务商并保存 API Key。");
+            settings ??= throw new InvalidDataException("尚未配置当前模块的模型。");
             await aiRuntime!.TestConnectionAsync(settings, timeout.Token);
             PublishAiTestStatus("success", $"连接成功，模型响应格式有效（{watch.Elapsed.TotalSeconds:F1} 秒）。", consumer);
         }
         catch (OperationCanceledException)
         {
-            PublishAiTestStatus("error", "连接测试超过 20 秒。请检查服务商状态和网络，或稍后重试。", consumer);
+            PublishAiTestStatus("error", $"连接测试超过 {waitSeconds} 秒。请检查模型服务是否运行。", consumer);
         }
         catch (Exception error) when (error is InvalidDataException or JsonException or HttpRequestException or
             System.Security.Cryptography.CryptographicException or IOException or UnauthorizedAccessException)
@@ -209,7 +218,7 @@ public partial class MainWindow
             var settings = smokeAi ? null : aiRuntime?.LoadSettings("course");
             if (!smokeAi && settings is null)
             {
-                PublishAiStatus("尚未配置 AI 服务；请在左侧设置接口、模型和 API Key。");
+                PublishAiStatus("尚未配置模型；请先在 AI 服务中选择连接。");
                 return;
             }
             var source = CourseView.CoreWebView2.Source;
