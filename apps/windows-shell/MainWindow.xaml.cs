@@ -777,6 +777,22 @@ public partial class MainWindow : Window
                 }
                 if (selectedConsumer != "作业校对配置")
                 { FailSmoke("AI consumer switch did not update its configuration panel"); return; }
+                ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    v = 1, kind = "ai.config", configured = true, consumer = "agent",
+                    provider = "阿里百炼", model = "qwen3.8-flash", hasKey = true, requiresKey = true,
+                    consumers = new[] { new { id = "agent", configured = true, provider = "阿里百炼",
+                        providerId = "qwen", model = "qwen3.8-flash", supportsImages = true } }
+                }));
+                var qwenModelVisible = false;
+                for (var attempt = 0; attempt < 20 && !qwenModelVisible; attempt++)
+                {
+                    qwenModelVisible = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('[data-agent-model=\"qwen3.8-max\"]')?.textContent.includes('Qwen 3.8 Max') === true") == "true";
+                    if (!qwenModelVisible) await Task.Delay(100);
+                }
+                if (!qwenModelVisible)
+                { FailSmoke("Domestic cloud models were not listed in Agent model picker"); return; }
                 PassSmoke();
             }
             else if (homeworkSmokeMode)
@@ -953,7 +969,9 @@ public partial class MainWindow : Window
                 case "agent.system": UpdateAgentSystemPrompt(message); break;
                 case "agent.models": await PublishAgentModelsAsync(); break;
                 case "agent.model": await SelectAgentModelAsync(message); break;
-                case "agent.configure": SelectAiConsumer("agent"); ConfigureAi(); PublishAgentOptions(); break;
+                case "agent.configure": SelectAiConsumer("agent");
+                    ConfigureAi(AgentString(message, "provider"), AgentString(message, "model"));
+                    PublishAgentOptions(); break;
                 case "agent.cancel": CancelAgent(); break;
                 case "agent.clear": NewAgentSession(); break;
                 case "agent.session.select": SelectAgentSession(message); break;
