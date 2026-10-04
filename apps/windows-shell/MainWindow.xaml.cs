@@ -345,18 +345,16 @@ public partial class MainWindow : Window
                       const session = document.querySelector('.agent-session-row').getBoundingClientRect();
                       const composer = document.getElementById('agent-form').getBoundingClientRect();
                       if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
-                      const categories = document.querySelector('.agent-side > .focus-menu');
-                      if (!categories.hidden) return false;
-                      document.querySelector('.agent-section-switch').click();
-                      if (categories.hidden) return false;
-                      categories.querySelectorAll('button')[3].click();
-                      if (!categories.hidden || document.querySelector('.agent-side').dataset.activePanel !== 'usage') return false;
-                      document.getElementById('agent-inspector-toggle').click();
-                      if (document.querySelector('.agent-side').dataset.activePanel !== 'sessions') return false;
-                      document.getElementById('agent-inspector-toggle').click();
+                      const rail = document.querySelector('.agent-section-rail');
+                      if (rail.querySelectorAll('button').length !== 6 ||
+                          document.querySelector('.agent-side').dataset.activePanel !== 'sessions' ||
+                          document.getElementById('agent-inspector-toggle')) return false;
+                      rail.querySelector('[data-agent-section="usage"]').click();
                       if (document.querySelector('.agent-side').dataset.activePanel !== 'usage' ||
                           !document.getElementById('agent-usage').closest('.focus-panel')) return false;
-                      categories.querySelectorAll('button')[0].click();
+                      rail.querySelector('[data-agent-section="modules"]').click();
+                      if (document.querySelector('.agent-side').dataset.activePanel !== 'modules') return false;
+                      rail.querySelector('[data-agent-section="sessions"]').click();
                       if (!document.querySelector('#view-activity > .overview-grid') ||
                           !document.querySelector('#view-course .study-side #course-chapters') ||
                           !document.querySelector('#view-homework .study-side #homework-page')) return false;
@@ -432,6 +430,13 @@ public partial class MainWindow : Window
                     if (!metered) await Task.Delay(100);
                 }
                 if (!metered) { FailSmoke("Agent token and cache meter was not rendered"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('[data-agent-section=usage]').click()");
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-usage-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('[data-agent-section=sessions]').click()");
+                }
                 PublishAgent("event", "Agent 可用", new { type = "assistant" });
                 var rendered = "";
                 for (var attempt = 0; attempt < 20 && rendered != "Agent 可用"; attempt++)
@@ -441,6 +446,15 @@ public partial class MainWindow : Window
                     if (rendered != "Agent 可用") await Task.Delay(100);
                 }
                 if (rendered != "Agent 可用") { FailSmoke("Agent messages were not rendered"); return; }
+                PublishAgent("event", "```c\nint main(void) {\n  return 42;\n}\n```", new { type = "assistant" });
+                var highlighted = "false";
+                for (var attempt = 0; attempt < 20 && highlighted != "true"; attempt++)
+                {
+                    highlighted = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelectorAll('.agent-assistant pre .agent-code-keyword').length >= 2 && document.querySelector('.agent-assistant pre .agent-code-number')?.textContent === '42'");
+                    if (highlighted != "true") await Task.Delay(100);
+                }
+                if (highlighted != "true") { FailSmoke("Agent code syntax colors were not rendered"); return; }
                 PublishAgent("event", "这是模型接口返回的思考内容。", new { type = "reasoning" });
                 PublishAgent("event", "replace_text\n更新说明文件", new { type = "step" });
                 PublishAgent("event", JsonSerializer.Serialize(new { name = "replace_text", path = "note.txt",

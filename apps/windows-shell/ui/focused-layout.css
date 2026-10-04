@@ -10,26 +10,32 @@
 .focus-panel > details { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
 .focus-panel > details > summary { display: none; }
 
-#view-ai .agent-side { position: relative; }
-#view-ai .agent-side-head { padding-bottom: 7px; }
-#view-ai .agent-section-switch { min-height: 34px; padding: 0 7px; background: transparent; box-shadow: none; color: var(--text); font-size: 15px; text-align: left; }
-#view-ai .agent-section-switch:hover { background: var(--surface); color: var(--accent); box-shadow: none; }
-#view-ai .agent-side-head #agent-search-toggle { width: 32px; padding: 0; }
+#view-ai .agent-layout { grid-template-columns: minmax(265px, 290px) minmax(0, 1fr); }
+#view-ai .agent-side { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0; padding: 0; }
+#view-ai .agent-section-rail { display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; margin: 0; padding: 16px 4px; border-right: 1px solid var(--border); }
+#view-ai .agent-rail-item { display: grid; place-items: center; width: 32px; min-height: 32px; margin: 0; padding: 0; border-radius: 10px; background: transparent; color: var(--subtle); box-shadow: none; }
+#view-ai .agent-rail-item:hover, #view-ai .agent-rail-item.active { background: var(--surface); color: var(--accent); box-shadow: none; }
+#view-ai .agent-rail-item svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+:root[data-theme="dark"] #view-ai .agent-rail-item { background: transparent; background-image: none; color: var(--subtle); box-shadow: none; }
+:root[data-theme="dark"] #view-ai .agent-rail-item:hover, :root[data-theme="dark"] #view-ai .agent-rail-item.active { background: var(--surface); background-image: none; color: #c9b7ff; box-shadow: none; }
+#view-ai .agent-side-content { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 14px 11px; }
+#view-ai .agent-side-head { padding: 0 1px 8px; }
+#view-ai .agent-side-head strong { font-size: 14px; }
+#view-ai .agent-side-head #agent-search-toggle { width: 30px; padding: 0; }
 #view-ai .agent-side:not([data-active-panel="sessions"]) #agent-search-toggle { display: none; }
-:root[data-theme="dark"] #view-ai .agent-section-switch { background: transparent; background-image: none; color: var(--text); box-shadow: none; }
-:root[data-theme="dark"] #view-ai .agent-section-switch:hover { background: var(--surface); background-image: none; color: var(--accent); box-shadow: none; }
-#view-ai .agent-new-chat { width: 100%; min-height: 38px; margin: 0 0 12px; padding: 7px 12px; border: 0; border-radius: 11px; background: transparent; box-shadow: none; color: var(--text); text-align: left; font-size: 12px; }
+#view-ai .agent-new-chat { width: 100%; min-height: 36px; margin: 0 0 12px; padding: 7px 9px; border: 0; border-radius: 10px; background: transparent; box-shadow: none; color: var(--text); text-align: left; font-size: 12px; }
 #view-ai .agent-new-chat:hover { background: var(--surface); color: var(--accent); box-shadow: none; }
 :root[data-theme="dark"] #view-ai .agent-new-chat { background: transparent; background-image: none; box-shadow: none; color: var(--text); }
 :root[data-theme="dark"] #view-ai .agent-new-chat:hover { background: var(--surface); background-image: none; box-shadow: none; color: var(--accent); }
-#view-ai .agent-side:not([data-active-panel="sessions"]) > .agent-new-chat,
-#view-ai .agent-side:not([data-active-panel="sessions"]) > .agent-project { display: none; }
-#view-ai .agent-project { min-height: 0; margin: 0 0 14px; padding: 7px 11px; border: 0; border-radius: 11px; background: transparent; box-shadow: none; }
+#view-ai .agent-side:not([data-active-panel="sessions"]) .agent-new-chat,
+#view-ai .agent-side:not([data-active-panel="sessions"]) .agent-project { display: none; }
+#view-ai .agent-project { position: relative; min-height: 0; margin: 0 0 14px; padding: 7px 9px; border: 0; border-radius: 10px; background: transparent; box-shadow: none; }
 #view-ai .agent-project:hover { background: var(--surface); box-shadow: none; }
-#view-ai .agent-project span { margin: 0 0 10px; font-size: 11px; font-weight: 750; }
-#view-ai .agent-project strong::before { content: '▱'; display: inline-block; width: 20px; margin-right: 5px; color: var(--subtle); font-size: 16px; vertical-align: -1px; }
-#view-ai .agent-side > .focus-menu { position: absolute; z-index: 12; top: 55px; left: 12px; right: 12px; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); box-shadow: 0 15px 35px #0003; }
-#view-ai .agent-side > .focus-panels { flex: 1; }
+#view-ai .agent-project span { margin: 0 0 9px; font-size: 11px; font-weight: 750; }
+#view-ai .agent-project svg { position: absolute; left: 9px; bottom: 9px; width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+#view-ai .agent-project strong { padding-left: 23px; }
+#view-ai .agent-side-content > .focus-panels { flex: 1; }
+#view-ai .agent-side-content > .focus-panels[hidden] { display: none; }
 #view-ai .focus-panel[data-focus-panel="sessions"] { height: 100%; }
 #view-ai .focus-panel .agent-sessions { height: 100%; margin: 0; padding: 0; }
 #view-ai .focus-panel .agent-config-panel, #view-ai .focus-panel .agent-configuration, #view-ai .focus-panel .ai-service-log { padding: 8px 1px; }
@@ -41,6 +47,26 @@
 #view-ai .focus-panel .ai-consumer small { display: block; margin-top: 4px; font-size: 10px; }
 #view-ai .focus-panel .agent-detail { padding: 5px 2px; }
 #view-ai .focus-panel .agent-detail #agent-meter[hidden] { display: none; }
+#view-ai .focus-panel .agent-detail #agent-cost[hidden] { display: none; }
+#view-ai .agent-usage-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-height: 34px; padding: 7px 3px; border-bottom: 1px solid var(--border); color: var(--subtle); font: 12px/1.5 "Microsoft YaHei UI", "Segoe UI", sans-serif; }
+#view-ai .agent-usage-row strong { color: var(--text); font-size: 13px; font-variant-numeric: tabular-nums; }
+#view-ai #agent-meter .agent-usage-row strong { color: var(--accent); }
+#view-ai #agent-cost .agent-usage-row { border-bottom: 0; }
+#view-ai .agent-entry.agent-assistant pre code { display: block; padding: 0; background: transparent; color: var(--text); font: 12px/1.65 "Cascadia Code", Consolas, monospace; white-space: pre; }
+#view-ai .agent-code-comment { color: #74806f; }
+#view-ai .agent-code-directive { color: #ad5a39; }
+#view-ai .agent-code-keyword { color: #8056a2; font-weight: 650; }
+#view-ai .agent-code-type { color: #1c7182; }
+#view-ai .agent-code-string { color: #a35728; }
+#view-ai .agent-code-number { color: #356db0; }
+#view-ai .agent-code-function { color: #81602d; }
+:root[data-theme="dark"] #view-ai .agent-code-comment { color: #829488; }
+:root[data-theme="dark"] #view-ai .agent-code-directive { color: #e69b79; }
+:root[data-theme="dark"] #view-ai .agent-code-keyword { color: #c6a6ef; }
+:root[data-theme="dark"] #view-ai .agent-code-type { color: #83cdd7; }
+:root[data-theme="dark"] #view-ai .agent-code-string { color: #e6b785; }
+:root[data-theme="dark"] #view-ai .agent-code-number { color: #9ac1f0; }
+:root[data-theme="dark"] #view-ai .agent-code-function { color: #e2cd8f; }
 #view-ai .agent-operation { align-self: stretch; max-width: min(100%, 850px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); color: var(--text); }
 #view-ai .agent-operation summary { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 13px; list-style: none; }
 #view-ai .agent-operation summary::-webkit-details-marker { display: none; }
@@ -102,6 +128,10 @@
 @media (max-width: 1050px) {
   #view-course .study-layout, #view-homework .study-layout { grid-template-columns: minmax(120px, 160px) minmax(0, 1fr); gap: 10px; }
   .study-side { padding: 9px; }
+}
+@media (max-width: 900px) {
+  #view-ai .agent-layout { grid-template-columns: minmax(0, 1fr); }
+  #view-ai .agent-side.mobile-open { display: grid; grid-template-columns: 40px minmax(0, 1fr); width: min(290px, calc(100% - 32px)); }
 }
 @media (max-width: 680px) {
   #view-course .study-layout, #view-homework .study-layout { display: block; }

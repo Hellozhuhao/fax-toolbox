@@ -62,31 +62,48 @@
     ], 'sessions');
     agentSettings.remove(); inspector.remove();
     const agentMenu = agentSide.querySelector(':scope > .focus-menu');
+    const agentPanels = agentSide.querySelector(':scope > .focus-panels');
     const agentHeader = agentSide.querySelector('.agent-side-head');
-    const agentSwitch = document.createElement('button'); agentSwitch.type = 'button'; agentSwitch.className = 'agent-section-switch';
-    agentSwitch.textContent = 'Agent ⌄'; agentSwitch.setAttribute('aria-label', '切换 Agent 侧栏分类');
-    agentHeader.querySelector('strong').replaceWith(agentSwitch);
+    const agentTitle = agentHeader.querySelector('strong');
     agentHeader.append($('agent-search-toggle'));
     agentSide.querySelector('.agent-list-heading').remove();
     const newChat = $('agent-clear'); agentSide.insertBefore(newChat, $('agent-folder'));
     newChat.textContent = '✎  新对话'; newChat.classList.add('agent-new-chat');
-    agentMenu.hidden = true;
+    const projectIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    projectIcon.setAttribute('viewBox', '0 0 24 24'); projectIcon.setAttribute('aria-hidden', 'true');
+    const folderPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    folderPath.setAttribute('d', 'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z');
+    projectIcon.append(folderPath); $('agent-folder').insertBefore(projectIcon, $('agent-root'));
+    const rail = document.createElement('nav'); rail.className = 'agent-section-rail'; rail.setAttribute('aria-label', 'Agent 分类');
+    const railItems = [
+      ['sessions', '会话', '<path d="M4 5h16v12H8l-4 3z"/>'],
+      ['model', '模型', '<path d="m12 2 2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z"/>'],
+      ['modules', '模块配置', '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'],
+      ['usage', '用量', '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'],
+      ['tools', '可用工具', '<path d="M14 5a5 5 0 0 0-6 6L3 16l5 5 5-5a5 5 0 0 0 6-6l-3 3-4-4z"/>'],
+      ['responses', '模块响应', '<path d="M5 3h10l4 4v14H5z"/><path d="M15 3v5h4M8 12h8M8 16h6"/>']
+    ];
+    for (const [key, label, paths] of railItems) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'agent-rail-item';
+      button.dataset.agentSection = key; button.title = label; button.setAttribute('aria-label', label);
+      button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
+      rail.append(button);
+    }
+    const sideContent = document.createElement('div'); sideContent.className = 'agent-side-content';
+    sideContent.append(agentHeader, newChat, $('agent-folder'), agentPanels);
+    agentSide.replaceChildren(rail, sideContent);
     const selectAgentCategory = key => {
       selectAgentPanel(key);
-      const label = [...agentMenu.querySelectorAll('button')].find(button => button.dataset.focusKey === key);
-      agentSwitch.textContent = key === 'sessions' ? 'Agent ⌄' : (label?.textContent || 'Agent') + ' ⌄';
-      agentMenu.hidden = true;
+      const label = railItems.find(item => item[0] === key)?.[1];
+      agentTitle.textContent = key === 'sessions' ? 'Agent' : label || 'Agent';
+      for (const button of rail.querySelectorAll('button')) {
+        const active = button.dataset.agentSection === key;
+        button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+      }
     };
-    agentSwitch.addEventListener('click', () => { agentMenu.hidden = !agentMenu.hidden; });
-    agentMenu.addEventListener('keydown', event => { if (event.key === 'Escape') { agentMenu.hidden = true; agentSwitch.focus(); } });
-    agentMenu.querySelectorAll('button').forEach(button => button.addEventListener('click', () => selectAgentCategory(button.dataset.focusKey)));
-    document.addEventListener('pointerdown', event => { if (!agentMenu.hidden && !agentMenu.contains(event.target) && event.target !== agentSwitch) agentMenu.hidden = true; });
-    $('agent-inspector-toggle').title = '用量与工具';
-    $('agent-inspector-toggle').setAttribute('aria-label', '用量与工具');
-    $('agent-inspector-toggle').addEventListener('click', () => {
-      selectAgentCategory(agentSide.dataset.activePanel === 'usage' ? 'sessions' : 'usage');
-      if (matchMedia('(max-width: 900px)').matches) { agentSide.classList.add('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'true'); }
-    });
+    rail.querySelectorAll('button').forEach(button => button.addEventListener('click', () => selectAgentCategory(button.dataset.agentSection)));
+    agentMenu.remove();
+    selectAgentCategory('sessions');
 
     function studyLayout(id, primary, secondary, initial) {
       const view = $('view-' + id);
@@ -423,11 +440,17 @@
   function renderAgentUsage(data) {
     const input = Number(data.input || 0), output = Number(data.output || 0);
     const rate = input > 0 && data.cached != null ? Math.round(100 * Number(data.cached) / input) + '%' : '—';
+    const row = (label, value) => {
+      const item = document.createElement('div'); item.className = 'agent-usage-row';
+      const name = document.createElement('span'); name.textContent = label;
+      const number = document.createElement('strong'); number.textContent = value;
+      item.append(name, number); return item;
+    };
+    $('agent-usage').replaceChildren(row('请求', String(data.calls || 0)), row('输入', input.toLocaleString()), row('输出', output.toLocaleString()));
     $('agent-meter').hidden = !data.calls;
-    const amount = data.cost == null ? '' : ` · 估算 ${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(4)}`;
-    $('agent-meter').textContent = `输入 ${input.toLocaleString()} · 输出 ${output.toLocaleString()} · 缓存 ${rate}${amount}`;
-    $('agent-usage').textContent = `${data.calls || 0} 次请求 · 输入 ${input.toLocaleString()} token · 输出 ${output.toLocaleString()} token · 缓存命中 ${rate}`;
-    $('agent-cost').textContent = data.cost == null ? '本会话暂无费用估算' : `估算费用：${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(6)} ${data.currency || ''}`;
+    $('agent-meter').replaceChildren(row('缓存命中', rate));
+    $('agent-cost').hidden = data.cost == null;
+    $('agent-cost').replaceChildren(...(data.cost == null ? [] : [row('估算', `${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`)]));
   }
   function renderAgentImages(animateFrom = Number.POSITIVE_INFINITY) {
     const tray = $('agent-attachments'); tray.replaceChildren(); tray.hidden = agentImages.length === 0;
@@ -467,6 +490,29 @@
     } catch (error) { $('agent-state').textContent = error.message || '图片无法读取'; }
     finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; $('agent-image-file').value = ''; }
   }
+  function highlightAgentCode(element, language) {
+    const source = element.textContent;
+    const keywords = new Set('auto break case catch class const continue def delete do else enum export false finally for from function if import in interface let new null private protected public return static struct switch this throw true try typedef using var void while yield async await sizeof include int char float double bool long short unsigned signed string namespace template typename'.split(' '));
+    const types = new Set('int char float double bool long short unsigned signed string String Number Boolean Array Object Dictionary List Task size_t uint32_t uint64_t'.split(' '));
+    const tokens = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\b\d+(?:\.\d+)?\b|\b[A-Za-z_$][\w$]*\b)/g;
+    const fragment = document.createDocumentFragment();
+    let offset = 0;
+    for (const match of source.matchAll(tokens)) {
+      if (match.index > offset) fragment.append(document.createTextNode(source.slice(offset, match.index)));
+      const value = match[0]; let kind = '';
+      if (value.startsWith('//') || value.startsWith('/*') || value.startsWith('#')) kind = value.startsWith('#') && language !== 'python' && language !== 'shell' ? 'directive' : 'comment';
+      else if (/^["'`]/.test(value)) kind = 'string';
+      else if (/^\d/.test(value)) kind = 'number';
+      else if (types.has(value)) kind = 'type';
+      else if (keywords.has(value)) kind = 'keyword';
+      else if (/^\s*\(/.test(source.slice(match.index + value.length))) kind = 'function';
+      if (kind) { const span = document.createElement('span'); span.className = 'agent-code-' + kind; span.textContent = value; fragment.append(span); }
+      else fragment.append(document.createTextNode(value));
+      offset = match.index + value.length;
+    }
+    if (offset < source.length) fragment.append(document.createTextNode(source.slice(offset)));
+    element.replaceChildren(fragment);
+  }
   function renderAgentMarkdown(container, source) {
     const lines = String(source || '').split(/\r?\n/);
     let paragraph = [], list = null, listKind = '', code = null;
@@ -483,8 +529,8 @@
     for (const line of lines) {
       if (line.trim().startsWith('```')) {
         flushParagraph(); closeList();
-        if (code) { container.append(code); code = null; }
-        else { code = document.createElement('pre'); const child = document.createElement('code'); code.append(child); }
+        if (code) { highlightAgentCode(code.firstChild, code.dataset.language); container.append(code); code = null; }
+        else { code = document.createElement('pre'); code.dataset.language = line.trim().slice(3).trim().toLowerCase(); const child = document.createElement('code'); code.append(child); }
         continue;
       }
       if (code) { code.firstChild.textContent += (code.firstChild.textContent ? '\n' : '') + line; continue; }
@@ -495,7 +541,7 @@
       if (item) { flushParagraph(); const kind = item[2] ? 'ol' : 'ul'; if (!list || listKind !== kind) { list = document.createElement(kind); container.append(list); listKind = kind; } const node = document.createElement('li'); inline(node, item[3]); list.append(node); continue; }
       closeList(); paragraph.push(line);
     }
-    flushParagraph(); if (code) container.append(code);
+    flushParagraph(); if (code) { highlightAgentCode(code.firstChild, code.dataset.language); container.append(code); }
   }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
