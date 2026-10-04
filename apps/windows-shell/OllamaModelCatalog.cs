@@ -38,6 +38,8 @@ internal static class OllamaModelCatalog
 
     internal static async Task<int> ContextTokensAsync(AiSettings settings, CancellationToken cancellation)
     {
+        if (AiProviderPresets.Match(settings).Id == "venice")
+            return settings.Model == "qwen-3-6-plus" ? 1_000_000 : 128_000;
         if (AiProviderPresets.Match(settings).Id != "ollama") return 128000;
         if (ContextCache.TryGetValue(settings.Model, out var cached)) return cached;
         try

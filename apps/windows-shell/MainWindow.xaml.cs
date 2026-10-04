@@ -427,6 +427,23 @@ public partial class MainWindow : Window
                     await using var output = File.Create(Path.Combine(root, ".cache", "agent-run-controls-preview.png"));
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
                 }
+                ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    v = 1, kind = "agent.options", extra = new { mode = "chat", effort = "normal",
+                        provider = "venice", model = "qwen-3-6-plus", systemPrompt = "" }
+                }));
+                await Task.Delay(100);
+                var veniceChoices = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const cards = [...document.querySelectorAll('#agent-model-list .agent-model-choice')];
+                      return cards.length === 2 && cards[0].classList.contains('selected') &&
+                        cards[0].textContent.includes('Qwen 3.6 Plus') &&
+                        cards[1].textContent.includes('Venice Uncensored 1.2');
+                    })()
+                    """);
+                if (veniceChoices != "true") { FailSmoke("Venice model choices were not rendered"); return; }
+                PublishAgentOptions();
+                await Task.Delay(100);
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
                 var agentPreview = Path.Combine(root, ".cache", "agent-workspace-preview.png");
                 Directory.CreateDirectory(Path.GetDirectoryName(agentPreview)!);
@@ -709,6 +726,19 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
                 await using (var output = File.Create(preview)) encoder.Save(output);
                 dialog.Close();
+                var venice = AiProviderPresets.All.First(item => item.Id == "venice");
+                var veniceDialog = new AiSettingsDialog(this,
+                    new AiSettings(venice.Endpoint, AiProviderPresets.VeniceModels[1].Id, ""), "agent");
+                veniceDialog.Show();
+                await Task.Delay(200);
+                var veniceImage = new RenderTargetBitmap((int)veniceDialog.ActualWidth,
+                    (int)veniceDialog.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                veniceImage.Render(veniceDialog);
+                var veniceEncoder = new PngBitmapEncoder();
+                veniceEncoder.Frames.Add(BitmapFrame.Create(veniceImage));
+                await using (var output = File.Create(Path.Combine(root, ".cache", "ai-dialog-venice-preview.png")))
+                    veniceEncoder.Save(output);
+                veniceDialog.Close();
                 var summary = "正在读取 AI 配置…";
                 for (var attempt = 0; attempt < 30 && summary == "正在读取 AI 配置…"; attempt++)
                 {

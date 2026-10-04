@@ -402,18 +402,19 @@
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
+    const modelLabel = name => name === 'qwen-3-6-plus' || name === 'venice-uncensored-1-2' ? agentModelNames(name)[0] : name;
     const detail = message.error || (!message.configured ? '尚未配置模型' :
-      `${message.provider} · ${message.model}${message.requiresKey ? `\nAPI Key ${message.hasKey ? '已保存' : '未填写'}` : ''}`);
+      `${message.provider} · ${modelLabel(message.model)}${message.requiresKey ? `\nAPI Key ${message.hasKey ? '已保存' : '未填写'}` : ''}`);
     const consumer = message.consumer || 'course';
     $('ai-config-heading').textContent = consumer === 'agent' ? 'Agent 配置' : consumer === 'homework' ? '作业校对配置' : '学习通答题配置';
     for (const item of document.querySelectorAll('[data-ai-consumer]')) { item.classList.toggle('selected', item.dataset.aiConsumer === consumer); item.setAttribute('aria-pressed', String(item.dataset.aiConsumer === consumer)); }
     for (const item of message.consumers || []) {
       const target = $('ai-' + item.id + '-config');
-      if (target) target.textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置模型';
-      if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置学习通 AI';
-      if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${item.model}` : '尚未配置作业 AI';
+      if (target) target.textContent = item.configured ? `${item.provider} · ${modelLabel(item.model)}` : '尚未配置模型';
+      if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${modelLabel(item.model)}` : '尚未配置学习通 AI';
+      if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${modelLabel(item.model)}` : '尚未配置作业 AI';
       if (item.id === 'agent') {
-        if (item.configured) { agentModel = item.model || ''; agentProvider = item.provider === '本地模型' ? 'ollama' : item.provider || ''; updateAgentRunOptions(); }
+        if (item.configured) { agentModel = item.model || ''; agentProvider = item.providerId || (item.provider === '本地模型' ? 'ollama' : item.provider === 'Venice' ? 'venice' : item.provider || ''); updateAgentRunOptions(); }
         agentImagesSupported = item.supportsImages !== false;
         $('agent-image-file').disabled = !agentImagesSupported;
         $('agent-image-add').classList.toggle('disabled', !agentImagesSupported);
@@ -442,13 +443,16 @@
   function agentModelNames(name) {
     if (name === 'fax-toolbox-qwen3:8k') return ['Qwen3 8B · 长上下文', '本地模型 · 8K 上下文'];
     if (name === 'huihui_ai/qwen3-abliterated:8b-v2') return ['Qwen3 8B · 默认配置', '本地模型 · 原始上下文'];
+    if (name === 'qwen-3-6-plus') return ['Qwen 3.6 Plus', 'Venice · 中文写作'];
+    if (name === 'venice-uncensored-1-2') return ['Venice Uncensored 1.2', 'Venice · 自由创作'];
     const title = name.replace(/^hf\.co\//i, '').split('/').pop().replace(/[-_]/g, ' ');
     return [title || '未配置模型', name];
   }
   function renderAgentModelList() {
     const list = $('agent-model-list');
     list.replaceChildren();
-    const models = agentProvider === 'ollama' ? agentInstalledModels.slice() : [];
+    const models = agentProvider === 'ollama' ? agentInstalledModels.slice() :
+      agentProvider === 'venice' ? [{name: 'qwen-3-6-plus'}, {name: 'venice-uncensored-1-2'}] : [];
     if (agentModel && !models.some(item => item.name === agentModel)) models.unshift({name: agentModel});
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';

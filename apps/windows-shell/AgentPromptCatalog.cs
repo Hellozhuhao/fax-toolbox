@@ -32,6 +32,9 @@ internal static class AgentPromptCatalog
             "qwen" => "当前是千问模型。用自然中文表达，回答前核对用户给出的具体条件。",
             "siliconflow" => "当前通过硅基流动连接模型。遵循模型实际能力，不假定已读取图片或项目。",
             "openai" => "当前通过 OpenAI 接口连接模型。直接回答并清楚区分已知事实与推测。",
+            "venice" => settings.Model == "qwen-3-6-plus" ?
+                "当前通过 Venice 连接 Qwen。优先用自然中文表达，并保留用户要求的题材、语气与篇幅。" :
+                "当前通过 Venice 连接创作模型。直接完成用户的合法创作请求，保持设定与人物一致。",
             _ => "当前通过自定义兼容接口连接模型。按当前请求和实际可用能力工作。"
         };
         var depth = effort switch
