@@ -113,8 +113,17 @@ var localPreset = AiProviderPresets.All.First(item => item.Id == "ollama");
 if (AiProviderPresets.Match(new AiSettings(localPreset.Endpoint, "another-local-model", "")).Id != "ollama")
     throw new Exception("Local model configuration lost its provider selection");
 if (AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, localPreset.Model, "")) ||
-    !AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, "qwen3.5:4b", "")))
+    !AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, "qwen3.5:4b", "")) ||
+    AiProviderPresets.SupportsImages(new AiSettings(localPreset.Endpoint, "fax-toolbox-qwen3:8k", "")))
     throw new Exception("Local model image capability was classified incorrectly");
+var packedContext = AgentContextBuilder.Build(
+    ["较早记录：" + new string('旧', 4000), "最近记录：继续聊中文\n"],
+    "用户：继续我们刚才的话题\n",
+    ["工具结果：" + new string('新', 4000)], 5200);
+if (packedContext.Length > 5200 || !packedContext.Contains("用户：继续我们刚才的话题") ||
+    !packedContext.Contains("工具结果：") || !packedContext.Contains("最近记录：") ||
+    packedContext.Contains("较早记录："))
+    throw new Exception("Local context did not prioritize current request and recent tool output");
 using (var localPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
     new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "你好")))
     if (localPayload.RootElement.GetProperty("response_format").GetProperty("type").GetString() != "json_object")

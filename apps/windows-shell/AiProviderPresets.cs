@@ -29,5 +29,6 @@ internal static class AiProviderPresets
     public static bool SupportsImages(AiSettings? settings) => settings is null ||
         !(Match(settings).Id == "qwen" && settings.Model == "qwen-plus" ||
           Match(settings).Id == "ollama" &&
-          settings.Model.StartsWith("huihui_ai/qwen3-abliterated", StringComparison.OrdinalIgnoreCase));
+          (settings.Model.StartsWith("huihui_ai/qwen3-abliterated", StringComparison.OrdinalIgnoreCase) ||
+           settings.Model.StartsWith("fax-toolbox-qwen3:", StringComparison.OrdinalIgnoreCase)));
 }
