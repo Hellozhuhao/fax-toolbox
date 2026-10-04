@@ -183,7 +183,7 @@ public partial class MainWindow
         var watch = Stopwatch.StartNew();
         try
         {
-            settings ??= throw new InvalidDataException("尚未配置当前模块的模型。");
+            if (settings is null) throw new InvalidDataException("尚未配置当前模块的模型。");
             await aiRuntime!.TestConnectionAsync(settings, timeout.Token);
             PublishAiTestStatus("success", $"连接成功，模型响应格式有效（{watch.Elapsed.TotalSeconds:F1} 秒）。", consumer);
         }
