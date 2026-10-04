@@ -739,6 +739,19 @@ public partial class MainWindow : Window
                 await using (var output = File.Create(Path.Combine(root, ".cache", "ai-dialog-venice-preview.png")))
                     veniceEncoder.Save(output);
                 veniceDialog.Close();
+                var qwen = AiProviderPresets.All.First(item => item.Id == "qwen");
+                var qwenDialog = new AiSettingsDialog(this,
+                    new AiSettings(qwen.Endpoint, qwen.Model, ""), "agent");
+                qwenDialog.Show();
+                await Task.Delay(200);
+                var qwenImage = new RenderTargetBitmap((int)qwenDialog.ActualWidth,
+                    (int)qwenDialog.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                qwenImage.Render(qwenDialog);
+                var qwenEncoder = new PngBitmapEncoder();
+                qwenEncoder.Frames.Add(BitmapFrame.Create(qwenImage));
+                await using (var output = File.Create(Path.Combine(root, ".cache", "ai-dialog-qwen-preview.png")))
+                    qwenEncoder.Save(output);
+                qwenDialog.Close();
                 var summary = "正在读取 AI 配置…";
                 for (var attempt = 0; attempt < 30 && summary == "正在读取 AI 配置…"; attempt++)
                 {

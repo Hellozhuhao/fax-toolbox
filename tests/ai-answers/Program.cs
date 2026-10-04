@@ -96,6 +96,9 @@ if (AiPricingCatalog.ParseDeepSeek("deepseek-flash 百万tokens输入（缓存�
 if (AiPricingCatalog.ParseQwen("qwen-plus 模型价格 华北 2（北京） 输入<=128k 输入 0.8 每百万 tokens 输出 2 每百万 tokens 输入（缓存命中） 0.16 每百万 tokens 128k<输入<=256k 输入 2.4 每百万 tokens 输出 20 每百万 tokens 输入（缓存命中） 0.48 每百万 tokens 256k<输入<=1m 输入 4.8 每百万 tokens 输出 48 每百万 tokens 输入（缓存命中） 0.96 每百万 tokens 新加坡") is not { Length: 3 } liveQwen ||
     liveQwen[2].OutputPerMillion != 48m)
     throw new Exception("Official Qwen price refresh could not parse its tiers");
+if (AiPricingCatalog.ParseQwenFlat("qwen3.8-flash 模型价格 华北2（北京） 输入 0.8 每百万tokens 输出 2.7 每百万tokens 输入（缓存命中） 0.1 每百万tokens 新加坡", "qwen3.8-flash") is not { Length: 1 } qwenFlashPrice ||
+    qwenFlashPrice[0].CachedInputPerMillion != .1m)
+    throw new Exception("Official Qwen Flash price refresh could not parse Beijing prices");
 if (AiPricingCatalog.ParseSiliconFlow("Qwen/Qwen3.6-27B 视觉输入 输入: ￥1.8 / M Tokens 输出: ￥14.4 / M Tokens") is not { Length: 1 } liveSilicon ||
     liveSilicon[0].InputPerMillion != 1.8m)
     throw new Exception("Official SiliconFlow price refresh could not parse its model card");
@@ -103,6 +106,26 @@ if (AiPricingCatalog.ParseOpenAi("GPT-4.1 Mini Pricing Text tokens Per 1M tokens
     liveOpenAi[0].CachedInputPerMillion != .1m)
     throw new Exception("Official OpenAI price refresh could not parse its model page");
 var venicePreset = AiProviderPresets.All.First(item => item.Id == "venice");
+var qwenPreset = AiProviderPresets.All.First(item => item.Id == "qwen");
+if (qwenPreset.Model != "qwen3.8-flash")
+    throw new Exception("Cost-effective Qwen model is not the default");
+foreach (var option in AiProviderPresets.QwenModels)
+{
+    var configured = new AiSettings(qwenPreset.Endpoint, option.Id, "");
+    if (AiProviderPresets.Match(configured).Id != "qwen")
+        throw new Exception("Qwen model was not recognized: " + option.Id);
+}
+if (AiPricingCatalog.Resolve(new AiSettings(qwenPreset.Endpoint, "qwen3.8-flash", ""),
+    metered, fridayPeak) is not { Currency: "CNY", OutputPerMillion: 2.7m } ||
+    AiPricingCatalog.Resolve(new AiSettings(qwenPreset.Endpoint, "qwen3.8-max", ""),
+    metered, fridayPeak)?.OutputPerMillion != 36m)
+    throw new Exception("Qwen 3.8 models were assigned the wrong price");
+using (var qwenPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(qwenPreset.Endpoint, "qwen3.8-flash", ""), "instructions", "你好",
+    structured: false, reasoningEffort: "none")))
+    if (qwenPayload.RootElement.GetProperty("reasoning_effort").GetString() != "none" ||
+        qwenPayload.RootElement.TryGetProperty("response_format", out _))
+        throw new Exception("Qwen Chat did not preserve the requested effort or text format");
 foreach (var option in AiProviderPresets.VeniceModels)
 {
     var configured = new AiSettings(venicePreset.Endpoint, option.Id, "");

@@ -12,13 +12,15 @@ namespace FaxToolbox.Windows;
 internal static class AiPricingCatalog
 {
     private sealed record Prices(AiTokenPricing DeepSeekOffPeak, AiTokenPricing DeepSeekPeak,
-        AiTokenPricing[] QwenTiers, AiTokenPricing SiliconFlow, AiTokenPricing OpenAi,
+        AiTokenPricing[] QwenTiers, AiTokenPricing QwenFlash, AiTokenPricing QwenMax,
+        AiTokenPricing SiliconFlow, AiTokenPricing OpenAi,
         AiTokenPricing VeniceQwen, AiTokenPricing VeniceUncensored);
 
     private static Prices prices = new(
         new("CNY", 1m, .02m, 4m), new("CNY", 2m, .04m, 8m),
         [new("CNY", .8m, .16m, 2m), new("CNY", 2.4m, .48m, 20m),
             new("CNY", 4.8m, .96m, 48m)],
+        new("CNY", .8m, .1m, 2.7m), new("CNY", 12m, 1.5m, 36m),
         new("CNY", 1.8m, 1.8m, 14.4m), new("USD", .4m, .1m, 1.6m),
         new("USD", .63m, .06m, 3.75m), new("USD", .20m, .20m, .90m));
     private static readonly object Gate = new();
@@ -37,7 +39,12 @@ internal static class AiPricingCatalog
         return preset switch
         {
             "deepseek" => DeepSeekFlash(current, requestUtc),
-            "qwen" => QwenPlusBeijing(current, usage.InputTokens),
+            "qwen" => settings.Model switch
+            {
+                "qwen3.8-flash" => current.QwenFlash,
+                "qwen3.8-max" => current.QwenMax,
+                _ => QwenPlusBeijing(current, usage.InputTokens)
+            },
             "siliconflow" => current.SiliconFlow,
             "openai" => current.OpenAi,
             "venice" => settings.Model == "qwen-3-6-plus" ? current.VeniceQwen : current.VeniceUncensored,
@@ -67,6 +74,12 @@ internal static class AiPricingCatalog
                 value => prices = prices with { DeepSeekOffPeak = value[0], DeepSeekPeak = value[1] }),
             RefreshOneAsync("https://help.aliyun.com/zh/model-studio/qwen-plus", ParseQwen,
                 value => prices = prices with { QwenTiers = value }),
+            RefreshOneAsync("https://help.aliyun.com/zh/model-studio/qwen3-8-flash",
+                value => ParseQwenFlat(value, "qwen3.8-flash"),
+                value => prices = prices with { QwenFlash = value[0] }),
+            RefreshOneAsync("https://help.aliyun.com/zh/model-studio/qwen3-8-max",
+                value => ParseQwenFlat(value, "qwen3.8-max"),
+                value => prices = prices with { QwenMax = value[0] }),
             RefreshOneAsync("https://www.siliconflow.cn/models", ParseSiliconFlow,
                 value => prices = prices with { SiliconFlow = value[0] }),
             RefreshOneAsync("https://developers.openai.com/api/docs/models/gpt-4.1-mini", ParseOpenAi,
@@ -167,6 +180,25 @@ internal static class AiPricingCatalog
             result.Add(new("CNY", input.Value, cached.Value, output.Value));
         }
         return result.ToArray();
+    }
+
+    internal static AiTokenPricing[]? ParseQwenFlat(string text, string modelId)
+    {
+        var model = text.IndexOf(modelId, StringComparison.OrdinalIgnoreCase);
+        if (model < 0) return null;
+        var start = text.IndexOf("模型价格", model, StringComparison.Ordinal);
+        if (start < 0) return null;
+        var region = Regex.Match(text[start..], @"华北\s*2\s*[（(]北京[）)]",
+            RegexOptions.None, TimeSpan.FromMilliseconds(300));
+        if (!region.Success) return null;
+        var beijing = start + region.Index;
+        var limit = text.IndexOf("新加坡", beijing, StringComparison.Ordinal);
+        var section = text[beijing..(limit > beijing ? limit : Math.Min(text.Length, beijing + 2500))];
+        var input = Number(section, @"\b输入\s*(?<price>\d+(?:\.\d+)?)\s*每百万\s*tokens");
+        var cached = Number(section, @"输入\s*[（(]缓存命中[）)]\s*(?<price>\d+(?:\.\d+)?)\s*每百万\s*tokens");
+        var output = Number(section, @"\b输出\s*(?<price>\d+(?:\.\d+)?)\s*每百万\s*tokens");
+        return input is not null && cached is not null && output is not null ?
+            [new("CNY", input.Value, cached.Value, output.Value)] : null;
     }
 
     internal static AiTokenPricing[]? ParseSiliconFlow(string text)

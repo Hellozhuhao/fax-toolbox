@@ -225,9 +225,9 @@ public partial class MainWindow
         var settings = aiRuntime?.LoadSettings("agent");
         if (settings is null || name.Length is < 1 or > 128) return;
         var provider = AiProviderPresets.Match(settings).Id;
-        if (provider == "venice")
+        if (provider is "venice" or "qwen")
         {
-            if (!AiProviderPresets.VeniceModels.Any(item => item.Id == name)) return;
+            if (!AiProviderPresets.ModelsFor(provider).Any(item => item.Id == name)) return;
         }
         else if (provider == "ollama")
         {
@@ -587,7 +587,9 @@ public partial class MainWindow
         if (local && currentRequest.Length > 5200)
             throw new InvalidDataException("这条消息太长，请分段发送。");
         var toolBlocks = new List<string>();
-        var reasoningEffort = local ? effort switch { "quick" => "none", "deep" => "high", _ => "medium" } : null;
+        var reasoningEffort = local ? effort switch { "quick" => "none", "deep" => "high", _ => "medium" } :
+            AiProviderPresets.Match(settings).Id == "qwen" && settings.Model.StartsWith("qwen3.8-", StringComparison.Ordinal) ?
+                effort switch { "quick" => "none", "deep" => "medium", _ => "low" } : null;
         for (var step = 0; step < 8; step++)
         {
             cancellation.ThrowIfCancellationRequested();
