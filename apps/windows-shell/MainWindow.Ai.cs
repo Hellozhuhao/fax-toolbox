@@ -51,6 +51,7 @@ public partial class MainWindow
                     if (activeModule == "homework") PublishHomeworkStatus("AI 配置已更新，请重新开始校对。");
                 }
                 PublishAiConfiguration();
+                if (selectedAiConsumer == "agent") PublishAgentOptions();
                 PublishAiTestStatus("idle", $"已保存 {AiConsumerRegistry.Require(selectedAiConsumer).Name} 的 {dialog.Settings.Model} 配置。");
                 _ = RefreshAiBalanceAsync();
             }

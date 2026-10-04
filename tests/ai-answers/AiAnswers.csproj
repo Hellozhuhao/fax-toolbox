@@ -12,7 +12,10 @@
     <Compile Include="Program.cs" />
     <Compile Include="../../apps/windows-shell/AiAgentService.cs" Link="AiAgentService.cs" />
     <Compile Include="../../apps/windows-shell/AgentContextBuilder.cs" Link="AgentContextBuilder.cs" />
-    <Compile Include="../../apps/windows-shell/AgentResponseParser.cs" Link="AgentResponseParser.cs" />
+    <Compile Include="../../apps/windows-shell/AgentMemoryPlanner.cs" Link="AgentMemoryPlanner.cs" />
+    <Compile Include="../../apps/windows-shell/AgentPromptCatalog.cs" Link="AgentPromptCatalog.cs" />
+    <Compile Include="../../apps/windows-shell/AgentPromptStore.cs" Link="AgentPromptStore.cs" />
+    <Compile Include="../../apps/windows-shell/AgentToolSchemas.cs" Link="AgentToolSchemas.cs" />
     <Compile Include="../../apps/windows-shell/AiConsumerRegistry.cs" Link="AiConsumerRegistry.cs" />
     <Compile Include="../../apps/windows-shell/AiAnswerService.cs" Link="AiAnswerService.cs" />
     <Compile Include="../../apps/windows-shell/AiBalanceService.cs" Link="AiBalanceService.cs" />

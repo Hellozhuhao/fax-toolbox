@@ -1,4 +1,6 @@
 using System.IO;
+using System.Net.Http;
+using System.Text.Json;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
@@ -15,12 +17,14 @@ internal sealed class AiSettingsDialog : Window
     private readonly AiConsumer consumer;
     private readonly PasswordBox key = new();
     private readonly TextBox endpoint = new();
-    private readonly TextBox model = new();
+    private readonly ComboBox model = new() { IsEditable = true, IsTextSearchEnabled = false };
     private readonly TextBox inputPrice = new();
     private readonly TextBox cachedPrice = new();
     private readonly TextBox outputPrice = new();
     private readonly ComboBox priceCurrency = new();
     private readonly Expander pricingFields = new();
+    private readonly Expander promptFields = new();
+    private readonly Dictionary<string, TextBox> promptEditors = [];
     private readonly StackPanel customFields = new();
     private readonly StackPanel modelFields = new();
     private readonly StackPanel keyFields = new();
@@ -30,6 +34,8 @@ internal sealed class AiSettingsDialog : Window
     private readonly Dictionary<string, Button> providerButtons = [];
     private readonly SolidColorBrush background, surface, text, subtle, border, accent;
     private AiProviderPreset selected;
+    private bool localModelsLoaded;
+    private string promptLoadedKey = "";
     public AiSettings? Settings { get; private set; }
 
     private static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
@@ -131,6 +137,27 @@ internal sealed class AiSettingsDialog : Window
             }
             pricingFields.Content = fields; body.Children.Add(pricingFields);
         }
+        else
+        {
+            promptFields.Header = "自定义系统提示词"; promptFields.Foreground = text;
+            promptFields.Margin = new Thickness(0, 12, 0, 0);
+            var fields = new StackPanel { Margin = new Thickness(0, 9, 0, 0) };
+            foreach (var (scope, titleText) in consumer.Id == "course" ?
+                new[] { ("course.answer", "答题") } :
+                new[] { ("homework.review", "作业校对"), ("homework.explain", "详解") })
+            {
+                fields.Children.Add(Label(titleText));
+                var editor = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
+                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto, MaxLength = 3000 };
+                StyleInput(editor); editor.Height = 95;
+                promptEditors[scope] = editor;
+                fields.Children.Add(InputFrame(editor, new Thickness(0, 7, 0, 13)));
+            }
+            promptFields.Content = fields; body.Children.Add(promptFields);
+            model.SelectionChanged += (_, _) => RefreshPromptFields();
+            model.LostFocus += (_, _) => RefreshPromptFields();
+            endpoint.LostFocus += (_, _) => RefreshPromptFields();
+        }
         privacyHint.Text = "密钥由 Windows 当前用户加密保存在本机。输入内容会发送给所选服务商。";
         privacyHint.Foreground = subtle; privacyHint.FontSize = 11; privacyHint.TextWrapping = TextWrapping.Wrap;
         privacyHint.Margin = new Thickness(0, 17, 0, 4); body.Children.Add(privacyHint);
@@ -178,6 +205,33 @@ internal sealed class AiSettingsDialog : Window
         field.Padding = new Thickness(10, 7, 10, 7);
         field.FontSize = 12; field.Height = 36;
     }
+    private void StyleInput(ComboBox field)
+    {
+        field.Background = surface; field.Foreground = text; field.BorderThickness = new Thickness(0);
+        field.Padding = new Thickness(10, 7, 10, 7); field.FontSize = 12; field.Height = 36;
+    }
+
+    private async Task LoadLocalModelsAsync()
+    {
+        if (localModelsLoaded) return;
+        localModelsLoaded = true;
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var installed = await OllamaModelCatalog.ListAsync(timeout.Token);
+            if (selected.Id != "ollama") return;
+            var current = model.Text;
+            model.Items.Clear();
+            foreach (var item in installed) model.Items.Add(item.Name);
+            model.Text = installed.Any(item => item.Name == current) ? current :
+                previous is not null && AiProviderPresets.Match(previous).Id == "ollama" ? previous.Model :
+                installed.FirstOrDefault()?.Name ?? current;
+            summary.Text = installed.Count > 0 ? $"已发现 {installed.Count} 个本地模型；也可输入其他名称。" :
+                "本机尚未发现已下载模型；仍可输入模型名称。";
+        }
+        catch (Exception error) when (error is HttpRequestException or TaskCanceledException or JsonException)
+        { summary.Text = "未连接到本机 Ollama；启动后会自动列出已安装模型。"; }
+    }
     private void SelectProvider(AiProviderPreset preset)
     {
         var changedProvider = selected.Id != preset.Id;
@@ -194,6 +248,7 @@ internal sealed class AiSettingsDialog : Window
         if (preset.Id == "ollama" && changedProvider)
             model.Text = previous is not null && AiProviderPresets.Match(previous).Id == "ollama" ?
                 previous.Model : preset.Model;
+        if (preset.Id == "ollama") _ = LoadLocalModelsAsync();
         keyFields.Visibility = preset.Id == "ollama" ? Visibility.Collapsed : Visibility.Visible;
         privacyHint.Visibility = preset.Id == "ollama" ? Visibility.Collapsed : Visibility.Visible;
         pricingFields.Visibility = consumer.Id == "agent" && preset.Id == "custom" ?
@@ -207,6 +262,20 @@ internal sealed class AiSettingsDialog : Window
         keyHint.Text = existing && !string.IsNullOrEmpty(previous!.EncryptedKey) ?
             "已保存此服务的密钥；留空将继续使用。" :
             preset.RequiresKey ? "请输入此服务商提供的 API Key。" : "如服务不需要密钥，可留空。";
+        RefreshPromptFields();
+    }
+
+    private void RefreshPromptFields()
+    {
+        if (promptEditors.Count == 0) return;
+        var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
+        var name = selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
+        var keyName = url + "\n" + name;
+        if (promptLoadedKey == keyName) return;
+        promptLoadedKey = keyName;
+        var settings = new AiSettings(url, name, "");
+        foreach (var (scope, editor) in promptEditors)
+            editor.Text = AgentPromptStore.Load(settings, scope, AgentPromptStore.DefaultPath);
     }
     private void Save(object sender, RoutedEventArgs args)
     {
@@ -233,6 +302,9 @@ internal sealed class AiSettingsDialog : Window
                     ParsePrice(inputPrice.Text), ParsePrice(cachedPrice.Text), ParsePrice(outputPrice.Text));
             }
             var settings = new AiSettings(url, name, encrypted, pricing);
+            AiSettings.Validate(url, name);
+            foreach (var (scope, editor) in promptEditors)
+                AgentPromptStore.Save(settings, scope, editor.Text.Trim(), AgentPromptStore.DefaultPath);
             AiSettings.Save(consumer.Id, settings); Settings = settings; key.Clear(); DialogResult = true;
         }
         catch (Exception error) when (error is InvalidDataException or UriFormatException)
