@@ -504,30 +504,24 @@ public partial class MainWindow
             if (!string.IsNullOrWhiteSpace(completion.Reasoning))
                 PublishAgent("event", completion.Reasoning.Length > 8000 ? completion.Reasoning[..8000] + "…" : completion.Reasoning,
                     new { type = "reasoning" });
-            var raw = completion.Text;
-            var cleaned = raw.Trim();
-            if (cleaned.StartsWith("```", StringComparison.Ordinal))
+            AgentDecision decision;
+            try { decision = AgentResponseParser.Parse(completion.Text, local); }
+            catch (InvalidDataException) when (local)
             {
-                var firstNewline = cleaned.IndexOf('\n');
-                var lastFence = cleaned.LastIndexOf("```", StringComparison.Ordinal);
-                if (firstNewline >= 0 && lastFence > firstNewline)
-                    cleaned = cleaned[(firstNewline + 1)..lastFence].Trim();
+                PublishAgent("state", "正在整理回复", new { busy = true });
+                var retry = await AiAgentService.CompleteWithUsageAsync("agent", settings, instructions,
+                    context + "\n请重新回答当前请求。普通对话只返回 {\"type\":\"final\",\"content\":\"中文回答\"}；调用工具时须包含 name 和 args。",
+                    cancellation, TimeSpan.FromSeconds(90), images);
+                RecordAgentUsage(retry.Usage, settings, DateTimeOffset.UtcNow);
+                if (!string.IsNullOrWhiteSpace(retry.Reasoning))
+                    PublishAgent("event", retry.Reasoning.Length > 8000 ? retry.Reasoning[..8000] + "…" : retry.Reasoning,
+                        new { type = "reasoning" });
+                decision = AgentResponseParser.Parse(retry.Text, true);
             }
-            using var document = JsonDocument.Parse(cleaned);
-            var response = document.RootElement;
-            if (response.ValueKind != JsonValueKind.Object) throw new InvalidDataException("Agent 响应格式无效");
-            var type = AgentString(response, "type");
-            if (type == "final")
-            {
-                var content = AgentString(response, "content");
-                if (content.Length is < 1 or > 12000) throw new InvalidDataException("Agent 回答为空或过长");
-                return content;
-            }
-            if (type != "tool" || !response.TryGetProperty("args", out var args) ||
-                args.ValueKind != JsonValueKind.Object)
-                throw new InvalidDataException("Agent 未返回可执行步骤");
-            var name = AgentString(response, "name");
-            var note = AgentString(response, "note");
+            if (decision.Type == "final") return decision.Content;
+            var name = decision.Name;
+            var note = decision.Note;
+            var args = decision.Args;
             PublishAgent("event", name + "\n" + note, new { type = "step" });
             var result = await RunAgentToolAsync(name, args, cancellation);
             var changed = (name == "create_file" && result.StartsWith("已创建 ", StringComparison.Ordinal)) ||
