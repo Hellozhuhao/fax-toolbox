@@ -7,18 +7,20 @@ using System.Text.RegularExpressions;
 
 namespace FaxToolbox.Windows;
 
-// Official list prices checked 2026-10-03. This is an estimate, not a provider bill.
+// Official list prices checked 2026-10-04. This is an estimate, not a provider bill.
 // Keep links in docs/AI_AGENT.md rather than adding pricing noise to the task UI.
 internal static class AiPricingCatalog
 {
     private sealed record Prices(AiTokenPricing DeepSeekOffPeak, AiTokenPricing DeepSeekPeak,
-        AiTokenPricing[] QwenTiers, AiTokenPricing SiliconFlow, AiTokenPricing OpenAi);
+        AiTokenPricing[] QwenTiers, AiTokenPricing SiliconFlow, AiTokenPricing OpenAi,
+        AiTokenPricing VeniceQwen, AiTokenPricing VeniceUncensored);
 
     private static Prices prices = new(
         new("CNY", 1m, .02m, 4m), new("CNY", 2m, .04m, 8m),
         [new("CNY", .8m, .16m, 2m), new("CNY", 2.4m, .48m, 20m),
             new("CNY", 4.8m, .96m, 48m)],
-        new("CNY", 1.8m, 1.8m, 14.4m), new("USD", .4m, .1m, 1.6m));
+        new("CNY", 1.8m, 1.8m, 14.4m), new("USD", .4m, .1m, 1.6m),
+        new("USD", .63m, .06m, 3.75m), new("USD", .20m, .20m, .90m));
     private static readonly object Gate = new();
     private static readonly HttpClient Client = new(new SocketsHttpHandler { AllowAutoRedirect = true })
     { Timeout = TimeSpan.FromSeconds(8) };
@@ -38,6 +40,7 @@ internal static class AiPricingCatalog
             "qwen" => QwenPlusBeijing(current, usage.InputTokens),
             "siliconflow" => current.SiliconFlow,
             "openai" => current.OpenAi,
+            "venice" => settings.Model == "qwen-3-6-plus" ? current.VeniceQwen : current.VeniceUncensored,
             "ollama" => new AiTokenPricing("CNY", 0m, 0m, 0m),
             _ => settings.Pricing
         };
@@ -67,7 +70,11 @@ internal static class AiPricingCatalog
             RefreshOneAsync("https://www.siliconflow.cn/models", ParseSiliconFlow,
                 value => prices = prices with { SiliconFlow = value[0] }),
             RefreshOneAsync("https://developers.openai.com/api/docs/models/gpt-4.1-mini", ParseOpenAi,
-                value => prices = prices with { OpenAi = value[0] }));
+                value => prices = prices with { OpenAi = value[0] }),
+            RefreshOneAsync("https://venice.ai/models/qwen-3-6-plus", ParseVenice,
+                value => prices = prices with { VeniceQwen = value[0] }),
+            RefreshOneAsync("https://venice.ai/models/venice-uncensored-1-2", ParseVenice,
+                value => prices = prices with { VeniceUncensored = value[0] }));
     }
 
     private static async Task RefreshOneAsync(string url, Func<string, AiTokenPricing[]?> parse,
@@ -185,5 +192,14 @@ internal static class AiPricingCatalog
         var output = Number(section, @"\bOutput\s*\$\s*(?<price>\d+(?:\.\d+)?)");
         return input is not null && cached is not null && output is not null ?
             [new("USD", input.Value, cached.Value, output.Value)] : null;
+    }
+
+    internal static AiTokenPricing[]? ParseVenice(string text)
+    {
+        var input = Number(text, @"Billed per token on Venice:\s*\$\s*(?<price>\d+(?:\.\d+)?)\s*per 1M input tokens");
+        var output = Number(text, @"Billed per token on Venice:[\s\S]{0,100}?\$\s*\d+(?:\.\d+)?\s*per 1M input tokens\s*and\s*\$\s*(?<price>\d+(?:\.\d+)?)\s*per 1M output tokens");
+        if (input is null || output is null) return null;
+        var cached = Number(text, @"Cached input / 1M\s*\$\s*(?<price>\d+(?:\.\d+)?)") ?? input;
+        return [new("USD", input.Value, cached.Value, output.Value)];
     }
 }

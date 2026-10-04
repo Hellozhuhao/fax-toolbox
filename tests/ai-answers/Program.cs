@@ -102,6 +102,28 @@ if (AiPricingCatalog.ParseSiliconFlow("Qwen/Qwen3.6-27B 视觉输入 输入: ￥
 if (AiPricingCatalog.ParseOpenAi("GPT-4.1 Mini Pricing Text tokens Per 1M tokens Input $0.40 Cached input $0.10 Output $1.60") is not { Length: 1 } liveOpenAi ||
     liveOpenAi[0].CachedInputPerMillion != .1m)
     throw new Exception("Official OpenAI price refresh could not parse its model page");
+var venicePreset = AiProviderPresets.All.First(item => item.Id == "venice");
+foreach (var option in AiProviderPresets.VeniceModels)
+{
+    var configured = new AiSettings(venicePreset.Endpoint, option.Id, "");
+    AiSettings.Validate(configured.Endpoint, configured.Model);
+    if (AiProviderPresets.Match(configured).Id != "venice")
+        throw new Exception("Venice model was not recognized: " + option.Id);
+}
+if (AiPricingCatalog.Resolve(new AiSettings(venicePreset.Endpoint, "qwen-3-6-plus", ""),
+    metered, fridayPeak) is not { Currency: "USD", OutputPerMillion: 3.75m } ||
+    AiPricingCatalog.Resolve(new AiSettings(venicePreset.Endpoint, "venice-uncensored-1-2", ""),
+    metered, fridayPeak)?.OutputPerMillion != .90m)
+    throw new Exception("Venice models were assigned the wrong price");
+if (AiPricingCatalog.ParseVenice("Billed per token on Venice: $0.63 per 1M input tokens and $3.75 per 1M output tokens. Cached input / 1M $0.06") is not { Length: 1 } venicePrice ||
+    venicePrice[0].CachedInputPerMillion != .06m)
+    throw new Exception("Official Venice price refresh could not parse its model page");
+using (var venicePayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(venicePreset.Endpoint, "qwen-3-6-plus", ""), "instructions", "写一篇中文文章",
+    structured: false)))
+    if (venicePayload.RootElement.GetProperty("model").GetString() != "qwen-3-6-plus" ||
+        venicePayload.RootElement.TryGetProperty("response_format", out _))
+        throw new Exception("Venice Chat did not send text-first Chat Completions payload");
 var imagePayload = AiAnswerService.BuildCompletionPayload(
     new AiSettings("https://api.deepseek.com/chat/completions", "deepseek-flash", ""),
     "instructions", "describe", [new AiImageInput(0, "用户附图 1", "data:image/jpeg;base64,/9j/")]);

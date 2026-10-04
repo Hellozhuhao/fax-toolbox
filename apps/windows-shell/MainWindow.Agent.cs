@@ -223,10 +223,19 @@ public partial class MainWindow
         if (agentCancellation is not null || smokeMode) return;
         var name = AgentString(message, "model");
         var settings = aiRuntime?.LoadSettings("agent");
-        if (settings is null || AiProviderPresets.Match(settings).Id != "ollama" || name.Length is < 1 or > 128) return;
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var models = await OllamaModelCatalog.ListAsync(timeout.Token);
-        if (!models.Any(item => item.Name == name)) return;
+        if (settings is null || name.Length is < 1 or > 128) return;
+        var provider = AiProviderPresets.Match(settings).Id;
+        if (provider == "venice")
+        {
+            if (!AiProviderPresets.VeniceModels.Any(item => item.Id == name)) return;
+        }
+        else if (provider == "ollama")
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var models = await OllamaModelCatalog.ListAsync(timeout.Token);
+            if (!models.Any(item => item.Name == name)) return;
+        }
+        else return;
         AiSettings.Save("agent", settings with { Model = name });
         PublishAiConfiguration();
         PublishAgentOptions();

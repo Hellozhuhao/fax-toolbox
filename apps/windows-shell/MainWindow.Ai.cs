@@ -75,6 +75,7 @@ public partial class MainWindow
                 return new { id = consumer.Id, name = consumer.Name,
                     configured = configured is not null,
                     provider = AiProviderPresets.Match(configured).Name,
+                    providerId = AiProviderPresets.Match(configured).Id,
                     model = configured?.Model ?? "",
                     supportsImages = AiProviderPresets.SupportsImages(configured) };
             }).ToArray();
