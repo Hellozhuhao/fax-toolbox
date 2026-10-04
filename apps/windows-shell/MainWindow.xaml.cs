@@ -345,15 +345,30 @@ public partial class MainWindow : Window
                       const session = document.querySelector('.agent-session-row').getBoundingClientRect();
                       const composer = document.getElementById('agent-form').getBoundingClientRect();
                       if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
+                      const categories = document.querySelector('.agent-side > .focus-menu');
+                      if (!categories.hidden) return false;
+                      document.querySelector('.agent-section-switch').click();
+                      if (categories.hidden) return false;
+                      categories.querySelectorAll('button')[3].click();
+                      if (!categories.hidden || document.querySelector('.agent-side').dataset.activePanel !== 'usage') return false;
                       document.getElementById('agent-inspector-toggle').click();
-                      if (document.getElementById('agent-inspector').hidden) return false;
-                      document.getElementById('agent-inspector-close').click();
-                      if (!document.getElementById('agent-inspector').hidden) return false;
+                      if (document.querySelector('.agent-side').dataset.activePanel !== 'sessions') return false;
+                      document.getElementById('agent-inspector-toggle').click();
+                      if (document.querySelector('.agent-side').dataset.activePanel !== 'usage' ||
+                          !document.getElementById('agent-usage').closest('.focus-panel')) return false;
+                      categories.querySelectorAll('button')[0].click();
+                      if (!document.querySelector('#view-activity > .overview-grid') ||
+                          !document.querySelector('#view-course .study-side #course-chapters') ||
+                          !document.querySelector('#view-homework .study-side #homework-page')) return false;
                       if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return false;
                       const labels = [...document.querySelectorAll('#toolbox-context-menu button')].map(item => item.textContent);
                       if (!labels.includes('粘贴') || !labels.includes('新建会话')) return false;
                       document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                      return document.getElementById('toolbox-context-menu').hidden;
+                      if (!document.getElementById('toolbox-context-menu').hidden) return false;
+                      const toolGroup = document.querySelector('.nav-group');
+                      toolGroup.classList.add('flyout-open');
+                      toolGroup.querySelector('.nav-item').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
+                      return !toolGroup.classList.contains('flyout-open');
                     })()
                     """);
                 if (conversationLayout != "true") { FailSmoke("Agent conversation layout or context menu failed"); return; }
@@ -375,6 +390,15 @@ public partial class MainWindow : Window
                     await ShellView.CoreWebView2.ExecuteScriptAsync(
                         "document.querySelector('.sidebar .nav-item[data-view=\"settings\"]').click()");
                     await using (var output = File.Create(Path.Combine(root, ".cache", "ui-settings-preview.png")))
+                        await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openCourse()");
+                    await using (var output = File.Create(Path.Combine(root, ".cache", "ui-course-focus-preview.png")))
+                        await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openHomework()");
+                    await using (var output = File.Create(Path.Combine(root, ".cache", "ui-homework-focus-preview.png")))
+                        await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.sidebar .nav-item[data-view=\"activity\"]').click()");
+                    await using (var output = File.Create(Path.Combine(root, ".cache", "ui-status-focus-preview.png")))
                         await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
                     await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openAi()");
                 }
@@ -417,6 +441,25 @@ public partial class MainWindow : Window
                     if (rendered != "Agent 可用") await Task.Delay(100);
                 }
                 if (rendered != "Agent 可用") { FailSmoke("Agent messages were not rendered"); return; }
+                PublishAgent("event", "这是模型接口返回的思考内容。", new { type = "reasoning" });
+                PublishAgent("event", "replace_text\n更新说明文件", new { type = "step" });
+                PublishAgent("event", JsonSerializer.Serialize(new { name = "replace_text", path = "note.txt",
+                    result = "已修改 note.txt", added = 1, removed = 1, before = "旧内容", after = "新内容" }),
+                    new { type = "tool" });
+                var operationCards = "false";
+                for (var attempt = 0; attempt < 20 && operationCards != "true"; attempt++)
+                {
+                    operationCards = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelectorAll('.agent-operation').length === 1 && document.querySelectorAll('.agent-reasoning').length === 1 && document.querySelector('.agent-operation-title')?.textContent === '已编辑 1 个文件'");
+                    if (operationCards != "true") await Task.Delay(100);
+                }
+                if (operationCards != "true") { FailSmoke("Agent tool and reasoning cards were not rendered"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.agent-operation').open = true");
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-operation-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
                 var project = Path.Combine(smokeDataDirectory!, "agent-project");
                 Directory.CreateDirectory(project);
                 agentProjectRoot = project;

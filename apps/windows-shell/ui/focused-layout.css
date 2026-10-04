@@ -1,0 +1,113 @@
+/* Focused secondary navigation keeps the existing toolbox rail and buttons. */
+.focus-menu { display: grid; gap: 3px; margin: 0; padding: 0; border: 0; background: transparent; }
+.focus-menu-item { width: 100%; min-height: 35px; margin: 0; padding: 7px 11px; border-radius: 11px; background: transparent; box-shadow: none; color: var(--text); text-align: left; font: 650 12px/1.35 "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif; }
+.focus-menu-item:hover, .focus-menu-item.selected { background: color-mix(in srgb, var(--accent) 11%, var(--panel)); color: var(--accent); box-shadow: none; }
+.focus-menu[hidden] { display: none !important; }
+:root[data-theme="dark"] .focus-menu-item { background: transparent; background-image: none; color: var(--text); box-shadow: none; }
+:root[data-theme="dark"] .focus-menu-item:hover, :root[data-theme="dark"] .focus-menu-item.selected { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); background-image: none; color: #cab7ff; box-shadow: none; }
+.focus-panels { min-height: 0; overflow: auto; }
+.focus-panel[hidden] { display: none !important; }
+.focus-panel > details { margin: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+.focus-panel > details > summary { display: none; }
+
+#view-ai .agent-side { position: relative; }
+#view-ai .agent-side-head { padding-bottom: 7px; }
+#view-ai .agent-section-switch { min-height: 34px; padding: 0 7px; background: transparent; box-shadow: none; color: var(--text); font-size: 15px; text-align: left; }
+#view-ai .agent-section-switch:hover { background: var(--surface); color: var(--accent); box-shadow: none; }
+#view-ai .agent-side-head #agent-search-toggle { width: 32px; padding: 0; }
+#view-ai .agent-side:not([data-active-panel="sessions"]) #agent-search-toggle { display: none; }
+:root[data-theme="dark"] #view-ai .agent-section-switch { background: transparent; background-image: none; color: var(--text); box-shadow: none; }
+:root[data-theme="dark"] #view-ai .agent-section-switch:hover { background: var(--surface); background-image: none; color: var(--accent); box-shadow: none; }
+#view-ai .agent-new-chat { width: 100%; min-height: 38px; margin: 0 0 12px; padding: 7px 12px; border: 0; border-radius: 11px; background: transparent; box-shadow: none; color: var(--text); text-align: left; font-size: 12px; }
+#view-ai .agent-new-chat:hover { background: var(--surface); color: var(--accent); box-shadow: none; }
+:root[data-theme="dark"] #view-ai .agent-new-chat { background: transparent; background-image: none; box-shadow: none; color: var(--text); }
+:root[data-theme="dark"] #view-ai .agent-new-chat:hover { background: var(--surface); background-image: none; box-shadow: none; color: var(--accent); }
+#view-ai .agent-side:not([data-active-panel="sessions"]) > .agent-new-chat,
+#view-ai .agent-side:not([data-active-panel="sessions"]) > .agent-project { display: none; }
+#view-ai .agent-project { min-height: 0; margin: 0 0 14px; padding: 7px 11px; border: 0; border-radius: 11px; background: transparent; box-shadow: none; }
+#view-ai .agent-project:hover { background: var(--surface); box-shadow: none; }
+#view-ai .agent-project span { margin: 0 0 10px; font-size: 11px; font-weight: 750; }
+#view-ai .agent-project strong::before { content: '▱'; display: inline-block; width: 20px; margin-right: 5px; color: var(--subtle); font-size: 16px; vertical-align: -1px; }
+#view-ai .agent-side > .focus-menu { position: absolute; z-index: 12; top: 55px; left: 12px; right: 12px; margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); box-shadow: 0 15px 35px #0003; }
+#view-ai .agent-side > .focus-panels { flex: 1; }
+#view-ai .focus-panel[data-focus-panel="sessions"] { height: 100%; }
+#view-ai .focus-panel .agent-sessions { height: 100%; margin: 0; padding: 0; }
+#view-ai .focus-panel .agent-config-panel, #view-ai .focus-panel .agent-configuration, #view-ai .focus-panel .ai-service-log { padding: 8px 1px; }
+#view-ai .focus-panel .ai-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#view-ai .focus-panel .ai-actions button { min-height: 33px; padding: 4px 5px; font-size: 11px; }
+#view-ai .focus-panel .ai-consumers { gap: 7px; }
+#view-ai .focus-panel .ai-consumer { min-height: 0; padding: 10px; }
+#view-ai .focus-panel .ai-consumer h3 { margin: 0; font-size: 12px; }
+#view-ai .focus-panel .ai-consumer small { display: block; margin-top: 4px; font-size: 10px; }
+#view-ai .focus-panel .agent-detail { padding: 5px 2px; }
+#view-ai .focus-panel .agent-detail #agent-meter[hidden] { display: none; }
+#view-ai .agent-operation { align-self: stretch; max-width: min(100%, 850px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); color: var(--text); }
+#view-ai .agent-operation summary { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 13px; list-style: none; }
+#view-ai .agent-operation summary::-webkit-details-marker { display: none; }
+#view-ai .agent-operation-icon { display: grid; place-items: center; flex: none; width: 31px; height: 31px; border-radius: 9px; background: var(--surface); color: var(--accent); font-size: 16px; }
+#view-ai .agent-operation-title { font-size: 13px; white-space: nowrap; }
+#view-ai .agent-operation summary small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--subtle); font-size: 11px; }
+#view-ai .agent-operation-body { padding: 9px 13px 13px; border-top: 1px solid var(--border); }
+#view-ai .agent-operation-file { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; color: var(--subtle); font: 12px/1.4 "Segoe UI", "Microsoft YaHei UI", sans-serif; overflow-wrap: anywhere; }
+#view-ai .agent-operation-counts { display: inline-flex; flex: none; gap: 8px; font-style: normal; }
+#view-ai .agent-operation-counts em { font-style: normal; }
+#view-ai .agent-operation-counts em:first-child { color: #238358; }
+#view-ai .agent-operation-counts em:last-child { color: #c44f55; }
+:root[data-theme="dark"] #view-ai .agent-operation-counts em:first-child { color: #54c99a; }
+:root[data-theme="dark"] #view-ai .agent-operation-counts em:last-child { color: #ff8b91; }
+#view-ai .agent-operation-body pre { margin: 6px 0 0; }
+#view-ai .agent-operation-body .agent-diff-removed { color: #a9474d; }
+#view-ai .agent-operation-body .agent-diff-added { color: #18784d; }
+:root[data-theme="dark"] #view-ai .agent-operation-body .agent-diff-removed { color: #ff8b91; }
+:root[data-theme="dark"] #view-ai .agent-operation-body .agent-diff-added { color: #54c99a; }
+#view-ai .agent-reasoning { align-self: stretch; max-width: min(100%, 850px); padding: 7px 12px; border-left: 2px solid var(--accent); color: var(--subtle); font-size: 12px; }
+#view-ai .agent-reasoning summary { cursor: pointer; font-weight: 650; }
+#view-ai .agent-reasoning p { max-height: 280px; margin: 9px 0 3px; overflow: auto; white-space: pre-wrap; line-height: 1.6; }
+
+#view-course .study-layout, #view-homework .study-layout { position: relative; display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 16px; }
+.study-toggle { display: none; }
+.study-side { min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: 22px; background: var(--panel); }
+.study-side .focus-menu { margin-bottom: 10px; }
+.study-side .focus-panels { padding-top: 9px; border-top: 1px solid var(--border); }
+.study-side .focus-panel .card { margin: 0; padding: 0; min-height: 0; }
+.study-side .focus-panel .card > summary { display: none; }
+.study-side .focus-panel p { overflow-wrap: anywhere; }
+.study-side .focus-panel button { width: 100%; min-height: 34px; padding: 5px 8px; font-size: 11px; }
+.study-side .focus-panel select, .study-side .focus-panel input, .study-side .focus-panel textarea { width: 100%; min-width: 0; }
+.study-session { display: grid; gap: 10px; }
+.study-session .url { font-size: 11px; }
+.study-main { min-width: 0; }
+.study-main > .card { margin-top: 0; }
+.study-main .course-actions { margin: 0 0 15px; }
+.study-main .course-actions button { min-width: 0; }
+#view-homework .study-main .homework-results { margin-top: 0; }
+
+#view-activity > .section-head { margin-top: 20px; }
+#view-activity > .lead { display: none; }
+#view-activity > .overview-grid { margin: 0 0 18px; }
+#view-activity > .overview-grid .card { min-height: 105px; }
+#view-activity > .overview-grid strong { color: var(--text); }
+#view-activity .activity-filters { flex: none; }
+#view-activity .activity-filters button { min-width: 38px; white-space: nowrap; }
+
+/* Descriptions are supporting text; color conveys meaning without a separate legend. */
+#view-modules .library-card p, #view-modules .library-card .pill, #view-modules .library-card h3,
+#view-home .module-card small { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif; }
+#view-modules .library-card p { min-height: 0; color: var(--subtle); font-size: 13px; line-height: 1.55; font-weight: 400; }
+#view-modules .library-card h3 { color: var(--text); font-weight: 750; }
+#view-modules .library-card .pill { color: var(--accent); }
+#view-activity #home-backend { color: #238358; }
+:root[data-theme="dark"] #view-activity #home-backend { color: #54c99a; }
+
+@media (max-width: 1050px) {
+  #view-course .study-layout, #view-homework .study-layout { grid-template-columns: minmax(120px, 160px) minmax(0, 1fr); gap: 10px; }
+  .study-side { padding: 9px; }
+}
+@media (max-width: 680px) {
+  #view-course .study-layout, #view-homework .study-layout { display: block; }
+  .study-toggle { display: inline-flex; align-items: center; width: auto; min-height: 34px; margin: 0 0 11px; padding: 5px 11px; border-radius: 12px; font-size: 11px; }
+  .study-side { position: absolute; z-index: 8; top: 0; left: 0; width: min(250px, calc(100% - 12px)); max-height: min(74dvh, 640px); padding: 12px; overflow: auto; box-shadow: 0 18px 42px #0004; opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-10px); transition: opacity .18s ease, transform .18s ease, visibility .18s; }
+  .study-layout.side-open .study-side { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
+  .study-main .course-actions { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .study-side { transition: none; } }
