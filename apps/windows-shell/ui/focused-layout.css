@@ -114,7 +114,9 @@
 #view-ai .agent-run-panel > label { display: flex; justify-content: space-between; align-items: center; color: var(--subtle); font-size: 11px; }
 #view-ai .agent-run-panel > label strong { color: var(--text); font-size: 12px; }
 #view-ai .agent-model-list { display: grid; gap: 4px; max-height: 220px; overflow-y: auto; min-width: 0; padding: 1px; scrollbar-width: thin; }
+#view-ai .agent-model-group { padding: 5px 10px 1px; color: var(--subtle); font-size: 10px; font-weight: 650; }
 #view-ai .agent-model-choice, #view-ai .agent-model-configure { display: flex; align-items: center; width: 100%; min-height: 52px; margin: 0; padding: 7px 10px; border: 1px solid transparent; border-radius: 11px; background: transparent; box-shadow: none; color: var(--text); text-align: left; transform: none; }
+#view-ai .agent-model-recommend { background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
 #view-ai .agent-model-choice:hover, #view-ai .agent-model-configure:hover { background: var(--surface); transform: none; }
 #view-ai .agent-model-choice.selected { border-color: color-mix(in srgb, var(--accent) 25%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
 #view-ai .agent-model-copy { display: grid; gap: 2px; min-width: 0; }

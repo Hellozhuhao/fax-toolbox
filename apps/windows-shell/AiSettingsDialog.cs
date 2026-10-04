@@ -39,8 +39,12 @@ internal sealed class AiSettingsDialog : Window
     private readonly TextBlock keyHint = new();
     private readonly TextBlock privacyHint = new();
     private readonly Dictionary<string, Button> providerButtons = [];
+    private readonly Dictionary<string, Button> categoryButtons = [];
+    private readonly UniformGrid providers = new() { Columns = 2, Margin = new Thickness(0, 8, 0, 10) };
+    private Border summaryCard = null!;
     private readonly SolidColorBrush background, surface, text, subtle, border, accent;
     private AiProviderPreset selected;
+    private string currentCategoryId = "";
     private Border modelInputFrame = null!;
     private bool localModelsLoaded;
     private string promptLoadedKey = "";
@@ -48,12 +52,17 @@ internal sealed class AiSettingsDialog : Window
 
     private static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
 
-    public AiSettingsDialog(Window owner, AiSettings? previousSettings, string consumerId = "course")
+    public AiSettingsDialog(Window owner, AiSettings? previousSettings, string consumerId = "course",
+        string? initialProviderId = null, string? initialModelId = null)
     {
         consumer = AiConsumerRegistry.Require(consumerId);
         previous = previousSettings;
         selected = AiProviderPresets.Match(previous);
         if (selected.Id is "qwen" or "venice") selectedPresetModels[selected.Id] = previous!.Model;
+        var requested = AiProviderPresets.All.FirstOrDefault(item => item.Id == initialProviderId);
+        if (requested is not null) selected = requested;
+        if (initialModelId is not null && AiProviderPresets.ModelsFor(selected.Id)
+            .Any(option => option.Id == initialModelId)) selectedPresetModels[selected.Id] = initialModelId;
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
         background = Brush(dark ? "#202126" : "#F5F5F3");
         surface = Brush(dark ? "#17181C" : "#FFFFFF");
@@ -94,8 +103,19 @@ internal sealed class AiSettingsDialog : Window
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         Grid.SetRow(scroll, 1); layout.Children.Add(scroll);
         var body = new StackPanel { Margin = new Thickness(28, 0, 28, 8) }; scroll.Content = body;
-        body.Children.Add(Label("服务商"));
-        var providers = new UniformGrid { Columns = 2, Margin = new Thickness(0, 10, 0, 17) };
+        body.Children.Add(Label("模型来源"));
+        var categories = new UniformGrid { Columns = 4, Margin = new Thickness(0, 9, 0, 2) };
+        foreach (var (id, caption) in new[] { ("domestic", "国内云端"), ("overseas", "海外云端"),
+            ("local", "本地模型"), ("custom", "自定义") })
+        {
+            var category = PlainButton(caption);
+            category.MinHeight = 34; category.Padding = new Thickness(7, 5, 7, 5);
+            category.Margin = new Thickness(0, 0, 6, 0);
+            category.Click += (_, _) => SelectCategory(id, true);
+            categoryButtons.Add(id, category);
+            categories.Children.Add(category);
+        }
+        body.Children.Add(categories);
         foreach (var preset in AiProviderPresets.All)
         {
             var card = PlainButton("");
@@ -105,10 +125,10 @@ internal sealed class AiSettingsDialog : Window
             contents.Children.Add(new TextBlock { Text = preset.Name, FontSize = 13, FontWeight = FontWeights.SemiBold });
             contents.Children.Add(new TextBlock { Text = preset.Hint, FontSize = 11, Foreground = subtle, Margin = new Thickness(0, 3, 0, 0) });
             card.Content = contents; card.Click += (_, _) => SelectProvider(preset);
-            providerButtons.Add(preset.Id, card); providers.Children.Add(card);
+            providerButtons.Add(preset.Id, card);
         }
         body.Children.Add(providers);
-        var summaryCard = new Border { Background = surface, BorderBrush = border, BorderThickness = new Thickness(1),
+        summaryCard = new Border { Background = surface, BorderBrush = border, BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(18), Padding = new Thickness(14), Margin = new Thickness(0, 0, 0, 18) };
         summary.TextWrapping = TextWrapping.Wrap; summary.FontSize = 12; summary.Foreground = subtle;
         summaryCard.Child = summary; body.Children.Add(summaryCard);
@@ -198,6 +218,7 @@ internal sealed class AiSettingsDialog : Window
         save.Background = accent; save.Foreground = Brushes.White; save.BorderBrush = accent; save.IsDefault = true;
         save.Click += Save; Grid.SetColumn(save, 2); actions.Children.Add(save);
         Grid.SetRow(actions, 2); layout.Children.Add(actions);
+        SelectCategory(CategoryFor(selected.Id), false);
         SelectProvider(selected);
     }
 
@@ -260,6 +281,7 @@ internal sealed class AiSettingsDialog : Window
     }
     private void SelectProvider(AiProviderPreset preset)
     {
+        if (currentCategoryId != CategoryFor(preset.Id)) SelectCategory(CategoryFor(preset.Id), false);
         var changedProvider = selected.Id != preset.Id;
         selected = preset;
         foreach (var (id, button) in providerButtons)
@@ -290,12 +312,39 @@ internal sealed class AiSettingsDialog : Window
             preset.Id == "venice" ? "选择云端模型，填写 Venice API Key。" :
             preset.Id == "qwen" ? "选择北京地域模型，填写百炼 API Key。" :
             $"默认模型：{preset.Model}\n接口：{preset.Endpoint}";
+        summaryCard.Visibility = preset.Id is "custom" or "ollama" ? Visibility.Visible : Visibility.Collapsed;
         var existing = previous is not null &&
             string.Equals(previous.Endpoint, preset.Id == "custom" ? endpoint.Text.Trim() : preset.Endpoint, StringComparison.OrdinalIgnoreCase);
         keyHint.Text = existing && !string.IsNullOrEmpty(previous!.EncryptedKey) ?
             "已保存此服务的密钥；留空将继续使用。" :
             preset.RequiresKey ? "请输入此服务商提供的 API Key。" : "如服务不需要密钥，可留空。";
         RefreshPromptFields();
+    }
+
+    private static string CategoryFor(string providerId) => providerId switch
+    {
+        "qwen" or "deepseek" or "siliconflow" => "domestic",
+        "openai" or "venice" => "overseas",
+        "ollama" => "local",
+        _ => "custom"
+    };
+
+    private void SelectCategory(string categoryId, bool selectFirst)
+    {
+        currentCategoryId = categoryId;
+        providers.Children.Clear();
+        var presets = AiProviderPresets.All.Where(item => CategoryFor(item.Id) == categoryId)
+            .OrderBy(item => item.Id switch { "qwen" or "venice" => 0,
+                "deepseek" or "openai" => 1, _ => 2 }).ToArray();
+        foreach (var preset in presets) providers.Children.Add(providerButtons[preset.Id]);
+        foreach (var (id, button) in categoryButtons)
+        {
+            var active = id == categoryId;
+            button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
+            button.BorderBrush = active ? accent : border;
+            button.Foreground = active ? accent : text;
+        }
+        if (selectFirst && presets.Length > 0) SelectProvider(presets[0]);
     }
 
     private void SelectPresetModel(string id)

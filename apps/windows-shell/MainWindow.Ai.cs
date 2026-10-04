@@ -36,12 +36,13 @@ public partial class MainWindow
         _ = RefreshAiBalanceAsync();
     }
 
-    private void ConfigureAi()
+    private void ConfigureAi(string? initialProviderId = null, string? initialModelId = null)
     {
         if (smokeMode) return;
         try
         {
-            var dialog = new AiSettingsDialog(this, aiRuntime?.LoadSettings(selectedAiConsumer), selectedAiConsumer);
+            var dialog = new AiSettingsDialog(this, aiRuntime?.LoadSettings(selectedAiConsumer),
+                selectedAiConsumer, initialProviderId, initialModelId);
             if (dialog.ShowDialog() == true && dialog.Settings is not null)
             {
                 if (selectedAiConsumer == "course") aiAnswerCancellation?.Cancel();

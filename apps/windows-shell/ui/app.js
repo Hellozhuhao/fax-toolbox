@@ -454,10 +454,28 @@
   function renderAgentModelList() {
     const list = $('agent-model-list');
     list.replaceChildren();
+    const heading = label => {
+      const group = document.createElement('div'); group.className = 'agent-model-group';
+      group.textContent = label; list.append(group);
+    };
+    if (agentProvider !== 'qwen') {
+      heading('国内云端 · 推荐');
+      const recommended = document.createElement('button'); recommended.type = 'button';
+      recommended.className = 'agent-model-choice agent-model-recommend';
+      recommended.dataset.agentProvider = 'qwen'; recommended.dataset.agentModel = 'qwen3.8-flash';
+      const copy = document.createElement('span'); copy.className = 'agent-model-copy';
+      const title = document.createElement('strong'); title.textContent = 'Qwen 3.8 Flash';
+      const detail = document.createElement('small'); detail.textContent = '阿里百炼 · 性价比优先';
+      copy.append(title, detail);
+      const action = document.createElement('span'); action.className = 'agent-model-size'; action.textContent = '配置';
+      recommended.append(copy, action); list.append(recommended);
+    }
     const models = agentProvider === 'ollama' ? agentInstalledModels.slice() :
       agentProvider === 'venice' ? [{name: 'qwen-3-6-plus'}, {name: 'venice-uncensored-1-2'}] :
       agentProvider === 'qwen' ? [{name: 'qwen3.8-flash'}, {name: 'qwen3.8-max'}, {name: 'qwen-plus'}] : [];
     if (agentModel && !models.some(item => item.name === agentModel)) models.unshift({name: agentModel});
+    if (models.length) heading(agentProvider === 'qwen' ? '国内云端 · 阿里百炼' :
+      agentProvider === 'ollama' ? '本地模型' : agentProvider === 'venice' ? '海外云端 · Venice' : '当前连接');
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'agent-model-choice'; button.dataset.agentModel = model.name;
@@ -1134,7 +1152,9 @@
   $('agent-model-list').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button || agentBusy) return;
-    if (button.classList.contains('agent-model-configure')) send('agent.configure');
+    if (button.dataset.agentProvider && button.dataset.agentProvider !== agentProvider)
+      send('agent.configure', {provider: button.dataset.agentProvider, model: button.dataset.agentModel});
+    else if (button.classList.contains('agent-model-configure')) send('agent.configure');
     else if (button.dataset.agentModel && button.dataset.agentModel !== agentModel)
       send('agent.model', {model: button.dataset.agentModel});
     $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
