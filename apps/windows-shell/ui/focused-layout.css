@@ -67,13 +67,13 @@
 :root[data-theme="dark"] #view-ai .agent-code-string { color: #e6b785; }
 :root[data-theme="dark"] #view-ai .agent-code-number { color: #9ac1f0; }
 :root[data-theme="dark"] #view-ai .agent-code-function { color: #e2cd8f; }
-#view-ai .agent-operation { align-self: stretch; max-width: min(100%, 850px); padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 15px; background: var(--panel); color: var(--text); }
-#view-ai .agent-operation summary { display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 13px; list-style: none; }
+#view-ai .agent-operation { align-self: stretch; max-width: min(100%, 850px); padding: 0; overflow: hidden; border: 0; border-radius: 0; background: transparent; color: var(--subtle); }
+#view-ai .agent-operation summary { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 2px 0; list-style: none; }
 #view-ai .agent-operation summary::-webkit-details-marker { display: none; }
-#view-ai .agent-operation-icon { display: grid; place-items: center; flex: none; width: 31px; height: 31px; border-radius: 9px; background: var(--surface); color: var(--accent); font-size: 16px; }
-#view-ai .agent-operation-title { font-size: 13px; white-space: nowrap; }
+#view-ai .agent-operation-icon { display: grid; place-items: center; flex: none; width: 19px; height: 19px; border-radius: 0; background: transparent; color: var(--subtle); font-size: 17px; }
+#view-ai .agent-operation-title { font-size: 12px; font-weight: 550; white-space: nowrap; }
 #view-ai .agent-operation summary small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--subtle); font-size: 11px; }
-#view-ai .agent-operation-body { padding: 9px 13px 13px; border-top: 1px solid var(--border); }
+#view-ai .agent-operation-body { padding: 7px 0 10px 27px; border: 0; border-left: 1px solid var(--border); margin-left: 9px; }
 #view-ai .agent-operation-file { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; color: var(--subtle); font: 12px/1.4 "Segoe UI", "Microsoft YaHei UI", sans-serif; overflow-wrap: anywhere; }
 #view-ai .agent-operation-counts { display: inline-flex; flex: none; gap: 8px; font-style: normal; }
 #view-ai .agent-operation-counts em { font-style: normal; }
@@ -86,9 +86,13 @@
 #view-ai .agent-operation-body .agent-diff-added { color: #18784d; }
 :root[data-theme="dark"] #view-ai .agent-operation-body .agent-diff-removed { color: #ff8b91; }
 :root[data-theme="dark"] #view-ai .agent-operation-body .agent-diff-added { color: #54c99a; }
-#view-ai .agent-reasoning { align-self: stretch; max-width: min(100%, 850px); padding: 7px 12px; border-left: 2px solid var(--accent); color: var(--subtle); font-size: 12px; }
-#view-ai .agent-reasoning summary { cursor: pointer; font-weight: 650; }
-#view-ai .agent-reasoning p { max-height: 280px; margin: 9px 0 3px; overflow: auto; white-space: pre-wrap; line-height: 1.6; }
+#view-ai .agent-reasoning { align-self: stretch; max-width: min(100%, 850px); padding: 0; border: 0; color: var(--subtle); font-size: 12px; }
+#view-ai .agent-reasoning summary { display: flex; align-items: center; gap: 8px; min-height: 28px; padding: 2px 0; list-style: none; cursor: pointer; font-weight: 550; }
+#view-ai .agent-reasoning summary::-webkit-details-marker { display: none; }
+#view-ai .agent-operation summary::after, #view-ai .agent-reasoning summary::after { content: '⌄'; margin-left: auto; color: var(--subtle); font-size: 14px; transition: transform .18s ease; }
+#view-ai .agent-operation[open] summary::after, #view-ai .agent-reasoning[open] summary::after { transform: rotate(180deg); }
+#view-ai .agent-reasoning p { max-height: 280px; margin: 6px 0 4px 9px; padding: 7px 0 7px 18px; border-left: 1px solid var(--border); overflow: auto; white-space: pre-wrap; line-height: 1.6; }
+#view-ai .agent-entry.agent-error { align-self: stretch; max-width: min(100%, 850px); padding: 4px 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 
 #view-course .study-layout, #view-homework .study-layout { position: relative; display: grid; grid-template-columns: minmax(150px, 190px) minmax(0, 1fr); gap: 16px; align-items: start; margin-top: 16px; }
 .study-toggle { display: none; }

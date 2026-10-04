@@ -607,7 +607,7 @@
       const operation = document.createElement('details'); operation.className = 'agent-operation'; operation.dataset.awaitingOutput = 'true';
       if (!restoringAgentSnapshot) animateNew(operation);
       const summary = document.createElement('summary');
-      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = ['create_file', 'replace_text'].includes(toolName) ? '✎' : toolName === 'open_module' ? '↗' : '◇';
+      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = ['create_file', 'replace_text'].includes(toolName) ? '✎' : toolName === 'open_module' ? '↗' : '◌';
       const title = document.createElement('strong'); title.className = 'agent-operation-title';
       title.textContent = known ? ({plan: '任务计划', module_status: '模块状态', open_module: '打开模块', project_overview: '项目概览', list_files: '列出文件', read_file: '读取文件', search_files: '搜索文件', create_file: '创建文件', replace_text: '修改文件', run_command: '运行命令', module_action: '模块操作'})[toolName] : (detail || '执行工具');
       summary.append(icon, title);
@@ -621,6 +621,8 @@
         let data;
         try { data = JSON.parse(detail); } catch (_) { data = {result: detail || ''}; }
         const body = document.createElement('div'); body.className = 'agent-operation-body';
+        const completed = {plan: '已规划步骤', module_status: '已查看模块状态', open_module: '已打开模块', project_overview: '已查看项目', list_files: '已列出文件', read_file: '已读取文件', search_files: '已搜索文件', run_command: '已运行命令', module_action: '已执行模块操作'};
+        if (completed[data.name]) operation.querySelector('.agent-operation-title').textContent = completed[data.name];
         if (data.name === 'create_file' && String(data.result || '').startsWith('已创建 ')) operation.querySelector('.agent-operation-title').textContent = '已创建 1 个文件';
         if (data.name === 'replace_text' && String(data.result || '').startsWith('已修改 ')) operation.querySelector('.agent-operation-title').textContent = '已编辑 1 个文件';
         if (data.module) { const module = document.createElement('div'); module.className = 'agent-operation-file'; module.textContent = data.module; body.append(module); }
@@ -645,7 +647,11 @@
     }
     if (type === 'reasoning') {
       const reasoning = document.createElement('details'); reasoning.className = 'agent-reasoning';
-      const summary = document.createElement('summary'); summary.textContent = '模型思考';
+      if (!restoringAgentSnapshot) animateNew(reasoning);
+      const summary = document.createElement('summary');
+      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = '◌';
+      const title = document.createElement('span'); title.textContent = '思考';
+      summary.append(icon, title);
       const body = document.createElement('p'); body.textContent = detail || '';
       reasoning.append(summary, body); timeline.append(reasoning); timeline.scrollTop = timeline.scrollHeight; return;
     }

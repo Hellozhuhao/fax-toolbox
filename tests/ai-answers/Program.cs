@@ -124,6 +124,13 @@ if (packedContext.Length > 5200 || !packedContext.Contains("用户：继续我�
     !packedContext.Contains("工具结果：") || !packedContext.Contains("最近记录：") ||
     packedContext.Contains("较早记录："))
     throw new Exception("Local context did not prioritize current request and recent tool output");
+if (AgentResponseParser.Parse("{\"type\":\"answer\",\"content\":\"你好\"}", true).Content != "你好" ||
+    AgentResponseParser.Parse("{\"message\":\"你好\"}", true).Content != "你好" ||
+    AgentResponseParser.Parse("{\"type\":\"tool\",\"name\":\"module_status\",\"args\":{}}", true).Type != "tool")
+    throw new Exception("Local Agent response normalization failed");
+try { AgentResponseParser.Parse("{\"type\":\"tool\",\"name\":\"module_status\"}", true);
+    throw new Exception("Incomplete tool call was accepted"); }
+catch (InvalidDataException) { }
 using (var localPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
     new AiSettings(localPreset.Endpoint, localPreset.Model, ""), "instructions", "你好")))
     if (localPayload.RootElement.GetProperty("response_format").GetProperty("type").GetString() != "json_object")
@@ -161,15 +168,24 @@ Console.WriteLine("PASS AI response validation");
 if (args.Contains("--live-local", StringComparer.Ordinal))
 {
     var local = AiProviderPresets.All.First(item => item.Id == "ollama");
+    var localModel = Environment.GetEnvironmentVariable("FAX_TOOLBOX_LOCAL_MODEL") ?? local.Model;
+    var localSettings = new AiSettings(local.Endpoint, localModel, "");
     using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(90));
     var reply = await AiAnswerService.CompleteWithUsageAsync(
-        new AiSettings(local.Endpoint, local.Model, ""),
+        localSettings,
         "只返回包含 content 字段的 JSON 对象，content 是简体中文。",
         "你好，请用一句话介绍自己。", timeout.Token);
     using var parsed = JsonDocument.Parse(reply.Text);
     if (string.IsNullOrWhiteSpace(parsed.RootElement.GetProperty("content").GetString()) ||
         reply.Usage is null)
         throw new Exception("Local model did not return structured Chinese chat and usage");
+    var agentReply = await AiAgentService.CompleteWithUsageAsync("agent", localSettings,
+        "你是通用中文 Agent。普通对话直接回答。每次只返回一个 JSON 对象，不要 Markdown。" +
+        "最终回答格式：{\"type\":\"final\",\"content\":\"中文回答\"}。" +
+        "调用工具格式：{\"type\":\"tool\",\"name\":\"工具名\",\"args\":{},\"note\":\"说明\"}。",
+        "用户：你好", timeout.Token);
+    if (AgentResponseParser.Parse(agentReply.Text, true) is not { Type: "final", Content: { Length: > 0 } })
+        throw new Exception("Local Agent did not answer a simple greeting");
     Console.WriteLine("PASS local Ollama Chinese response and usage");
 }
 if (args.Contains("--live", StringComparer.Ordinal))
