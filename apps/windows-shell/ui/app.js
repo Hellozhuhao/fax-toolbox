@@ -21,6 +21,106 @@
   let developerMode = false;
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
   const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'Agent', activity: '状态', settings: '设置', vault: '密码箱'};
+  function focusedMenu(side, entries, initial) {
+    const menu = document.createElement('nav'); menu.className = 'focus-menu'; menu.setAttribute('aria-label', '内容分类');
+    const panels = document.createElement('div'); panels.className = 'focus-panels';
+    const buttons = new Map();
+    function select(key) {
+      for (const [name, button] of buttons) button.classList.toggle('selected', name === key);
+      for (const panel of panels.children) panel.hidden = panel.dataset.focusPanel !== key;
+      side.dataset.activePanel = key;
+    }
+    for (const {key, label, nodes} of entries) {
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'focus-menu-item'; button.dataset.focusKey = key;
+      button.textContent = label; button.addEventListener('click', () => select(key)); menu.append(button); buttons.set(key, button);
+      const panel = document.createElement('div'); panel.className = 'focus-panel'; panel.dataset.focusPanel = key;
+      for (const node of nodes) if (node) { if (node.tagName === 'DETAILS') node.open = true; panel.append(node); }
+      panels.append(panel);
+    }
+    side.append(menu, panels); select(initial);
+    return select;
+  }
+  function setupFocusedViews() {
+    const overview = document.querySelector('#view-home .overview-grid');
+    const heading = overview.previousElementSibling;
+    $('view-activity').insertBefore(heading, document.querySelector('#view-activity .activity-overview'));
+    heading.querySelector('.eyebrow').textContent = '应用';
+    heading.querySelector('h2').textContent = '运行概览';
+    heading.after(overview);
+
+    const agentSide = document.querySelector('.agent-side');
+    const agentSettings = agentSide.querySelector('.agent-sidebar-settings');
+    const inspector = $('agent-inspector');
+    const inspectorDetails = [...inspector.querySelectorAll('.agent-detail')];
+    const selectAgentPanel = focusedMenu(agentSide, [
+      {key: 'sessions', label: '会话', nodes: [agentSide.querySelector('.agent-sessions')]},
+      {key: 'model', label: '模型连接', nodes: [agentSettings.querySelector('.agent-config-panel')]},
+      {key: 'modules', label: '模块配置', nodes: [agentSettings.querySelector('.agent-configuration')]},
+      {key: 'usage', label: '用量', nodes: [inspectorDetails[0]]},
+      {key: 'tools', label: '可用工具', nodes: [inspectorDetails[1]]},
+      {key: 'responses', label: '模块响应', nodes: [agentSettings.querySelector('.ai-service-log')]}
+    ], 'sessions');
+    agentSettings.remove(); inspector.remove();
+    const agentMenu = agentSide.querySelector(':scope > .focus-menu');
+    const agentHeader = agentSide.querySelector('.agent-side-head');
+    const agentSwitch = document.createElement('button'); agentSwitch.type = 'button'; agentSwitch.className = 'agent-section-switch';
+    agentSwitch.textContent = 'Agent ⌄'; agentSwitch.setAttribute('aria-label', '切换 Agent 侧栏分类');
+    agentHeader.querySelector('strong').replaceWith(agentSwitch);
+    agentHeader.append($('agent-search-toggle'));
+    agentSide.querySelector('.agent-list-heading').remove();
+    const newChat = $('agent-clear'); agentSide.insertBefore(newChat, $('agent-folder'));
+    newChat.textContent = '✎  新对话'; newChat.classList.add('agent-new-chat');
+    agentMenu.hidden = true;
+    const selectAgentCategory = key => {
+      selectAgentPanel(key);
+      const label = [...agentMenu.querySelectorAll('button')].find(button => button.dataset.focusKey === key);
+      agentSwitch.textContent = key === 'sessions' ? 'Agent ⌄' : (label?.textContent || 'Agent') + ' ⌄';
+      agentMenu.hidden = true;
+    };
+    agentSwitch.addEventListener('click', () => { agentMenu.hidden = !agentMenu.hidden; });
+    agentMenu.addEventListener('keydown', event => { if (event.key === 'Escape') { agentMenu.hidden = true; agentSwitch.focus(); } });
+    agentMenu.querySelectorAll('button').forEach(button => button.addEventListener('click', () => selectAgentCategory(button.dataset.focusKey)));
+    document.addEventListener('pointerdown', event => { if (!agentMenu.hidden && !agentMenu.contains(event.target) && event.target !== agentSwitch) agentMenu.hidden = true; });
+    $('agent-inspector-toggle').title = '用量与工具';
+    $('agent-inspector-toggle').setAttribute('aria-label', '用量与工具');
+    $('agent-inspector-toggle').addEventListener('click', () => {
+      selectAgentCategory(agentSide.dataset.activePanel === 'usage' ? 'sessions' : 'usage');
+      if (matchMedia('(max-width: 900px)').matches) { agentSide.classList.add('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'true'); }
+    });
+
+    function studyLayout(id, primary, secondary, initial) {
+      const view = $('view-' + id);
+      const layout = document.createElement('div'); layout.className = 'study-layout';
+      const side = document.createElement('aside'); side.className = 'study-side'; side.setAttribute('aria-label', viewNames[id] + '分类');
+      const main = document.createElement('div'); main.className = 'study-main';
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'study-toggle secondary';
+      toggle.textContent = '☰  分类'; toggle.setAttribute('aria-label', '打开' + viewNames[id] + '分类'); toggle.setAttribute('aria-expanded', 'false');
+      toggle.addEventListener('click', () => { layout.classList.toggle('side-open'); toggle.setAttribute('aria-expanded', String(layout.classList.contains('side-open'))); });
+      layout.addEventListener('pointerdown', event => { if (layout.classList.contains('side-open') && !side.contains(event.target) && event.target !== toggle) { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); } });
+      layout.addEventListener('keydown', event => { if (event.key === 'Escape') { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); } });
+      for (const node of primary) main.append(node);
+      main.prepend(toggle);
+      focusedMenu(side, secondary, initial);
+      layout.append(side, main); view.append(layout);
+    }
+    const course = $('view-course');
+    const courseActions = course.querySelector('.course-actions');
+    const session = document.createElement('div'); session.className = 'study-session';
+    session.append($('course-chapter-id'), $('course-url'), $('course-save-session'), $('course-analyze'));
+    studyLayout('course', [courseActions, course.querySelector('.course-current'), course.querySelector('.course-control')], [
+      {key: 'catalog', label: '章节目录', nodes: [course.querySelector('.course-catalog')]},
+      {key: 'session', label: '登录与页面', nodes: [session]},
+      {key: 'ai', label: 'AI 答题', nodes: [course.querySelector('.ai-card')]},
+      {key: 'answers', label: '答案库', nodes: [course.querySelector('.advanced')]}
+    ], 'catalog');
+    const homework = $('view-homework');
+    studyLayout('homework', [homework.querySelector('.course-actions'), homework.querySelector('.homework-results')], [
+      {key: 'page', label: '当前页面', nodes: [homework.querySelector('.course-current')]},
+      {key: 'progress', label: '校对进度', nodes: [homework.querySelector('.homework-progress-card')]},
+      {key: 'ai', label: 'AI 校对', nodes: [homework.querySelector('.ai-card')]}
+    ], 'page');
+  }
+  setupFocusedViews();
   $('home-tool-count').textContent = String(document.querySelectorAll('#view-home .module-card:not([hidden])').length);
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
@@ -34,6 +134,7 @@
     const previousView = currentView;
     currentView = view;
     if (view !== 'ai') { document.querySelector('.agent-side')?.classList.remove('mobile-open'); $('agent-sidebar-toggle')?.setAttribute('aria-expanded', 'false'); }
+    if (previousView !== view) for (const layout of document.querySelectorAll('.study-layout.side-open')) { layout.classList.remove('side-open'); layout.querySelector('.study-toggle')?.setAttribute('aria-expanded', 'false'); }
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
@@ -400,18 +501,52 @@
     const timeline = $('agent-timeline');
     timeline.querySelector('.agent-empty')?.remove();
     if (type === 'step') {
+      const [toolName, ...noteLines] = String(detail || '').split('\n');
+      const known = ['plan', 'module_status', 'open_module', 'project_overview', 'list_files', 'read_file', 'search_files', 'create_file', 'replace_text', 'run_command', 'module_action'].includes(toolName);
       const operation = document.createElement('details'); operation.className = 'agent-operation'; operation.dataset.awaitingOutput = 'true';
       if (!restoringAgentSnapshot) animateNew(operation);
-      const summary = document.createElement('summary'); summary.textContent = detail || '执行工具';
+      const summary = document.createElement('summary');
+      const icon = document.createElement('span'); icon.className = 'agent-operation-icon'; icon.textContent = ['create_file', 'replace_text'].includes(toolName) ? '✎' : toolName === 'open_module' ? '↗' : '◇';
+      const title = document.createElement('strong'); title.className = 'agent-operation-title';
+      title.textContent = known ? ({plan: '任务计划', module_status: '模块状态', open_module: '打开模块', project_overview: '项目概览', list_files: '列出文件', read_file: '读取文件', search_files: '搜索文件', create_file: '创建文件', replace_text: '修改文件', run_command: '运行命令', module_action: '模块操作'})[toolName] : (detail || '执行工具');
+      summary.append(icon, title);
+      if (known && noteLines.join('\n').trim()) { const note = document.createElement('small'); note.textContent = noteLines.join('\n').trim(); summary.append(note); }
       operation.append(summary); timeline.append(operation); timeline.scrollTop = timeline.scrollHeight; return;
     }
     if (type === 'tool') {
       const operations = [...timeline.querySelectorAll('.agent-operation[data-awaiting-output]')];
       const operation = operations.at(-1);
       if (operation) {
-        const output = document.createElement('pre'); output.textContent = detail || ''; operation.append(output);
+        let data;
+        try { data = JSON.parse(detail); } catch (_) { data = {result: detail || ''}; }
+        const body = document.createElement('div'); body.className = 'agent-operation-body';
+        if (data.name === 'create_file' && String(data.result || '').startsWith('已创建 ')) operation.querySelector('.agent-operation-title').textContent = '已创建 1 个文件';
+        if (data.name === 'replace_text' && String(data.result || '').startsWith('已修改 ')) operation.querySelector('.agent-operation-title').textContent = '已编辑 1 个文件';
+        if (data.module) { const module = document.createElement('div'); module.className = 'agent-operation-file'; module.textContent = data.module; body.append(module); }
+        if (data.path) {
+          const file = document.createElement('div'); file.className = 'agent-operation-file';
+          const path = document.createElement('span'); path.textContent = data.path; file.append(path);
+          if (data.added || data.removed) {
+            const counts = document.createElement('span'); counts.className = 'agent-operation-counts';
+            const added = document.createElement('em'); added.textContent = '+' + (data.added || 0);
+            const removed = document.createElement('em'); removed.textContent = '−' + (data.removed || 0);
+            counts.append(added, removed); file.append(counts);
+          }
+          body.append(file);
+        }
+        if (data.before || data.after) {
+          if (data.before) { const removed = document.createElement('pre'); removed.className = 'agent-operation-diff agent-diff-removed'; removed.textContent = '− ' + data.before.replaceAll('\n', '\n− '); body.append(removed); }
+          if (data.after) { const added = document.createElement('pre'); added.className = 'agent-operation-diff agent-diff-added'; added.textContent = '+ ' + data.after.replaceAll('\n', '\n+ '); body.append(added); }
+        } else if (data.result) { const output = document.createElement('pre'); output.textContent = data.result; body.append(output); }
+        operation.append(body);
         delete operation.dataset.awaitingOutput; timeline.scrollTop = timeline.scrollHeight; return;
       }
+    }
+    if (type === 'reasoning') {
+      const reasoning = document.createElement('details'); reasoning.className = 'agent-reasoning';
+      const summary = document.createElement('summary'); summary.textContent = '模型思考';
+      const body = document.createElement('p'); body.textContent = detail || '';
+      reasoning.append(summary, body); timeline.append(reasoning); timeline.scrollTop = timeline.scrollHeight; return;
     }
     const entry = document.createElement('div'); entry.className = 'agent-entry agent-' + (['user', 'assistant', 'step', 'tool', 'error', 'status'].includes(type) ? type : 'status');
     if (!restoringAgentSnapshot) animateNew(entry);
@@ -602,7 +737,7 @@
     const settingsItem = target.closest('[data-settings-panel]');
     if (currentView === 'settings' && settingsItem) add('打开' + settingsItem.querySelector('strong')?.textContent, () => settingsItem.click());
     const page = {
-      home: [['查看所有工具', () => show('modules')], ['打开 Agent', openAi]],
+      home: [['查看所有工具', () => show('modules')], ['查看状态', () => show('activity')]],
       modules: [['打开 Agent', openAi], ['打开学习通', openCourse], ['打开作业校对', openHomework]],
       workspace: [['查看所有工具', () => show('modules')]],
       ai: [['新建会话', () => click('agent-clear'), !agentBusy], ['选择项目文件夹', () => click('agent-folder'), !agentBusy], ['模型配置', () => { document.querySelector('.agent-config-panel').open = true; click('ai-configure'); }]],
@@ -682,8 +817,6 @@
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
   $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
-  $('agent-inspector-toggle').addEventListener('click', () => { const panel = $('agent-inspector'); panel.hidden = !panel.hidden; $('agent-inspector-toggle').setAttribute('aria-expanded', String(!panel.hidden)); });
-  $('agent-inspector-close').addEventListener('click', () => { $('agent-inspector').hidden = true; $('agent-inspector-toggle').setAttribute('aria-expanded', 'false'); });
   $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
   $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
   $('agent-image-file').addEventListener('change', event => addAgentImages([...event.target.files]));
@@ -746,17 +879,20 @@
   setDeveloperMode(savedDeveloperMode);
   const toolGroup = document.querySelector('.nav-group');
   let flyoutOpenTimer, flyoutCloseTimer;
+  let suppressFlyoutUntilLeave = false;
+  const hideFlyoutNow = () => { clearTimeout(flyoutOpenTimer); clearTimeout(flyoutCloseTimer); toolGroup.classList.remove('flyout-open'); };
   const openFlyout = () => { clearTimeout(flyoutCloseTimer); clearTimeout(flyoutOpenTimer);
-    flyoutOpenTimer = setTimeout(() => toolGroup.classList.add('flyout-open'), 380); };
+    if (!suppressFlyoutUntilLeave) flyoutOpenTimer = setTimeout(() => toolGroup.classList.add('flyout-open'), 380); };
   const closeFlyout = () => { clearTimeout(flyoutOpenTimer); clearTimeout(flyoutCloseTimer);
-    flyoutCloseTimer = setTimeout(() => toolGroup.classList.remove('flyout-open'), 180); };
+    flyoutCloseTimer = setTimeout(hideFlyoutNow, 180); };
   toolGroup.addEventListener('pointerenter', openFlyout);
-  toolGroup.addEventListener('pointerleave', closeFlyout);
-  toolGroup.addEventListener('focusin', () => { clearTimeout(flyoutCloseTimer); toolGroup.classList.add('flyout-open'); });
+  toolGroup.addEventListener('pointerleave', () => { suppressFlyoutUntilLeave = false; closeFlyout(); });
+  toolGroup.querySelector('.nav-item').addEventListener('pointerdown', () => { suppressFlyoutUntilLeave = true; hideFlyoutNow(); });
+  toolGroup.addEventListener('focusin', event => { if (!suppressFlyoutUntilLeave && event.target.matches(':focus-visible')) { clearTimeout(flyoutCloseTimer); toolGroup.classList.add('flyout-open'); } });
   toolGroup.addEventListener('focusout', () => setTimeout(() => {
     if (!toolGroup.contains(document.activeElement)) toolGroup.classList.remove('flyout-open');
   }, 0));
-  toolGroup.querySelectorAll('.nav-flyout button').forEach(button => button.addEventListener('click', () => toolGroup.classList.remove('flyout-open')));
+  toolGroup.querySelectorAll('.nav-flyout button').forEach(button => button.addEventListener('click', () => { suppressFlyoutUntilLeave = true; hideFlyoutNow(); }));
   for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
   setTheme(savedTheme);

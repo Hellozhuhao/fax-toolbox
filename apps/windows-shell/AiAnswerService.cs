@@ -23,7 +23,7 @@ internal sealed record AiUsage(long InputTokens, long OutputTokens, long? Cached
     }
 }
 
-internal sealed record AiCompletionResult(string Text, AiUsage? Usage);
+internal sealed record AiCompletionResult(string Text, AiUsage? Usage, string? Reasoning = null);
 
 internal sealed record AiSettings(string Endpoint, string Model, string EncryptedKey,
     AiTokenPricing? Pricing = null)
@@ -337,7 +337,9 @@ internal static class AiAnswerService
         var content = answerContent.GetString();
         if (string.IsNullOrWhiteSpace(content))
             throw new InvalidDataException("AI 未返回答案，请人工检查");
-        return new AiCompletionResult(content, ParseUsage(result.RootElement));
+        var reasoning = message.TryGetProperty("reasoning_content", out var reasoningValue) &&
+            reasoningValue.ValueKind == JsonValueKind.String ? reasoningValue.GetString() : null;
+        return new AiCompletionResult(content, ParseUsage(result.RootElement), reasoning);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
         {

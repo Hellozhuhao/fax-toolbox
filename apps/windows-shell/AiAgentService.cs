@@ -27,7 +27,7 @@ internal static class AiAgentService
         AiConsumerRegistry.Require(consumer);
         using var client = new ToolboxChatClient(settings, timeout, images);
         var content = await RunWithClientAsync(consumer, client, instructions, prompt, cancellation);
-        return new AiCompletionResult(content, client.LastUsage);
+        return new AiCompletionResult(content, client.LastUsage, client.LastReasoning);
     }
 
     internal static async Task<string> RunWithClientAsync(string consumer, IChatClient client,
@@ -46,6 +46,7 @@ internal static class AiAgentService
         IReadOnlyList<AiImageInput>? images) : IChatClient
     {
         public AiUsage? LastUsage { get; private set; }
+        public string? LastReasoning { get; private set; }
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
 
@@ -65,6 +66,7 @@ internal static class AiAgentService
             var result = await AiAnswerService.CompleteWithUsageAsync(settings, system, user,
                 cancellationToken, timeout, images);
             LastUsage = result.Usage;
+            LastReasoning = result.Reasoning;
             return new ChatResponse(new ChatMessage(ChatRole.Assistant, result.Text));
         }
 

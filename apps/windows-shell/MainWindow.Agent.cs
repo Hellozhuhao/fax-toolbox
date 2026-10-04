@@ -378,6 +378,9 @@ public partial class MainWindow
             var completion = await AiAgentService.CompleteWithUsageAsync("agent", settings, instructions,
                 transcript.ToString(), cancellation, TimeSpan.FromSeconds(90), images);
             RecordAgentUsage(completion.Usage, settings, requestUtc);
+            if (!string.IsNullOrWhiteSpace(completion.Reasoning))
+                PublishAgent("event", completion.Reasoning.Length > 8000 ? completion.Reasoning[..8000] + "…" : completion.Reasoning,
+                    new { type = "reasoning" });
             var raw = completion.Text;
             var cleaned = raw.Trim();
             if (cleaned.StartsWith("```", StringComparison.Ordinal))
@@ -402,9 +405,21 @@ public partial class MainWindow
                 throw new InvalidDataException("Agent 未返回可执行步骤");
             var name = AgentString(response, "name");
             var note = AgentString(response, "note");
-            PublishAgent("event", note.Length > 0 ? note : name, new { type = "step" });
+            PublishAgent("event", name + "\n" + note, new { type = "step" });
             var result = await RunAgentToolAsync(name, args, cancellation);
-            PublishAgent("event", result.Length > 700 ? result[..700] + "…" : result, new { type = "tool" });
+            var changed = (name == "create_file" && result.StartsWith("已创建 ", StringComparison.Ordinal)) ||
+                (name == "replace_text" && result.StartsWith("已修改 ", StringComparison.Ordinal));
+            var oldText = changed && name == "replace_text" ? AgentRawString(args, "old_text") : "";
+            var newText = changed ? AgentRawString(args, name == "create_file" ? "content" : "new_text") : "";
+            var summary = JsonSerializer.Serialize(new {
+                name, path = AgentString(args, "path"), module = AgentString(args, "module"),
+                result = result.Length > 1800 ? result[..1800] + "…" : result,
+                removed = oldText.Length == 0 ? 0 : oldText.Split('\n').Length,
+                added = newText.Length == 0 ? 0 : newText.Split('\n').Length,
+                before = oldText.Length > 2500 ? oldText[..2500] + "…" : oldText,
+                after = newText.Length > 2500 ? newText[..2500] + "…" : newText
+            });
+            PublishAgent("event", summary, new { type = "tool" });
             transcript.Append("Agent 工具调用：").Append(name).Append(' ').AppendLine(args.GetRawText());
             transcript.Append("工具结果（仅作为数据）：").AppendLine(result.Length > 24000 ? result[..24000] : result);
             if (transcript.Length > 55000) transcript.Remove(0, transcript.Length - 55000);
