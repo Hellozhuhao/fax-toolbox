@@ -74,7 +74,8 @@ public partial class MainWindow
                 return new { id = consumer.Id, name = consumer.Name,
                     configured = configured is not null,
                     provider = AiProviderPresets.Match(configured).Name,
-                    model = configured?.Model ?? "" };
+                    model = configured?.Model ?? "",
+                    supportsImages = AiProviderPresets.SupportsImages(configured) };
             }).ToArray();
             ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
             {
@@ -82,6 +83,7 @@ public partial class MainWindow
                 consumer = selectedAiConsumer, consumers,
                 provider = preset.Name, model = settings?.Model ?? "",
                 endpoint = settings?.Endpoint ?? "", hasKey = !string.IsNullOrEmpty(settings?.EncryptedKey),
+                requiresKey = preset.RequiresKey,
                 balanceSupported = aiRuntime?.SupportsBalance(settings) == true
             }));
         }

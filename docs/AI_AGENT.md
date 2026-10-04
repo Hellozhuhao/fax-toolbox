@@ -4,6 +4,7 @@ AI 服务接入 [Microsoft Agent Framework](https://github.com/microsoft/agent-f
 `ChatClientAgent`（MIT，NuGet `Microsoft.Agents.AI` 1.20.0）。工具箱通过
 `AiAgentService` 实现 `IChatClient` 适配，沿用现有兼容 Chat Completions 的 HTTPS
 传输、请求超时、图片输入和结果校验。学习通和作业校对的模型调用不共享对话。
+本地 Ollama 连接只允许通过回环 IP 的 `11434` 端口使用 HTTP。
 
 ## 模块边界
 
@@ -27,7 +28,7 @@ AI 页面包含独立的 Agent 对话与步骤记录。Agent 的模型配置属�
 下次启动继续使用；图片本身不写入会话文件。
 
 输入框支持最多四张图片和粘贴截图，图片先在本机缩放并转为 JPEG，再传给当前 Agent
-模型。预设的 `qwen-plus` 是文字模型，因此图片入口在该配置下禁用。
+模型。预设的 `qwen-plus` 和本地 Huihui Qwen3 8B 是文字模型，因此图片入口在这些配置下禁用。
 系统提示词按 DeepSeek、阿里百炼、硅基流动、OpenAI 和自定义兼容接口调整输出约束，
 要求模型以单步 JSON 表达工具调用；工具输出一律当作不可信数据。
 
@@ -43,6 +44,16 @@ Agent 当前可查看模块状态、打开模块、列出及搜索所选项目�
 右侧模块状态卡选择要配置的模块。余额和连接测试只针对当前选择；模块卡片分别显示
 自己的模型配置与运行状态。
 
+## 本地中文模型
+
+安装 [Ollama for Windows](https://ollama.com/download/windows)，再运行
+`ollama pull huihui_ai/qwen3-abliterated:8b-v2`。在工具箱 Agent 的现有模型配置中选择
+“本地模型”；无需 API Key。工具箱使用本机 `127.0.0.1:11434`，不会把对话发到云端。
+同一配置中的模型名称可更换为其他已下载的 Ollama 模型。
+该模型是约 5 GB 的 Q4_K_M 文字模型，适合 8 GB 显存下的中文对话。
+其去拒答训练旨在减少拒答，但无法保证任何话题都绝不拒答或输出正确。
+项目文件写入和模块操作仍须用户逐项确认。
+
 ## 用量与费用
 
 每次模型响应只读取服务商返回的 `usage`。输入、输出 token 和缓存命中量没有响应字段时
@@ -51,6 +62,8 @@ Agent 当前可查看模块状态、打开模块、列出及搜索所选项目�
 查询失败或页面结构不匹配时使用 2026-10-03 核对的内置价格快照。该查询不使用 API Key，
 也不因打开 Agent 标签或调用模型而重复发起。预设模型自动匹配价格，
 只有自定义接口在配置中填写每百万 token 单价。内置价格来源：
+
+- 本地 Ollama：没有按 token 向模型服务商付费的费用，估算单价为零；电费和设备成本不计入。
 
 - [DeepSeek Flash](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)：按请求开始时的 UTC 星期与时段切换高峰/空闲单价；输入缓存另计。
 - [阿里百炼 qwen-plus](https://help.aliyun.com/zh/model-studio/qwen-plus)：预设接口位于北京，按单次输入长度选择非思考模式阶梯价；缓存输入另计。

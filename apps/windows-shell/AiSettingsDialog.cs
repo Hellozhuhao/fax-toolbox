@@ -22,8 +22,11 @@ internal sealed class AiSettingsDialog : Window
     private readonly ComboBox priceCurrency = new();
     private readonly Expander pricingFields = new();
     private readonly StackPanel customFields = new();
+    private readonly StackPanel modelFields = new();
+    private readonly StackPanel keyFields = new();
     private readonly TextBlock summary = new();
     private readonly TextBlock keyHint = new();
+    private readonly TextBlock privacyHint = new();
     private readonly Dictionary<string, Button> providerButtons = [];
     private readonly SolidColorBrush background, surface, text, subtle, border, accent;
     private AiProviderPreset selected;
@@ -65,7 +68,7 @@ internal sealed class AiSettingsDialog : Window
         heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var title = new StackPanel();
         title.Children.Add(new TextBlock { Text = consumer.Name + " · 模型配置", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = text });
-        title.Children.Add(new TextBlock { Text = "选择服务商，填写自己的 API Key。", FontSize = 12, Foreground = subtle, Margin = new Thickness(0, 5, 0, 0) });
+        title.Children.Add(new TextBlock { Text = "选择模型连接。", FontSize = 12, Foreground = subtle, Margin = new Thickness(0, 5, 0, 0) });
         heading.Children.Add(title);
         var close = PlainButton("✕"); close.Width = 32; close.Height = 32; close.Click += (_, _) => Close();
         Grid.SetColumn(close, 1); heading.Children.Add(close);
@@ -98,14 +101,16 @@ internal sealed class AiSettingsDialog : Window
         customFields.Children.Add(Label("接口地址"));
         endpoint.ToolTip = "完整的 HTTPS /chat/completions 地址"; endpoint.Text = previous?.Endpoint ?? "";
         StyleInput(endpoint); customFields.Children.Add(InputFrame(endpoint, new Thickness(0, 8, 0, 15)));
-        customFields.Children.Add(Label("模型名称")); model.Text = previous?.Model ?? "";
-        StyleInput(model); customFields.Children.Add(InputFrame(model, new Thickness(0, 8, 0, 15))); body.Children.Add(customFields);
-        body.Children.Add(Label("API Key"));
+        body.Children.Add(customFields);
+        modelFields.Children.Add(Label("模型名称")); model.Text = previous?.Model ?? "";
+        StyleInput(model); modelFields.Children.Add(InputFrame(model, new Thickness(0, 8, 0, 15)));
+        body.Children.Add(modelFields);
+        keyFields.Children.Add(Label("API Key"));
         key.Background = surface; key.Foreground = text; key.BorderThickness = new Thickness(0);
         key.Padding = new Thickness(10, 7, 10, 7); key.FontSize = 13; key.Height = 36;
-        body.Children.Add(InputFrame(key, new Thickness(0, 9, 0, 6)));
+        keyFields.Children.Add(InputFrame(key, new Thickness(0, 9, 0, 6)));
         keyHint.Foreground = subtle; keyHint.FontSize = 11; keyHint.TextWrapping = TextWrapping.Wrap;
-        body.Children.Add(keyHint);
+        keyFields.Children.Add(keyHint); body.Children.Add(keyFields);
         if (consumer.Id == "agent")
         {
             pricingFields.Header = "自定义模型单价"; pricingFields.Foreground = text;
@@ -126,8 +131,9 @@ internal sealed class AiSettingsDialog : Window
             }
             pricingFields.Content = fields; body.Children.Add(pricingFields);
         }
-        body.Children.Add(new TextBlock { Text = "密钥由 Windows 当前用户加密保存在本机。输入内容会发送给所选服务商。",
-            Foreground = subtle, FontSize = 11, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 17, 0, 4) });
+        privacyHint.Text = "密钥由 Windows 当前用户加密保存在本机。输入内容会发送给所选服务商。";
+        privacyHint.Foreground = subtle; privacyHint.FontSize = 11; privacyHint.TextWrapping = TextWrapping.Wrap;
+        privacyHint.Margin = new Thickness(0, 17, 0, 4); body.Children.Add(privacyHint);
 
         var actions = new Grid { Margin = new Thickness(28, 16, 28, 22) };
         actions.ColumnDefinitions.Add(new ColumnDefinition());
@@ -174,6 +180,7 @@ internal sealed class AiSettingsDialog : Window
     }
     private void SelectProvider(AiProviderPreset preset)
     {
+        var changedProvider = selected.Id != preset.Id;
         selected = preset;
         foreach (var (id, button) in providerButtons)
         {
@@ -183,13 +190,20 @@ internal sealed class AiSettingsDialog : Window
             button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
+        modelFields.Visibility = preset.Id is "custom" or "ollama" ? Visibility.Visible : Visibility.Collapsed;
+        if (preset.Id == "ollama" && changedProvider)
+            model.Text = previous is not null && AiProviderPresets.Match(previous).Id == "ollama" ?
+                previous.Model : preset.Model;
+        keyFields.Visibility = preset.Id == "ollama" ? Visibility.Collapsed : Visibility.Visible;
+        privacyHint.Visibility = preset.Id == "ollama" ? Visibility.Collapsed : Visibility.Visible;
         pricingFields.Visibility = consumer.Id == "agent" && preset.Id == "custom" ?
             Visibility.Visible : Visibility.Collapsed;
         summary.Text = preset.Id == "custom" ? "填写兼容 Chat Completions 的 HTTPS 接口地址和模型名称。" :
+            preset.Id == "ollama" ? "通过本机 Ollama 运行；填写已下载的模型名称。" :
             $"默认模型：{preset.Model}\n接口：{preset.Endpoint}";
         var existing = previous is not null &&
             string.Equals(previous.Endpoint, preset.Id == "custom" ? endpoint.Text.Trim() : preset.Endpoint, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(previous.Model, preset.Id == "custom" ? model.Text.Trim() : preset.Model, StringComparison.Ordinal);
+            string.Equals(previous.Model, preset.Id is "custom" or "ollama" ? model.Text.Trim() : preset.Model, StringComparison.Ordinal);
         keyHint.Text = existing && !string.IsNullOrEmpty(previous!.EncryptedKey) ?
             "已保存此服务的密钥；留空将继续使用。" :
             preset.RequiresKey ? "请输入此服务商提供的 API Key。" : "如服务不需要密钥，可留空。";
@@ -199,14 +213,14 @@ internal sealed class AiSettingsDialog : Window
         try
         {
             var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
-            var name = selected.Id == "custom" ? model.Text.Trim() : selected.Model;
+            var name = selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
             var sameConfiguration = previous is not null &&
                 string.Equals(previous.Endpoint, url, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(previous.Model, name, StringComparison.Ordinal);
             if (selected.RequiresKey && key.Password.Length == 0 &&
                 (!sameConfiguration || string.IsNullOrEmpty(previous!.EncryptedKey)))
                 throw new InvalidDataException("请填写所选服务的 API Key");
-            var encrypted = key.Password.Length > 0 ? VaultCrypto.Protect(key.Password) :
+            var encrypted = selected.Id == "ollama" ? "" : key.Password.Length > 0 ? VaultCrypto.Protect(key.Password) :
                 sameConfiguration ? previous!.EncryptedKey : "";
             AiTokenPricing? pricing = null;
             if (consumer.Id == "agent" && selected.Id == "custom" &&

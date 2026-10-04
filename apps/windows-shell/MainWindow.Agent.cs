@@ -377,12 +377,12 @@ public partial class MainWindow
         var settings = aiRuntime?.LoadSettings("agent");
         if (settings is null)
         {
-            PublishAgent("event", "先在 Agent 配置中保存模型和 API Key。", new { type = "error" });
+            PublishAgent("event", "先在 Agent 配置中选择模型。", new { type = "error" });
             return;
         }
-        if (images.Count > 0 && AiProviderPresets.Match(settings).Id == "qwen")
+        if (images.Count > 0 && !AiProviderPresets.SupportsImages(settings))
         {
-            PublishAgent("event", "当前预设的 qwen-plus 只接受文字。请切换支持视觉输入的模型。", new { type = "error" });
+            PublishAgent("event", "当前模型只接受文字。请切换支持图片的模型。", new { type = "error" });
             return;
         }
         var cancellation = new CancellationTokenSource();
@@ -564,6 +564,8 @@ public partial class MainWindow
             "当前使用 Qwen3.6-27B。先在内部分析项目与图像，再输出严格的 JSON 决策；逐步调用工具，避免在一个回复中混合多个工具。" :
             host.EndsWith("openai.com", StringComparison.OrdinalIgnoreCase) ?
             "当前使用 OpenAI 兼容的 Chat Completions 模型。每轮只选择一个工具或给出最终答复，不在 JSON 外添加说明；需要项目事实时先调用工具。" :
+            AiProviderPresets.Match(settings).Id == "ollama" ?
+            "当前使用本地 Qwen3 中文模型。用自然、简洁的中文交流；每轮只输出一个完整 JSON 对象。直接回答闲聊问题，确实需要项目事实时再调用工具。" :
             "当前使用自定义兼容模型。使用最小且有效的 JSON，严格遵守给定字段；不能确定工具参数时先询问。";
         if (hasImages)
             profile += model.Contains("flash", StringComparison.Ordinal) && host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase) ?
