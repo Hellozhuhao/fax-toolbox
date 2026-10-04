@@ -410,6 +410,12 @@ button[aria-disabled="true"] { background-image: none; }
 .agent-session-row button{margin:0;min-height:34px;box-shadow:none;border:0;background:transparent;color:var(--text)}
 .agent-session-row .agent-session-select{flex:1;min-width:0;padding:6px 9px;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
 .agent-session-row .agent-session-select.selected{color:var(--accent);font-weight:750}
+.agent-session-row.unread .agent-session-select{font-weight:800}
+.agent-session-row.unread .agent-session-select::before{content:"";display:inline-block;width:6px;height:6px;margin-right:7px;border-radius:50%;background:var(--accent);vertical-align:2px}
+.agent-archive-group{margin:12px 0 0;padding-top:7px;border-top:1px solid var(--border)}
+.agent-archive-group[hidden]{display:none}
+.agent-archive-group>summary{padding:5px 7px;color:var(--subtle);font-size:11px;font-weight:750;cursor:pointer}
+.agent-archive-group .agent-session-group{margin:4px 0 0}
 .agent-session-row .agent-session-delete{width:30px;min-width:30px;padding:0;border-radius:50%;opacity:0;font-size:18px;line-height:1;transition:background .16s,opacity .16s,transform .16s}
 .agent-session-row:hover .agent-session-delete,.agent-session-row:focus-within .agent-session-delete{opacity:.7}
 .agent-session-row .agent-session-delete:hover{background:var(--accent);color:#fff;opacity:1;transform:rotate(90deg)}
@@ -505,8 +511,18 @@ button[aria-disabled="true"] { background-image: none; }
 @media(max-width:850px){.agent-layout{grid-template-columns:1fr;height:auto}.agent-workspace{height:max(430px,calc(100dvh - 130px))}.agent-side{overflow:visible}.agent-side .ai-consumers{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){.agent-side .ai-consumers{grid-template-columns:1fr}.agent-workspace-heading{align-items:flex-start;flex-direction:column}.agent-heading-actions{width:100%}}
 .toolbox-context-menu{position:fixed;z-index:1000;min-width:190px;max-width:min(280px,calc(100vw - 16px));padding:5px;border:1px solid var(--border);border-radius:14px;background:var(--panel);color:var(--text);box-shadow:0 16px 42px #0003;animation:context-enter .11s ease-out both}
+.toolbox-context-menu.session-menu{min-width:238px;max-width:min(285px,calc(100vw - 16px));max-height:calc(100dvh - 16px);overflow-y:auto;padding:6px}
+.toolbox-context-submenu{z-index:1001}
 .toolbox-context-menu[hidden]{display:none}
 .toolbox-context-menu button{display:block;width:100%;min-height:34px;margin:0;padding:6px 11px;border:0;border-radius:9px;background:transparent;color:var(--text);box-shadow:none;text-align:left;font-size:12px;font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toolbox-context-menu.session-menu button{display:flex;align-items:center;gap:9px;min-height:35px;padding:6px 9px;overflow:visible;font-weight:500}
+.toolbox-context-icon{display:grid;place-items:center;flex:none;width:17px;height:17px;color:var(--subtle)}
+.toolbox-context-icon svg{display:block;width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.toolbox-context-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis}
+.toolbox-context-menu kbd{flex:none;margin-left:13px;color:var(--subtle);font:10px/1.2 "Segoe UI","Microsoft YaHei UI",sans-serif}
+.toolbox-context-arrow{flex:none;margin-left:12px;color:var(--subtle);font-size:17px;line-height:1}
+.toolbox-context-separator{height:1px;margin:5px -6px;background:var(--border)}
+.toolbox-context-menu.session-menu button:hover .toolbox-context-icon,.toolbox-context-menu.session-menu button:focus-visible .toolbox-context-icon{color:var(--accent)}
 .toolbox-context-menu button:hover,.toolbox-context-menu button:focus-visible{background:color-mix(in srgb,var(--accent) 14%,var(--panel));color:var(--accent);outline:0;box-shadow:none}
 .toolbox-context-menu button:disabled{opacity:.4}
 :root[data-theme="dark"] .toolbox-context-menu button{background:transparent;background-image:none;color:var(--text);box-shadow:none}
@@ -514,4 +530,17 @@ button[aria-disabled="true"] { background-image: none; }
 :root[data-theme="dark"] .toolbox-context-menu button:focus-visible{background:color-mix(in srgb,var(--accent) 17%,var(--panel));background-image:none;color:#d8c9ff;box-shadow:none}
 @keyframes context-enter{from{opacity:0;transform:translateY(-3px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.toolbox-context-menu{animation:none}}
+.toolbox-confirm{box-sizing:border-box;width:min(390px,calc(100vw - 32px));max-width:none;margin:auto;padding:25px 26px 22px;border:1px solid var(--border);border-radius:22px;background:var(--panel);color:var(--text);box-shadow:0 24px 72px #0004;font-family:"Microsoft YaHei UI","Segoe UI",sans-serif}
+.toolbox-confirm::backdrop{background:#11111680}
+.toolbox-confirm h2{margin:0;color:var(--text);font-size:17px;line-height:1.4;font-weight:750}
+.toolbox-confirm p{margin:12px 0 25px;color:var(--subtle);font-size:13px;line-height:1.65;overflow-wrap:anywhere}
+.toolbox-confirm input{box-sizing:border-box;width:100%;min-height:38px;margin:-8px 0 22px;padding:8px 11px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);font-size:12px}
+.toolbox-confirm input[hidden]{display:none}
+.toolbox-confirm-actions{display:flex;justify-content:flex-end;gap:9px}
+.toolbox-confirm-actions button{min-width:76px;min-height:36px;margin:0;padding:6px 14px;border-radius:11px;font-size:12px}
+.toolbox-confirm #toolbox-confirm-accept.destructive{background:#b44743;color:#fff;box-shadow:none}
+.toolbox-confirm #toolbox-confirm-accept.destructive:hover{background:#9e3937;background-image:none}
+:root[data-theme="dark"] .toolbox-confirm{box-shadow:0 26px 76px #000a}
+:root[data-theme="dark"] .toolbox-confirm #toolbox-confirm-accept.destructive{background:#ad4650;background-image:none;color:#fff;box-shadow:none}
+:root[data-theme="dark"] .toolbox-confirm #toolbox-confirm-accept.destructive:hover{background:#c3535e;background-image:none}
 @media(max-width:620px){.activity-overview{grid-template-columns:1fr}.ai-consumers,.settings-layout{grid-template-columns:1fr}.settings-menu{grid-template-columns:repeat(2,minmax(0,1fr))}.command-meta{display:none}}

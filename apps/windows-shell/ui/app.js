@@ -21,6 +21,45 @@
   let developerMode = false;
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
   const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'Agent', activity: '状态', settings: '设置', vault: '密码箱'};
+  const confirmation = $('toolbox-confirm');
+  let confirmationAction = null;
+  let confirmationTrigger = null;
+  function confirmAction(title, message, action, options = {}) {
+    if (confirmation.open) confirmation.close();
+    confirmationAction = action;
+    confirmationTrigger = document.activeElement;
+    $('toolbox-confirm-title').textContent = title;
+    $('toolbox-confirm-message').textContent = message;
+    const input = $('toolbox-confirm-input'); input.hidden = !options.input; input.value = '';
+    input.placeholder = options.placeholder || '';
+    const accept = $('toolbox-confirm-accept'); accept.textContent = options.confirmLabel || '删除';
+    accept.classList.toggle('destructive', !options.input);
+    confirmation.showModal();
+    (options.input ? input : $('toolbox-confirm-cancel')).focus();
+  }
+  $('toolbox-confirm-cancel').addEventListener('click', () => confirmation.close());
+  $('toolbox-confirm-accept').addEventListener('click', () => {
+    const input = $('toolbox-confirm-input');
+    if (!input.hidden && !input.value.trim()) { input.focus(); return; }
+    const action = confirmationAction;
+    confirmationAction = null;
+    confirmation.close();
+    action?.(input.value.trim());
+  });
+  $('toolbox-confirm-input').addEventListener('keydown', event => {
+    if (event.key === 'Enter') { event.preventDefault(); $('toolbox-confirm-accept').click(); }
+  });
+  confirmation.addEventListener('close', () => {
+    if (confirmation.open) return;
+    confirmationAction = null;
+    if (confirmationTrigger?.isConnected) confirmationTrigger.focus();
+    confirmationTrigger = null;
+  });
+  confirmation.addEventListener('pointerdown', event => {
+    if (event.target !== confirmation) return;
+    const rect = confirmation.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) confirmation.close();
+  });
   function focusedMenu(side, entries, initial) {
     const menu = document.createElement('nav'); menu.className = 'focus-menu'; menu.setAttribute('aria-label', '内容分类');
     const panels = document.createElement('div'); panels.className = 'focus-panels';
@@ -336,7 +375,7 @@
       const label = document.createElement('span'); label.textContent = entry.username;
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary';
       remove.textContent = '删除保存副本'; remove.title = '删除密码箱中的登录状态；当前网页仍保持登录';
-      remove.addEventListener('click', () => { if (confirm('删除密码箱中的学习通登录状态？当前网页仍保持登录。')) send('vault.delete', {entryId: entry.id}); });
+      remove.addEventListener('click', () => confirmAction('删除登录状态', '只删除密码箱中的副本；当前网页保持登录。', () => send('vault.delete', {entryId: entry.id})));
       row.append(label, remove); sessions.append(row);
     }
     if (!sessions.childElementCount) sessions.textContent = '暂无保存的登录状态';
@@ -344,7 +383,7 @@
       const row = document.createElement('div'); row.className = 'vault-row';
       const label = document.createElement('span'); label.textContent = entry.username;
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '删除';
-      remove.addEventListener('click', () => { if (confirm('删除这个账号？')) send('vault.delete', {entryId: entry.id}); });
+      remove.addEventListener('click', () => confirmAction('删除账号', `从密码箱中删除「${entry.username}」？`, () => send('vault.delete', {entryId: entry.id})));
       row.append(label, remove); accounts.append(row);
     }
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
@@ -392,6 +431,7 @@
   let agentImagesSupported = true;
   let activeAgentSessionId = '';
   const agentDrafts = new Map();
+  const agentSessionMeta = new Map();
   let agentSessionSearch = '';
   function filterAgentSessions() {
     for (const group of $('agent-session-list').querySelectorAll('.agent-session-group')) {
@@ -401,6 +441,11 @@
         if (!row.hidden) visible++;
       }
       group.hidden = visible === 0;
+    }
+    const archive = $('agent-session-list').querySelector('.agent-archive-group');
+    if (archive) {
+      archive.hidden = archive.querySelector('.agent-session-group')?.hidden ?? true;
+      if (agentSessionSearch) archive.open = !archive.hidden;
     }
   }
   function renameAgentSession(row) {
@@ -416,24 +461,34 @@
     input.addEventListener('blur', () => finish(true));
   }
   function renderAgentSessions(data) {
-    const list = $('agent-session-list'); list.replaceChildren();
+    const list = $('agent-session-list'); list.replaceChildren(); agentSessionMeta.clear();
     const groups = new Map();
     for (const session of data.sessions || []) {
+      agentSessionMeta.set(session.id, session);
       const project = session.root || '';
-      if (!groups.has(project)) {
+      const groupKey = session.archived ? 'archived' : session.pinned ? 'pinned' : session.section ? 'section:' + session.section : 'project:' + project;
+      if (!groups.has(groupKey)) {
         const group = document.createElement('section'); group.className = 'agent-session-group';
-        const heading = document.createElement('h4'); heading.textContent = project ? project.split(/[\\/]/).filter(Boolean).pop() : '最近'; heading.title = project;
-        group.append(heading); list.append(group); groups.set(project, group);
+        if (session.archived) {
+          const fold = document.createElement('details'); fold.className = 'agent-archive-group';
+          const summary = document.createElement('summary'); summary.textContent = '归档'; fold.append(summary, group); list.append(fold);
+        } else {
+          const heading = document.createElement('h4');
+          heading.textContent = session.pinned ? '置顶' : session.section || (project ? project.split(/[\\/]/).filter(Boolean).pop() : '最近');
+          heading.title = session.section || project; group.append(heading); list.append(group);
+        }
+        groups.set(groupKey, group);
       }
       const row = document.createElement('div'); row.className = 'agent-session-row'; row.dataset.sessionId = session.id;
+      row.classList.toggle('pinned', !!session.pinned); row.classList.toggle('unread', !!session.unread);
       const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
       select.textContent = session.title || '新任务'; select.title = select.textContent;
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
       select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); document.querySelector('.agent-side').classList.remove('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'false'); });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
       remove.textContent = '×'; remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
-      remove.addEventListener('click', () => { if (!agentBusy && confirm('删除这个 Agent 会话及其记录？')) send('agent.session.delete', {sessionId: session.id}); });
-      row.append(select, remove); groups.get(project).append(row);
+      remove.addEventListener('click', () => { if (!agentBusy) confirmAction('删除会话', `删除「${session.title || '新任务'}」及其记录？此操作无法撤销。`, () => { if (!agentBusy) send('agent.session.delete', {sessionId: session.id}); }); });
+      row.append(select, remove); groups.get(groupKey).append(row);
     }
     filterAgentSessions();
   }
@@ -754,11 +809,59 @@
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
     refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
   const contextMenu = $('toolbox-context-menu');
+  const contextSubmenu = $('toolbox-context-submenu');
   let contextTarget = null;
   let contextPasteTarget = null;
-  function closeContextMenu() { contextMenu.hidden = true; contextMenu.replaceChildren(); contextTarget = null; }
+  function hideContextSubmenu() { contextSubmenu.hidden = true; contextSubmenu.replaceChildren(); }
+  function closeContextMenu() { contextMenu.hidden = true; contextMenu.replaceChildren(); hideContextSubmenu(); contextTarget = null; }
   function contextAction(label, run, enabled = true) { return {label, run, enabled}; }
+  function buildSessionContextActions(row) {
+    const session = agentSessionMeta.get(row.dataset.sessionId);
+    if (!session) return [];
+    const id = session.id;
+    const enabled = !agentBusy;
+    const make = (label, icon, run, shortcut = '', items) => ({label, icon, run, shortcut, items, enabled});
+    const sections = [...new Set([...agentSessionMeta.values()].map(item => item.section).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    return [
+      make('重命名', 'edit', () => renameAgentSession(row), 'Alt+Ctrl+R'),
+      make(session.pinned ? '取消置顶' : '置顶', 'pin', () => send('agent.session.pin', {sessionId: id}), 'Alt+Ctrl+P'),
+      make(session.unread ? '标记为已读' : '标记为未读', 'eye', () => send('agent.session.unread', {sessionId: id}), 'Ctrl+Shift+U'),
+      make(session.archived ? '取消归档' : '归档', 'archive', () => send('agent.session.archive', {sessionId: id}), 'Ctrl+Shift+A'),
+      make('永久删除', 'trash', () => row.querySelector('.agent-session-delete')?.click()),
+      {separator: true},
+      make('项目', 'folder', null, '', [
+        make('选择项目文件夹…', 'folder', () => send('agent.session.project', {sessionId: id})),
+        ...(session.root ? [make('移出项目', 'remove', () => send('agent.session.project.clear', {sessionId: id}))] : []),
+      ]),
+      make('分区', 'list', null, '', [
+        ...sections.map(section => make((section === session.section ? '✓ ' : '') + section, 'list', () => send('agent.session.section', {sessionId: id, section}))),
+        make('新建分区…', 'plus', () => confirmAction('新建分区', '输入分区名称', name => send('agent.session.section', {sessionId: id, section: name}), {input: true, confirmLabel: '创建', placeholder: '分区名称'})),
+        ...(session.section ? [make('移出分区', 'remove', () => send('agent.session.section', {sessionId: id, section: ''}))] : [])
+      ]),
+      {separator: true},
+      make('分享', 'share', null, '', [
+        make('导出 Markdown…', 'share', () => send('agent.session.export', {sessionId: id})),
+        make('复制会话内容', 'copy', () => send('agent.session.copy', {sessionId: id, kind: 'conversation'}))
+      ]),
+      make('复制', 'copy', null, '', [
+        make('复制标题', 'copy', () => send('agent.session.copy', {sessionId: id, kind: 'title'})),
+        make('复制会话内容', 'copy', () => send('agent.session.copy', {sessionId: id, kind: 'conversation'})),
+        make('复制会话 ID', 'copy', () => send('agent.session.copy', {sessionId: id, kind: 'id'}))
+      ]),
+      {separator: true},
+      make('分叉', 'fork', () => send('agent.session.fork', {sessionId: id})),
+      {separator: true},
+      make('打开方式', 'open', null, '', [
+        make('在当前标签中打开', 'open', () => row.querySelector('.agent-session-select')?.click()),
+        make('在新标签中打开', 'plus', () => send('agent.session.open', {sessionId: id, mode: 'tab'})),
+        make('在新窗口中打开', 'open', () => send('agent.session.open', {sessionId: id, mode: 'window'}))
+      ]),
+      make('在新窗口中打开', 'open', () => send('agent.session.open', {sessionId: id, mode: 'window'}))
+    ];
+  }
   function buildContextActions(target) {
+    const sessionRow = target.closest('.agent-session-row');
+    if (currentView === 'ai' && sessionRow) return buildSessionContextActions(sessionRow);
     const actions = [];
     const add = (label, run, enabled = true) => actions.push(contextAction(label, run, enabled));
     const click = id => $(id)?.click();
@@ -772,12 +875,6 @@
     } else if (selected) add('复制所选内容', () => { send('ui.clipboard.copy', {text: selected.slice(0, 65536)}); });
     const moduleCard = target.closest('[data-open],#module-ai,#module-course,#module-homework,#module-demo');
     if (moduleCard && !moduleCard.hidden) add('打开' + (moduleCard.querySelector('strong')?.textContent || '工具'), () => moduleCard.click());
-    const session = target.closest('.agent-session-row');
-    if (currentView === 'ai' && session) {
-      add('切换到此会话', () => session.querySelector('.agent-session-select')?.click(), !agentBusy);
-      add('重命名会话', () => renameAgentSession(session), !agentBusy);
-      add('删除此会话', () => session.querySelector('.agent-session-delete')?.click(), !agentBusy);
-    }
     const vaultRow = target.closest('.vault-row');
     if (currentView === 'vault' && vaultRow) add('删除此项', () => vaultRow.querySelector('button')?.click());
     const settingsItem = target.closest('[data-settings-panel]');
@@ -799,27 +896,78 @@
     return actions;
   }
   function showContextMenu(event) {
-    if (event.target.closest('#toolbox-context-menu')) { event.preventDefault(); return; }
+    if (event.target.closest('.toolbox-context-menu')) { event.preventDefault(); return; }
     event.preventDefault();
     closeContextMenu();
     contextTarget = event.target;
-    for (const action of buildContextActions(contextTarget)) {
-      const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem';
-      button.textContent = action.label; button.disabled = !action.enabled;
-      button.addEventListener('click', () => { closeContextMenu(); action.run(); });
-      contextMenu.append(button);
-    }
+    renderContextItems(contextMenu, buildContextActions(contextTarget));
     contextMenu.hidden = false;
     const width = contextMenu.offsetWidth, height = contextMenu.offsetHeight;
     contextMenu.style.left = Math.max(8, Math.min(event.clientX, innerWidth - width - 8)) + 'px';
     contextMenu.style.top = Math.max(8, Math.min(event.clientY, innerHeight - height - 8)) + 'px';
   }
+  function contextIcon(name) {
+    const paths = {
+      edit: '<path d="M4 20h4l11-11-4-4L4 16zM13 7l4 4"/>',
+      pin: '<path d="m9 3 6 6-1 3 3 3-2 2-3-3-3 1-6-6zM9 15l-5 5"/>',
+      eye: '<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.5"/>',
+      archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/>',
+      trash: '<path d="M4 7h16M9 7V4h6v3m3 0-1 13H7L6 7M10 11v6m4-6v6"/>',
+      folder: '<path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+      list: '<path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2"/>',
+      share: '<path d="M12 16V3m0 0L7 8m5-5 5 5M4 15v5h16v-5"/>',
+      copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+      fork: '<circle cx="6" cy="4" r="2"/><circle cx="6" cy="20" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 6v12M8 12h8"/>',
+      open: '<path d="M6 18 18 6M9 6h9v9"/>',
+      plus: '<path d="M12 4v16M4 12h16"/>',
+      remove: '<path d="M5 12h14"/>'
+    };
+    if (!paths[name]) return null;
+    const icon = document.createElement('span'); icon.className = 'toolbox-context-icon';
+    icon.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${paths[name]}</svg>`;
+    return icon;
+  }
+  function renderContextItems(host, actions) {
+    host.replaceChildren();
+    host.classList.toggle('session-menu', actions.some(action => action.icon));
+    for (const action of actions) {
+      if (action.separator) { const line = document.createElement('div'); line.className = 'toolbox-context-separator'; host.append(line); continue; }
+      const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem';
+      button.disabled = action.enabled === false;
+      const icon = contextIcon(action.icon); if (icon) button.append(icon);
+      const label = document.createElement('span'); label.className = 'toolbox-context-label'; label.textContent = action.label; button.append(label);
+      if (action.shortcut) { const hint = document.createElement('kbd'); hint.textContent = action.shortcut; button.append(hint); }
+      if (action.items) { const arrow = document.createElement('span'); arrow.className = 'toolbox-context-arrow'; arrow.textContent = '›'; button.append(arrow); button.setAttribute('aria-haspopup', 'menu'); }
+      if (host === contextMenu) button.addEventListener('pointerenter', () => action.items ? showContextSubmenu(action.items, button) : hideContextSubmenu());
+      button.addEventListener('click', () => {
+        if (action.items) { showContextSubmenu(action.items, button); contextSubmenu.querySelector('button:not(:disabled)')?.focus(); return; }
+        closeContextMenu(); action.run?.();
+      });
+      host.append(button);
+    }
+  }
+  function showContextSubmenu(items, trigger) {
+    renderContextItems(contextSubmenu, items); contextSubmenu.hidden = false;
+    const rect = trigger.getBoundingClientRect();
+    const width = contextSubmenu.offsetWidth, height = contextSubmenu.offsetHeight;
+    const right = rect.right + width + 5 <= innerWidth;
+    contextSubmenu.style.left = Math.max(8, Math.min(right ? rect.right + 4 : rect.left - width - 4, innerWidth - width - 8)) + 'px';
+    contextSubmenu.style.top = Math.max(8, Math.min(rect.top - 5, innerHeight - height - 8)) + 'px';
+  }
   document.addEventListener('contextmenu', showContextMenu);
-  document.addEventListener('pointerdown', event => { if (!event.target.closest('#toolbox-context-menu')) closeContextMenu(); }, true);
-  document.addEventListener('scroll', closeContextMenu, true);
+  document.addEventListener('pointerdown', event => { if (!event.target.closest('.toolbox-context-menu')) closeContextMenu(); }, true);
+  document.addEventListener('scroll', event => { if (!event.target.closest?.('.toolbox-context-menu')) closeContextMenu(); }, true);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); closeContextMenu(); }
+    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); if (!contextSubmenu.hidden) hideContextSubmenu(); else closeContextMenu(); }
     if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus(); }
+    if (currentView !== 'ai' || agentBusy || confirmation.open || !$('command-palette').hidden || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
+    const row = document.activeElement?.closest('.agent-session-row') || [...document.querySelectorAll('.agent-session-row')].find(item => item.dataset.sessionId === activeAgentSessionId);
+    if (!row) return;
+    const key = event.key.toLowerCase();
+    if (event.altKey && event.ctrlKey && key === 'r') { event.preventDefault(); closeContextMenu(); renameAgentSession(row); }
+    else if (event.altKey && event.ctrlKey && key === 'p') { event.preventDefault(); closeContextMenu(); send('agent.session.pin', {sessionId: row.dataset.sessionId}); }
+    else if (event.ctrlKey && event.shiftKey && key === 'u') { event.preventDefault(); closeContextMenu(); send('agent.session.unread', {sessionId: row.dataset.sessionId}); }
+    else if (event.ctrlKey && event.shiftKey && key === 'a') { event.preventDefault(); closeContextMenu(); send('agent.session.archive', {sessionId: row.dataset.sessionId}); }
   });
   window.FaxToolboxContextMenu = Object.freeze({openFor: (selector) => { const element = document.querySelector(selector); if (!element) return false; const rect = element.getBoundingClientRect(); showContextMenu({target: element, clientX: rect.left + 8, clientY: rect.bottom - 8, preventDefault() {}}); return !contextMenu.hidden; }});
   const palette = $('command-palette');

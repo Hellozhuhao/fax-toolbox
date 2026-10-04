@@ -15,6 +15,7 @@ public partial class MainWindow
     private string? assignedModule;
     private string? initialModule;
     private bool closingAsTab;
+    private bool detachedWindow;
     private bool closingTask;
     private bool darkTaskTabs;
     private bool shellCanGoBack;
@@ -423,6 +424,17 @@ public partial class MainWindow
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (closingAsTab || smokeMode) return;
+        if (detachedWindow)
+        {
+            if (!TaskWindows.Any(window => !ReferenceEquals(window, this) && window.Visibility == Visibility.Visible))
+            {
+                var next = TaskWindows.FirstOrDefault(window => !ReferenceEquals(window, this) && !window.closingTask);
+                if (next is not null) { next.Show(); next.Activate(); }
+            }
+            return;
+        }
+        if (TaskWindows.Any(window => !ReferenceEquals(window, this) && window.detachedWindow &&
+            window.Visibility == Visibility.Visible)) return;
         // The system close button exits the toolbox and ends all tabs.
         foreach (var window in TaskWindows.ToArray())
         {

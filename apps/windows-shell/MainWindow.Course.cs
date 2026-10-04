@@ -451,18 +451,25 @@ public partial class MainWindow
         {
             var expected = IsLoginPage(url) ? "WAITING_LOGIN" :
                 IsCoursePage(url) ? "READY" : "CHOOSING_COURSE";
-            var actual = await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "JSON.stringify({state:document.getElementById('course-state').textContent," +
-                "disabled:document.getElementById('course-start').disabled})");
-            using var check = JsonDocument.Parse(JsonSerializer.Deserialize<string>(actual)!);
-            var label = check.RootElement.GetProperty("state").GetString();
-            var disabled = check.RootElement.GetProperty("disabled").GetBoolean();
-            var correct = expected switch
+            string actual = "";
+            var correct = false;
+            // WebView2 delivers the posted status after navigation completes.
+            for (var attempt = 0; attempt < 20 && !correct; attempt++)
             {
-                "WAITING_LOGIN" => label == "等待登录" && disabled,
-                "CHOOSING_COURSE" => label == "选择课程" && disabled,
-                _ => label == "就绪" && !disabled
-            };
+                actual = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "JSON.stringify({state:document.getElementById('course-state').textContent," +
+                    "disabled:document.getElementById('course-start').disabled})");
+                using var check = JsonDocument.Parse(JsonSerializer.Deserialize<string>(actual)!);
+                var label = check.RootElement.GetProperty("state").GetString();
+                var disabled = check.RootElement.GetProperty("disabled").GetBoolean();
+                correct = expected switch
+                {
+                    "WAITING_LOGIN" => label == "等待登录" && disabled,
+                    "CHOOSING_COURSE" => label == "选择课程" && disabled,
+                    _ => label == "就绪" && !disabled
+                };
+                if (!correct) await Task.Delay(50);
+            }
             if (!correct) { FailSmoke("course login transition: " + actual); return; }
             if (expected == "READY") { PassSmoke(); return; }
             await CourseView.CoreWebView2.ExecuteScriptAsync("document.getElementById('next').click()");
@@ -649,6 +656,26 @@ public partial class MainWindow
         if (TaskWindows.Count != 2 || !TaskWindows.Contains(second) || second.backend is null)
         { FailSmoke("closing a tab did not remove only its task"); return; }
         await second.backend.RequestAsync("system.ping", new { });
+        var agentId = second.currentAgentSession.Id;
+        using (var openTab = JsonDocument.Parse("{\"sessionId\":\"" + agentId + "\",\"mode\":\"tab\"}"))
+            await second.OpenAgentSessionAsync(openTab.RootElement);
+        if (TaskWindows.Count != 3 || TaskWindows[2].currentAgentSession.Id != agentId ||
+            TaskWindows[2].assignedModule != "ai")
+        { FailSmoke("Agent conversation did not open in a new tab"); return; }
+        var agentTab = TaskWindows[2];
+        agentTab.CloseTaskWindow(agentTab);
+        for (var attempt = 0; attempt < 30 && TaskWindows.Contains(agentTab); attempt++) await Task.Delay(100);
+        if (TaskWindows.Contains(agentTab)) { FailSmoke("Agent tab did not close"); return; }
+        using (var openWindow = JsonDocument.Parse("{\"sessionId\":\"" + agentId + "\",\"mode\":\"window\"}"))
+            await second.OpenAgentSessionAsync(openWindow.RootElement);
+        if (TaskWindows.Count != 3 || !TaskWindows[2].detachedWindow ||
+            TaskWindows[2].currentAgentSession.Id != agentId ||
+            second.Visibility != Visibility.Visible || TaskWindows[2].Visibility != Visibility.Visible)
+        { FailSmoke("Agent conversation did not open in a separate window"); return; }
+        var agentWindow = TaskWindows[2];
+        agentWindow.Close();
+        if (TaskWindows.Contains(agentWindow) || second.Visibility != Visibility.Visible)
+        { FailSmoke("closing a detached Agent window affected the source window"); return; }
         PassSmoke();
     }
 

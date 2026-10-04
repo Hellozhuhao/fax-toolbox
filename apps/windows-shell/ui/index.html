@@ -103,6 +103,8 @@
     </main>
   </div>
   <div id="command-palette" class="palette-backdrop" hidden><div class="palette" role="dialog" aria-modal="true" aria-label="快速操作"><div class="palette-heading">快速操作 <span>Esc 关闭</span></div><button type="button" data-action="course">打开学习通模块 <span>↵</span></button><button type="button" data-action="homework">打开作业校对</button><button type="button" data-action="demo">打开页面事件演示</button><button type="button" data-action="modules">查看所有模块</button><button type="button" data-action="ai">配置 AI 答题服务</button><button type="button" data-action="settings">打开系统选项</button></div></div>
+  <dialog id="toolbox-confirm" class="toolbox-confirm" aria-labelledby="toolbox-confirm-title" aria-describedby="toolbox-confirm-message"><h2 id="toolbox-confirm-title"></h2><p id="toolbox-confirm-message"></p><input id="toolbox-confirm-input" type="text" maxlength="40" aria-label="分区名称" hidden><div class="toolbox-confirm-actions"><button id="toolbox-confirm-cancel" class="secondary" type="button">取消</button><button id="toolbox-confirm-accept" type="button">删除</button></div></dialog>
   <div id="toolbox-context-menu" class="toolbox-context-menu" role="menu" aria-label="页面操作" hidden></div>
+  <div id="toolbox-context-submenu" class="toolbox-context-menu toolbox-context-submenu" role="menu" aria-label="子菜单" hidden></div>
 </body>
 </html>
