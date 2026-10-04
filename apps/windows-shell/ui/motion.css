@@ -1,0 +1,130 @@
+/* Motion changes state without changing the toolbox's visual language.
+   Keep large surfaces still: opacity and transform are the only animated
+   properties on page transitions and newly inserted content. */
+:root {
+  --motion-quick: 140ms;
+  --motion-standard: 220ms;
+  --motion-ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+/* Only a user-initiated page change enters; startup never flashes. */
+.content .view.motion-enter:not([hidden]) {
+  animation: toolbox-view-in var(--motion-standard) var(--motion-ease) backwards;
+}
+@keyframes toolbox-view-in {
+  from { opacity: .88; transform: translate3d(0, 6px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+/* Tactile feedback uses the existing colours and shapes. */
+button:not(:disabled),
+.sidebar .nav-item,
+.module-card,
+.nav-flyout button,
+.settings-menu button,
+.activity-filters button,
+.agent-session-row,
+.agent-attach {
+  transition-duration: var(--motion-quick);
+  transition-timing-function: var(--motion-ease);
+}
+button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
+.sidebar .nav-item .nav-icon {
+  transition: transform var(--motion-standard) var(--motion-ease);
+}
+.sidebar .nav-item.active .nav-icon { transform: scale(1.07); }
+.module-card {
+  transition-property: transform, border-color, background-color;
+}
+.module-card:active { transform: translate3d(0, -1px, 0) scale(.99); }
+.module-card .module-icon {
+  transition: transform var(--motion-standard) var(--motion-ease);
+}
+.nav-flyout {
+  transition-duration: var(--motion-standard);
+  transition-timing-function: var(--motion-ease);
+}
+.nav-flyout button { transition-property: transform, background-color, color; }
+@media (hover: hover) {
+  .module-card:hover { transform: translate3d(0, -3px, 0); }
+  .module-card:hover .module-icon { transform: scale(1.06); }
+  .nav-flyout button:hover { transform: translate3d(2px, 0, 0); }
+}
+.settings-menu button,
+.activity-filters button { transition-property: background-color, color, transform; }
+.agent-session-row { transition-property: background-color, color; }
+
+/* A panel appears near its trigger; no layout-sized expansion is animated. */
+.palette-backdrop:not([hidden]) {
+  animation: toolbox-backdrop-in 160ms ease-out backwards;
+}
+.palette-backdrop:not([hidden]) .palette {
+  animation: toolbox-panel-in var(--motion-standard) var(--motion-ease) backwards;
+}
+.toolbox-context-menu:not([hidden]) {
+  animation: toolbox-panel-in 180ms var(--motion-ease) backwards;
+}
+.developer-toast:not([hidden]) {
+  animation: toolbox-toast-in 180ms var(--motion-ease) backwards;
+}
+#view-ai .agent-inspector:not([hidden]),
+#view-ai .agent-side.mobile-open {
+  animation: toolbox-panel-in var(--motion-standard) var(--motion-ease) backwards;
+}
+@keyframes toolbox-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes toolbox-panel-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0) scale(.985); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes toolbox-toast-in {
+  from { opacity: 0; translate: 0 -6px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+/* Live events animate once; restoring a saved conversation remains immediate. */
+#view-ai .agent-entry.motion-new,
+#view-ai .agent-operation.motion-new,
+#view-ai .agent-image.motion-new,
+#view-activity .activity-row.motion-new,
+#view-settings .settings-detail section.motion-new {
+  animation: toolbox-event-in var(--motion-standard) var(--motion-ease) backwards;
+}
+@keyframes toolbox-event-in {
+  from { opacity: 0; transform: translate3d(0, 7px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content .view.motion-enter:not([hidden]),
+  .palette-backdrop:not([hidden]),
+  .palette-backdrop:not([hidden]) .palette,
+  .toolbox-context-menu:not([hidden]),
+  .developer-toast:not([hidden]),
+  #view-ai .agent-inspector:not([hidden]),
+  #view-ai .agent-side.mobile-open,
+  #view-ai .agent-entry.motion-new,
+  #view-ai .agent-operation.motion-new,
+  #view-ai .agent-image.motion-new,
+  #view-activity .activity-row.motion-new,
+  #view-settings .settings-detail section.motion-new { animation: none; }
+  button:not(:disabled),
+  .sidebar .nav-item,
+  .sidebar .nav-item .nav-icon,
+  .module-card,
+  .module-card .module-icon,
+  .nav-flyout,
+  .nav-flyout button,
+  .settings-menu button,
+  .activity-filters button,
+  .agent-session-row,
+  .agent-attach { transition: none; }
+  button:not(:disabled):active,
+  .module-card:hover,
+  .module-card:active,
+  .module-card:hover .module-icon,
+  .sidebar .nav-item.active .nav-icon,
+  .nav-flyout button:hover { transform: none; }
+}
