@@ -1,0 +1,49 @@
+/* Individual illustrated symbols, with one consistent optical size. */
+:root, body, button, input, textarea, select { font-family: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", sans-serif; }
+.content .view[hidden] { display: none !important; }
+.module-card .art-icon, .library-card .art-icon { display: grid; place-items: center; width: 62px; height: 62px; padding: 0; border-radius: 0; background: transparent !important; flex: none; }
+.art-icon img { display: block; width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 5px 7px #28354816); transition: transform .22s ease; }
+.module-card:hover .art-icon img, .library-card:hover .art-icon img { transform: translateY(-3px) rotate(-3deg); }
+.brand-mark { border-radius: 0; width: 56px; height: 56px; }
+.sidebar .brand { margin-bottom: 24px; }
+.sidebar .nav-icon { border-radius: 12px; }
+.sidebar .nav-icon svg { width: 22px; height: 22px; stroke-width: 1.9; }
+.module-card { gap: 15px; min-height: 118px; border-radius: 24px; }
+.module-card > span:nth-child(2) { min-width: 0; text-align: left; }
+.module-card strong { display: block; font-size: 17px; line-height: 1.45; }
+.module-card small { display: block; margin-top: 4px; font-size: 12px; line-height: 1.6; }
+.module-card .arrow { display: grid; place-items: center; width: 28px; height: 28px; flex: none; }
+.library-card .art-icon { width: 68px; height: 68px; margin-bottom: 14px; }
+.library-card .pill { top: 25px; right: 22px; font-size: 11px; }
+.icon-button svg, .button-icon { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+button.icon-button { display: grid; place-items: center; padding: 0; min-width: 32px; }
+.ai-card button { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.ai-card p { line-height: 1.65; overflow-wrap: anywhere; }
+#course-ai-summary, #homework-ai-summary { font-size: 12px; }
+body[data-view="course"] .content, body[data-view="homework"] .content { border-radius: 26px; }
+body[data-view="course"] .command-meta, body[data-view="homework"] .command-meta { display: none; }
+@media(max-width:680px) {
+  body[data-view="course"] .app, body[data-view="homework"] .app { padding: 6px; gap: 6px; grid-template-columns: 50px minmax(0,1fr); }
+  body[data-view="course"] .sidebar, body[data-view="homework"] .sidebar { width: 50px; border-radius: 20px; top: 6px; height: calc(100vh - 12px); }
+  body[data-view="course"] .brand-mark, body[data-view="homework"] .brand-mark { width: 38px; height: 38px; }
+  body[data-view="course"] .content .view, body[data-view="homework"] .content .view { padding: 15px 12px; }
+  body[data-view="course"] .command-bar, body[data-view="homework"] .command-bar { padding: 0 12px; height: 48px; min-height: 48px; }
+  #view-course > .lead, #view-homework > .lead, #view-course > .eyebrow, #view-homework > .eyebrow { display: none; }
+  #view-course > h2, #view-homework > h2 { font-size: 20px; margin: 0 0 10px; }
+  .study-main .course-actions { display: grid; grid-template-columns: 1fr; gap: 7px; }
+  .study-main .course-actions button { width: 100%; margin: 0; }
+  .study-main .card { padding: 15px; border-radius: 18px; }
+  .study-main .card h3 { font-size: 14px; }
+  .study-side { width: calc(100% - 8px); }
+  .study-toggle { width: 100%; justify-content: center; }
+}
+@media(prefers-reduced-motion:reduce) { .art-icon img { transition: none; } }
+
+#view-ai .agent-new-chat { display: flex; align-items: center; gap: 9px; }
+#view-ai .agent-session-remove svg, #view-ai .agent-attachments button svg { width: 14px; height: 14px; margin: auto; }
+
+@media(max-width:680px) {
+  .study-layout:not(.side-open) .study-side { display: none; }
+  .study-layout.side-open .study-side { display: block; }
+  #view-course > h2, #view-homework > h2 { display: none; }
+}

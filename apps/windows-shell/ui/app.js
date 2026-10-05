@@ -1,6 +1,10 @@
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
+  function uiIcon(name) {
+    const paths = {close: '<path d="m6 6 12 12M18 6 6 18"/>', compose: '<path d="M13 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-7M15 3l6 6M10 14l1-5 8-8 4 4-8 8z"/>', arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>'};
+    return `<svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true">${paths[name] || paths.arrow}</svg>`;
+  }
   let courseState = 'WAITING_LOGIN';
   let courseReady = false;
   let catalogEntries = [];
@@ -114,7 +118,7 @@
     agentHeader.append($('agent-search-toggle'));
     agentSide.querySelector('.agent-list-heading').remove();
     const newChat = $('agent-clear'); agentSide.insertBefore(newChat, $('agent-folder'));
-    newChat.textContent = '✎  新对话'; newChat.classList.add('agent-new-chat');
+    newChat.innerHTML = uiIcon('compose') + '<span>新对话</span>'; newChat.classList.add('agent-new-chat');
     const projectIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     projectIcon.setAttribute('viewBox', '0 0 24 24'); projectIcon.setAttribute('aria-hidden', 'true');
     const folderPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -191,6 +195,7 @@
     ], 'page');
   }
   setupFocusedViews();
+  for (const id of ['course-ai-open', 'homework-ai-open']) $(id).innerHTML = '<span>模型设置</span>' + uiIcon('arrow');
   $('home-tool-count').textContent = String(document.querySelectorAll('#view-home .module-card:not([hidden])').length);
   const stateName = state => stateNames[state] || state || '未知';
   function send(command, extra = {}) { window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra})); }
@@ -208,6 +213,9 @@
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
+      // A new module tab starts without a previous view. Hide the default home
+      // surface too; otherwise both sections remain visible in the narrow pane.
+      if (!previousView) for (const surface of document.querySelectorAll('.content > .view')) surface.hidden = true;
       if (previousView) {
         const outgoing = $('view-' + previousView);
         outgoing.hidden = true;
@@ -222,6 +230,7 @@
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
+    document.body.dataset.view = view;
     send('ui.layout', {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
       ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
@@ -581,7 +590,7 @@
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
       select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); document.querySelector('.agent-side').classList.remove('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'false'); });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
-      remove.textContent = '×'; remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
+      remove.innerHTML = uiIcon('close'); remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
       remove.addEventListener('click', () => { if (!agentBusy) confirmAction('删除会话', `删除「${session.title || '新任务'}」及其记录？此操作无法撤销。`, () => { if (!agentBusy) send('agent.session.delete', {sessionId: session.id}); }); });
       row.append(select, remove); groups.get(groupKey).append(row);
     }
@@ -608,7 +617,7 @@
       const item = document.createElement('div'); item.className = 'agent-image';
       if (index >= animateFrom) animateNew(item);
       const preview = document.createElement('img'); preview.src = dataUrl; preview.alt = '待发送图片 ' + (index + 1);
-      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除图片';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除图片';
       remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
       item.append(preview, remove); tray.append(item);
     });
@@ -616,7 +625,7 @@
       const item = document.createElement('div'); item.className = 'agent-file'; item.title = file.name;
       const icon = document.createElement('span'); icon.textContent = file.name.includes('/') ? '▧' : '▤';
       const name = document.createElement('span'); name.textContent = file.name;
-      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除附件';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除附件';
       remove.addEventListener('click', () => { agentFiles.splice(index, 1); renderAgentImages(); });
       item.append(icon, name, remove); tray.append(item);
     });
@@ -1263,8 +1272,8 @@
   $('homework-open').addEventListener('click', () => { setHomeworkBrowsing(true); show('homework'); send('homework.open'); });
   $('homework-show-results').addEventListener('click', () => { setHomeworkBrowsing(false); show('homework'); send('homework.results'); });
   $('homework-start').addEventListener('click', () => send('homework.start'));
-  $('homework-ai-open').addEventListener('click', openAi);
-  $('course-ai-open').addEventListener('click', openAi);
+  $('homework-ai-open').addEventListener('click', () => send('ai.configure', {consumer: 'homework'}));
+  $('course-ai-open').addEventListener('click', () => send('ai.configure', {consumer: 'course'}));
   $('course-save-session').addEventListener('click', () => send('course.session.save'));
   $('course-analyze').addEventListener('click', () => send('course.analyze'));
   $('course-start').addEventListener('click', () => send('course.start'));

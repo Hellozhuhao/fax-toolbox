@@ -93,7 +93,11 @@ internal sealed class AiSettingsDialog : Window
         title.Children.Add(new TextBlock { Text = consumer.Name + " · 模型配置", FontSize = 22, FontWeight = FontWeights.SemiBold, Foreground = text });
         title.Children.Add(new TextBlock { Text = "选择模型连接。", FontSize = 12, Foreground = subtle, Margin = new Thickness(0, 5, 0, 0) });
         heading.Children.Add(title);
-        var close = PlainButton("✕"); close.Width = 32; close.Height = 32; close.Click += (_, _) => Close();
+        var close = PlainButton(""); close.Width = 32; close.Height = 32; close.MinHeight = 32; close.Padding = new Thickness(0);
+        close.ToolTip = "关闭模型配置";
+        close.Content = new System.Windows.Shapes.Path { Data = Geometry.Parse("M 1,1 L 11,11 M 11,1 L 1,11"), Stroke = subtle, StrokeThickness = 1.6,
+            StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round, Width = 12, Height = 12 };
+        close.Click += (_, _) => Close();
         Grid.SetColumn(close, 1); heading.Children.Add(close);
         heading.MouseLeftButtonDown += (_, args) => { if (args.ChangedButton == MouseButton.Left) DragMove(); };
         layout.Children.Add(heading);

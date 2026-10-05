@@ -1,5 +1,5 @@
 ﻿param(
-    [ValidateSet('Status','Start','Stop','Watch','Enable','Disable','StartupOn','StartupOff','Validate')][string]$Action = 'Status',
+    [ValidateSet('Status','Start','Stop','Watch','Enable','Disable','StartupOn','StartupOff','Validate','InstallMihomo','RestoreXray')][string]$Action = 'Status',
     [string]$DataDirectory = (Join-Path $env:LOCALAPPDATA 'FaxToolbox\proxy-autoswitch'),
     [switch]$TakeOverLegacy,
     [switch]$LibraryOnly
@@ -16,6 +16,7 @@ $script:LogPath = Join-Path $script:Root 'events.log'
 $script:StartupPath = Join-Path ([Environment]::GetFolderPath('Startup')) 'FaxToolbox-ProxyAutoSwitch.vbs'
 $script:ProxyKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 $script:EnvNames = @('HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','NO_PROXY')
+. (Join-Path $PSScriptRoot 'mihomo.ps1')
 
 function Write-AtomicJson($Path, $Value) {
     $temporary = $Path + '.' + $PID + '.tmp'
@@ -36,6 +37,7 @@ function Get-Settings {
     if ($settings.pollSeconds -lt 2 -or $settings.pollSeconds -gt 30) { throw '检查间隔应为 2–30 秒。' }
     if ($settings.stableSeconds -lt 0 -or $settings.stableSeconds -gt 60) { throw '切换等待应为 0–60 秒。' }
     if ($settings.priority -notin @('work','game') -or $settings.idleBehavior -notin @('keep','off')) { throw '切换规则无效。' }
+    Get-CoreType $settings | Out-Null
     return $settings
 }
 function Get-Endpoint([string]$Url) {
@@ -142,7 +144,8 @@ function Enable-Proxy($Settings) {
             # A core using this executable but a different port may have an invalid config. Do not spawn duplicates.
             $external = @(Get-Process -Name ([IO.Path]::GetFileNameWithoutExtension($Settings.xrayPath)) -ErrorAction SilentlyContinue | Where-Object { try { $_.Path -ieq $Settings.xrayPath } catch { $false } })
             if ($external.Count) { throw '代理内核已运行但目标端口未监听，请检查配置中的 HTTP 入站端口。' }
-            $core = Start-Process -FilePath $Settings.xrayPath -ArgumentList @('run','-c', ('"' + $Settings.xrayConfig + '"')) -WindowStyle Hidden -PassThru
+            Test-CoreConfiguration $Settings
+            $core = Start-Process -FilePath $Settings.xrayPath -ArgumentList (Get-CoreArguments $Settings) -WorkingDirectory (Split-Path -Parent $Settings.xrayConfig) -WindowStyle Hidden -PassThru
             Write-AtomicJson $script:CorePath @{ pid=$core.Id; started=$core.StartTime.ToUniversalTime().ToString('o'); path=$Settings.xrayPath }
         }
         for ($attempt=0; $attempt -lt 20 -and -not (Test-Port $endpoint); $attempt++) { Start-Sleep -Milliseconds 250 }
@@ -230,8 +233,10 @@ function Get-Status {
     $legacyStartup = (Test-Path -LiteralPath $legacyStartupPath) -and
         (Get-Content -LiteralPath $legacyStartupPath -Raw).IndexOf((Join-Path $script:LegacyRoot 'auto-switch.ps1'),[StringComparison]::OrdinalIgnoreCase) -ge 0
     $ready = Test-Port (Get-Endpoint $settings.proxyUrl)
+    $record=Read-Json $script:CorePath
+    $core=Get-OwnedProcess $record $record.path
     return @{ running=[bool]$watcher; startup=(Test-Path -LiteralPath $script:StartupPath); proxyEnabled=($proxy.ProxyEnable -eq 1); proxyServer=$proxy.ProxyServer;
-        portReady=$ready; legacyRunning=($legacy.Count -gt 0 -or $legacyStartup); state=$state; logs=$log }
+        coreRunning=[bool]$core; portReady=$ready; legacyRunning=($legacy.Count -gt 0 -or $legacyStartup); state=$state; logs=$log }
 }
 function Invoke-Watcher {
     $mutexName = 'Local\FaxToolboxProxyWatcher-' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
@@ -278,7 +283,9 @@ try {
     if (-not $control.WaitOne(10000)) { throw '另一个代理操作正在执行，请稍后重试。' }
     try {
         switch ($Action) {
-            'Validate' { $settings=Get-Settings; $endpoint=Get-Endpoint $settings.proxyUrl; if (-not (Test-Port $endpoint) -and (-not (Test-Path -LiteralPath $settings.xrayPath -PathType Leaf) -or -not (Test-Path -LiteralPath $settings.xrayConfig -PathType Leaf))) { throw '端口未监听，请选择代理内核及配置文件。' } }
+            'Validate' { $settings=Get-Settings; Test-CoreConfiguration $settings }
+            'InstallMihomo' { Install-Mihomo }
+            'RestoreXray' { Restore-XrayConfiguration }
             'Start' {
                 if (-not (Get-Watcher)) {
                     $settings=Get-Settings

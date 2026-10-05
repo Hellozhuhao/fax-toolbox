@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
 $assetDirectory = Join-Path $PSScriptRoot '..\apps\windows-shell\assets'
@@ -20,45 +20,24 @@ function New-RoundedPath([single]$x, [single]$y, [single]$width, [single]$height
 try {
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.ScaleTransform(4, 4)
-    $shape = New-RoundedPath 0 0 64 64 15
+    $shape = New-RoundedPath 2 2 60 60 19
+    $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new([System.Drawing.Rectangle]::new(0,0,64,64),[Drawing.ColorTranslator]::FromHtml('#404e66'),[Drawing.ColorTranslator]::FromHtml('#242e42'),45.0)
+    $paper = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#fff4e2'))
+    $gold = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#f6d4a4'),3.5)
+    $seam = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#a58b6a'),1.8)
+    $coral = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#d17b59'))
+    $star = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#e49a71'))
+    $handle = New-RoundedPath 23 16 18 18 5
+    $case = New-RoundedPath 13 26 40 26 7
+    $clasp = New-RoundedPath 29 35 6 9 2
     try {
-        $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new(
-            [System.Drawing.Rectangle]::new(0, 0, 64, 64),
-            [System.Drawing.Color]::FromArgb(255, 238, 154, 116),
-            [System.Drawing.Color]::FromArgb(255, 198, 93, 64), 130.0)
-        try { $graphics.FillPath($gradient, $shape) } finally { $gradient.Dispose() }
-        $white = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 255, 250, 246))
-        $ink = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 203, 97, 68))
-        $fold = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(255, 244, 196, 178))
-        $handlePen = [System.Drawing.Pen]::new($white.Color, 5.0)
-        $detailPen = [System.Drawing.Pen]::new($ink.Color, 1.7)
-        $seamPen = [System.Drawing.Pen]::new([System.Drawing.Color]::FromArgb(209, 203, 97, 68), 2.0)
-        try {
-            $handlePen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
-            $detailPen.StartCap = $detailPen.EndCap = [System.Drawing.Drawing2D.LineCap]::Round
-            $handle = [System.Drawing.Drawing2D.GraphicsPath]::new()
-            $handle.AddLine(19, 29, 19, 20)
-            $handle.AddBezier(19, 20, 19, 17, 21, 15, 24, 15)
-            $handle.AddLine(24, 15, 30, 15)
-            $handle.AddBezier(30, 15, 33, 15, 35, 17, 35, 20)
-            $handle.AddLine(35, 20, 35, 29)
-            $paper = New-RoundedPath 37 10 14 20 2
-            $case = New-RoundedPath 8 28 48 27 7
-            $clasp = New-RoundedPath 29 35 6 9 2
-            try {
-                $graphics.DrawPath($handlePen, $handle)
-                $graphics.FillPath($white, $paper)
-                $graphics.FillPolygon($fold, [System.Drawing.Point[]]@(
-                    [System.Drawing.Point]::new(46, 10), [System.Drawing.Point]::new(46, 15),
-                    [System.Drawing.Point]::new(51, 15)))
-                $graphics.DrawLine($detailPen, 40, 20, 48, 20)
-                $graphics.DrawLine($detailPen, 40, 24, 46, 24)
-                $graphics.FillPath($white, $case)
-                $graphics.DrawLine($seamPen, 9, 39, 55, 39)
-                $graphics.FillPath($ink, $clasp)
-            } finally { $handle.Dispose(); $paper.Dispose(); $case.Dispose(); $clasp.Dispose() }
-        } finally { $white.Dispose(); $ink.Dispose(); $fold.Dispose(); $handlePen.Dispose(); $detailPen.Dispose(); $seamPen.Dispose() }
-    } finally { $shape.Dispose() }
+        $graphics.FillPath($gradient,$shape)
+        $graphics.DrawPath($gold,$handle)
+        $graphics.FillPath($paper,$case)
+        $graphics.DrawBezier($seam,14,37,25,42,39,42,52,37)
+        $graphics.FillPath($coral,$clasp)
+        $graphics.FillPolygon($star,[Drawing.PointF[]]@([Drawing.PointF]::new(46,9),[Drawing.PointF]::new(47.8,13.2),[Drawing.PointF]::new(52,15),[Drawing.PointF]::new(47.8,16.8),[Drawing.PointF]::new(46,21),[Drawing.PointF]::new(44.2,16.8),[Drawing.PointF]::new(40,15),[Drawing.PointF]::new(44.2,13.2)))
+    } finally { $shape.Dispose();$gradient.Dispose();$paper.Dispose();$gold.Dispose();$seam.Dispose();$coral.Dispose();$star.Dispose();$handle.Dispose();$case.Dispose();$clasp.Dispose() }
 } finally { $graphics.Dispose() }
 
 $png = [System.IO.MemoryStream]::new()

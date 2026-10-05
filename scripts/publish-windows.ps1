@@ -6,6 +6,7 @@ $root = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $env:DOTNET_ROOT_X64 = $env:DOTNET_ROOT
 $env:DOTNET_CLI_HOME = Join-Path $root '.cache\dotnet-home'
 $env:NUGET_PACKAGES = Join-Path $root '.cache\nuget-packages'
+& (Join-Path $PSScriptRoot 'download-mihomo.ps1')
 
 # Ensure the pinned WebView2 SDK and the development build are available.
 & (Join-Path $PSScriptRoot 'build-windows.ps1')

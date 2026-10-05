@@ -624,9 +624,18 @@ public partial class MainWindow
         for (var attempt = 0; attempt < 30 && homeworkTab.currentShellView != "homework"; attempt++) await Task.Delay(50);
         if (homeworkTab.currentShellView != "homework" || homeworkTab.shellCanGoBack)
         { FailSmoke("homework tab first rendered the home page"); return; }
+        if (!await VerifyModuleSurfaceAsync(homeworkTab, "homework")) return;
         homeworkTab.CloseTaskWindow(homeworkTab);
         for (var attempt = 0; attempt < 30 && TaskWindows.Contains(homeworkTab); attempt++) await Task.Delay(100);
         if (TaskWindows.Contains(homeworkTab)) { FailSmoke("homework tab did not close"); return; }
+        second.OpenModuleInNewTab("course");
+        var directCourse = TaskWindows.Last();
+        if (!await WaitForTabUiAsync(directCourse) || !await WaitForTabCourseAsync(directCourse))
+        { FailSmoke("direct course tab did not load"); return; }
+        if (!await VerifyModuleSurfaceAsync(directCourse, "course")) return;
+        directCourse.CloseTaskWindow(directCourse);
+        for (var attempt = 0; attempt < 30 && TaskWindows.Contains(directCourse); attempt++) await Task.Delay(100);
+        if (TaskWindows.Contains(directCourse)) { FailSmoke("direct course tab did not close"); return; }
         second.Width = 1120;
         second.Height = 720;
         await second.ActivateTaskWindowAsync(first);
@@ -693,6 +702,27 @@ public partial class MainWindow
             await Task.Delay(100);
         }
         return false;
+    }
+
+    private async Task<bool> VerifyModuleSurfaceAsync(MainWindow tab, string module)
+    {
+        var result = await tab.ShellView.CoreWebView2.ExecuteScriptAsync("""
+            (() => {
+              const visible = [...document.querySelectorAll('.content > .view')].filter(view => getComputedStyle(view).display !== 'none');
+              const expected = 'view-' + document.body.dataset.view;
+              const view = document.getElementById(expected);
+              return visible.length === 1 && visible[0] === view && document.getElementById('view-home').hidden &&
+                document.getElementById('view-home').getBoundingClientRect().height === 0 &&
+                view.getBoundingClientRect().width <= innerWidth && !!view.querySelector('.study-layout');
+            })()
+            """);
+        if (result != "true") { FailSmoke(module + " tab leaked home content or overflowed its control pane"); return false; }
+        if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+        {
+            await using var output = File.Create(Path.Combine(root, ".cache", "ui-" + module + "-isolated-preview.png"));
+            await tab.ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+        }
+        return true;
     }
 
     private static async Task<bool> WaitForTabCourseAsync(MainWindow tab)

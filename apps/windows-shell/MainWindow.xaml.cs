@@ -830,12 +830,32 @@ public partial class MainWindow : Window
                     if (!networkReady) await Task.Delay(100);
                 }
                 if (!networkReady) { FailSmoke("Network manager did not load independently"); return; }
+                var detected = false;
+                for (var attempt = 0; attempt < 20 && !detected; attempt++)
+                {
+                    detected = await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.network-connection-choice').length===1 && document.querySelectorAll('.network-app-row').length===2 && !document.querySelector('.network-advanced').open") == "true";
+                    if (!detected) await Task.Delay(50);
+                }
+                if (!detected) { FailSmoke("Proxy discovery choices or collapsed advanced settings missing"); return; }
+                var selectOnly = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{const choices=document.querySelectorAll('.network-app-row select');choices[1].value='game';choices[1].dispatchEvent(new Event('change',{bubbles:true}));const changed=document.getElementById('proxy-games').value==='test-game';return changed&&!document.getElementById('proxy-confirm').open})()");
+                if (selectOnly != "true") { FailSmoke("Detected app selection did not populate rules"); return; }
+                // Saving in smoke mode is isolated: the host returns a fixture.
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-config').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+                for (var attempt = 0; attempt < 20; attempt++)
+                {
+                    if (await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-games').value === ''") == "true") break;
+                    await Task.Delay(50);
+                }
                 var networkConfirmation = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{document.getElementById('proxy-start').click();const open=document.getElementById('proxy-confirm').open;document.getElementById('proxy-confirm-cancel').click();return open&&!document.getElementById('proxy-confirm').open})()");
                 if (networkConfirmation != "true") { FailSmoke("Network manager confirmation was not displayed"); return; }
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                 {
                     await using var networkOutput = File.Create(Path.Combine(root, ".cache", "network-manager-preview.png"));
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, networkOutput);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-config').scrollIntoView({block:'start'})");
+                    await Task.Delay(200);
+                    await using var setupOutput = File.Create(Path.Combine(root, ".cache", "network-setup-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, setupOutput);
                 }
                 PassSmoke();
             }
@@ -979,7 +999,7 @@ public partial class MainWindow : Window
             var command = message.GetProperty("command").GetString();
             if (messageBytes > MaxPageMessage && command != "agent.send" &&
                 !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024)) return;
-            if (command is "proxy.get" or "proxy.save" or "proxy.start" or "proxy.stop" or "proxy.on" or "proxy.off" or "proxy.validate" or "proxy.pick" or "proxy.startup.on" or "proxy.startup.off")
+            if (command is "proxy.get" or "proxy.save" or "proxy.start" or "proxy.stop" or "proxy.on" or "proxy.off" or "proxy.validate" or "proxy.pick" or "proxy.startup.on" or "proxy.startup.off" or "proxy.install" or "proxy.restore-xray" or "proxy.detect")
             {
                 await HandleProxyMessageAsync(command, message);
                 return;
@@ -1105,7 +1125,9 @@ public partial class MainWindow : Window
                 case "course.stop": await CourseCommandAsync("stop"); break;
                 case "course.jump": await JumpToChapterAsync(message.GetProperty("chapterId").GetString() ?? ""); break;
                 case "answers.save": await SaveAnswersAsync(message); break;
-                case "ai.configure": ConfigureAi(); break;
+                case "ai.configure":
+                    if (message.TryGetProperty("consumer", out var aiConsumer)) SelectAiConsumer(aiConsumer.GetString() ?? "");
+                    ConfigureAi(); break;
                 case "ai.select": SelectAiConsumer(message.GetProperty("consumer").GetString() ?? ""); break;
                 case "ai.get-config": PublishAiConfiguration(); break;
                 case "ai.test": await TestAiConnectionAsync(); break;

@@ -42,3 +42,31 @@
 .network-confirm .action-row { margin-top: 24px; justify-content: flex-end; }
 .network-confirm [hidden] { display: none; }
 @media (max-width: 760px) { .network-dashboard, .network-fields { grid-template-columns: minmax(0,1fr); } .network-heading { align-items: flex-start; } .network-heading h2 { font-size: 28px; } }
+
+.network-core-choice { padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(120deg, #659fb212, #9886ce12); }
+.network-core-choice h3 { margin: 7px 0; }
+.network-core-choice .action-row { flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+.network-simple { margin: 24px 0; }
+.network-setup-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 22px 0 10px; }
+.network-setup-heading h3 { margin: 0; }
+.network-setup-heading p { margin: 6px 0; font-size: 12px; }
+.network-setup-heading button { width: auto; white-space: nowrap; margin: 0; }
+.network-connections { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 9px; }
+.network-config .network-connection-choice { display: flex; flex-direction: column; justify-content: center; gap: 7px; align-items: flex-start; padding: 14px; min-height: 76px; border-radius: 15px; margin: 0; }
+.network-connection-choice strong { font-size: 13px; }
+.network-connection-choice small { font-size: 11px; color: var(--subtle); }
+.network-config .network-connection-choice.selected { border-color: var(--accent); background: color-mix(in srgb,var(--accent) 8%,var(--panel)); }
+.network-apps { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 16px; padding: 0 14px; }
+.network-app-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.network-app-row:last-child { border: 0; }
+.network-app-row > div { display: grid; gap: 4px; min-width: 0; }
+.network-app-row strong { font-size: 13px; overflow-wrap: anywhere; }
+.network-app-row small { font-size: 11px; color: var(--subtle); }
+.network-app-row select { width: 145px; flex: none; margin: 0; min-height: 35px; font-size: 12px; }
+.network-advanced { border-top: 1px solid var(--border); padding: 15px 0; }
+.network-advanced > summary { cursor: pointer; font-weight: 650; font-size: 13px; }
+.network-advanced > summary span { margin-left: 10px; color: var(--subtle); font-weight: 400; font-size: 11px; }
+.network-advanced[open] > summary { margin-bottom: 20px; }
+.network-priority { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 18px 0 0; font-size: 12px; }
+.network-priority select { width: 210px; max-width: 55%; margin: 0; font-size: 12px; }

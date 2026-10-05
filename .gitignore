@@ -26,3 +26,5 @@ dist/
 *.db-*
 *.pdb
 *.trace
+# Official proxy binary is downloaded and checksum-verified when publishing.
+modules/proxy-autoswitch/mihomo-official.zip

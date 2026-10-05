@@ -17,6 +17,7 @@ public partial class MainWindow
 
     private sealed class ProxySettings
     {
+        public string CoreType { get; set; } = "xray";
         public string XrayPath { get; set; } = "";
         public string XrayConfig { get; set; } = "";
         public string ProxyUrl { get; set; } = "http://127.0.0.1:10809";
@@ -56,6 +57,7 @@ public partial class MainWindow
 
     private async Task HandleProxyMessageAsync(string command, JsonElement message)
     {
+        if (command == "proxy.detect") { await DetectProxyCandidatesAsync(); return; }
         if (smokeMode)
         {
             PublishProxy(new { ok = true, config = new ProxySettings(), status = new { running = false, startup = false, proxyEnabled = false, proxyServer = "", portReady = true, legacyRunning = false, state = new { reason = "界面测试，未修改系统设置" }, logs = new[] { "网络管家界面已加载" } } });
@@ -64,8 +66,8 @@ public partial class MainWindow
         if (command == "proxy.pick")
         {
             var field = message.GetProperty("field").GetString();
-            if (field is not ("xrayPath" or "xrayConfig")) return;
-            var dialog = new OpenFileDialog { Title = field == "xrayPath" ? "选择代理内核" : "选择代理配置", Filter = field == "xrayPath" ? "可执行文件|*.exe" : "JSON 配置|*.json" };
+            if (field is not ("xrayPath" or "xrayConfig" or "application")) return;
+            var dialog = new OpenFileDialog { Title = field == "application" ? "选择要添加的应用" : field == "xrayPath" ? "选择代理内核" : "选择代理配置", Filter = field is "xrayPath" or "application" ? "可执行文件|*.exe" : "代理配置|*.json;*.yaml;*.yml|所有文件|*.*" };
             if (dialog.ShowDialog(this) == true)
                 ShellView.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(new { v = 1, kind = "proxy.picked", field, path = dialog.FileName }));
             return;
@@ -83,16 +85,23 @@ public partial class MainWindow
             var installedScript = Path.Combine(ProxyDataRoot, "auto-switch.ps1");
             // The startup entry points to a stable user-data path, independent of package updates.
             if (!File.Exists(installedScript)) File.Copy(script, installedScript);
+            foreach (var name in new[] { "mihomo.ps1", "mihomo-official.zip" })
+            {
+                var asset = Path.Combine(root, "modules", "proxy-autoswitch", name);
+                if (File.Exists(asset) && (name != "mihomo-official.zip" || command == "proxy.install" || !File.Exists(Path.Combine(ProxyDataRoot, name)))) File.Copy(asset, Path.Combine(ProxyDataRoot, name), true);
+            }
             var action = command switch
             {
                 "proxy.start" => "Start", "proxy.stop" => "Stop", "proxy.on" => "Enable", "proxy.off" => "Disable",
-                "proxy.startup.on" => "StartupOn", "proxy.startup.off" => "StartupOff", "proxy.validate" => "Validate", _ => "Status"
+                "proxy.startup.on" => "StartupOn", "proxy.startup.off" => "StartupOff", "proxy.validate" => "Validate",
+                "proxy.install" => "InstallMihomo", "proxy.restore-xray" => "RestoreXray", _ => "Status"
             };
             if (command == "proxy.save")
             {
                 var running = await RunProxyScriptAsync(installedScript, "Status");
-                if (running.TryGetProperty("status", out var current) && current.GetProperty("running").GetBoolean())
-                    throw new InvalidOperationException("请先停止自动切换，再修改配置。");
+                if (running.TryGetProperty("status", out var current) && (current.GetProperty("running").GetBoolean() ||
+                    current.TryGetProperty("coreRunning", out var coreRunning) && coreRunning.GetBoolean()))
+                    throw new InvalidOperationException("请先点击停止并还原，再修改配置。");
                 settings = message.GetProperty("config").Deserialize<ProxySettings>(ProxyJson) ?? throw new InvalidOperationException("配置无效。");
                 ValidateProxySettings(settings);
                 var configPath = Path.Combine(ProxyDataRoot, "config.json");
@@ -101,20 +110,23 @@ public partial class MainWindow
                 File.Move(temporary, configPath, true);
             }
             // Update worker code only while it is stopped.
-            if (command is "proxy.start" or "proxy.save")
+            if (command is "proxy.start" or "proxy.save" or "proxy.install" or "proxy.restore-xray" or "proxy.validate")
             {
                 var current = await RunProxyScriptAsync(installedScript, "Status");
                 if (current.TryGetProperty("status", out var status) && !status.GetProperty("running").GetBoolean())
                     File.Copy(script, installedScript, true);
             }
             var result = await RunProxyScriptAsync(installedScript, action, message.TryGetProperty("takeOverLegacy", out var takeover) && takeover.ValueKind == JsonValueKind.True);
+            if (command is "proxy.install" or "proxy.restore-xray") settings = LoadProxySettings();
             if (result.TryGetProperty("status", out var liveStatus))
             {
                 proxyWatcherRunning = liveStatus.GetProperty("running").GetBoolean();
                 proxyWatcherDetail = liveStatus.GetProperty("proxyEnabled").GetBoolean() ? "系统代理已启用" : "系统代理已关闭";
             }
             PublishProxy(new { ok = result.GetProperty("ok").GetBoolean(), config = settings, status = result.TryGetProperty("status", out var snapshot) ? snapshot : (JsonElement?)null,
-                error = result.TryGetProperty("error", out var error) ? error.GetString() : null, detail = command == "proxy.save" ? "配置已保存" : command == "proxy.validate" && result.GetProperty("ok").GetBoolean() ? "配置和本地代理检查通过" : null });
+                error = result.TryGetProperty("error", out var error) ? error.GetString() : null, detail = !result.GetProperty("ok").GetBoolean() ? null : command switch {
+                    "proxy.save" => "配置已保存", "proxy.validate" => "内核配置检查通过",
+                    "proxy.install" => "Mihomo 已安装，节点与分流已导入。启用代理后生效。", "proxy.restore-xray" => "已恢复 Xray 配置", _ => null } });
         }
         catch (Exception error) { PublishProxy(new { ok = false, error = error.Message }); }
         finally { proxyOperationBusy = false; ProxyOperationLock.Release(); }
@@ -122,6 +134,7 @@ public partial class MainWindow
 
     private static void ValidateProxySettings(ProxySettings settings)
     {
+        if (settings.CoreType is not ("xray" or "mihomo")) throw new InvalidOperationException("请选择 Xray 或 Mihomo 内核。");
         if (!Uri.TryCreate(settings.ProxyUrl, UriKind.Absolute, out var endpoint) || endpoint.Scheme != "http" || !endpoint.IsLoopback || endpoint.UserInfo.Length != 0 || endpoint.AbsolutePath != "/" || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
             throw new InvalidOperationException("请输入本机 HTTP 代理地址，例如 http://127.0.0.1:10809。");
         if (settings.PollSeconds is < 2 or > 30 || settings.StableSeconds is < 0 or > 60 || settings.Priority is not ("work" or "game") || settings.IdleBehavior is not ("keep" or "off"))
@@ -145,7 +158,7 @@ public partial class MainWindow
         using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动代理控制程序。");
         var output = process.StandardOutput.ReadToEndAsync();
         var errors = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(50));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(action == "InstallMihomo" ? 180 : 50));
         try { await process.WaitForExitAsync(timeout.Token); }
         catch (OperationCanceledException) { process.Kill(); throw new TimeoutException("代理操作超时，请刷新状态或查看日志。"); }
         var text = await output;
@@ -164,6 +177,8 @@ public partial class MainWindow
             LoadProxySettings();
             var script = Path.Combine(ProxyDataRoot, "auto-switch.ps1");
             if (!File.Exists(script)) File.Copy(Path.Combine(root, "modules", "proxy-autoswitch", "auto-switch.ps1"), script);
+            var helper = Path.Combine(root, "modules", "proxy-autoswitch", "mihomo.ps1");
+            File.Copy(helper, Path.Combine(ProxyDataRoot, "mihomo.ps1"), true);
             // Legacy takeover and startup changes require their dedicated review in the module UI.
             var result = await RunProxyScriptAsync(script, action);
             if (!result.GetProperty("ok").GetBoolean()) throw new InvalidOperationException(result.GetProperty("error").GetString());

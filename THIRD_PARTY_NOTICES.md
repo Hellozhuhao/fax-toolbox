@@ -34,3 +34,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+# Mihomo
+
+The Windows package includes the unmodified official Mihomo v1.19.32 Windows amd64 v1 release archive.
+Copyright MetaCubeX and contributors. Licensed under GPL-3.0.
+Source, license and corresponding release: https://github.com/MetaCubeX/mihomo/tree/v1.19.32
+The source is available from the above versioned repository. The toolbox launches the executable as a separate process.
