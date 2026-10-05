@@ -80,7 +80,13 @@ public partial class MainWindow : Window
     private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
     private bool controlsCollapsed;
-    private Task moduleWebViewsReady = Task.CompletedTask;
+    private Task? moduleWebViewsReady;
+    private string moduleProfileRoot = "";
+
+    private Task EnsureModuleWebViewsAsync() => moduleWebViewsReady ??=
+        InitializeModuleWebViewsAsync(
+            GetSharedWebViewEnvironmentAsync(Path.Combine(moduleProfileRoot, "modules", "smoke")),
+            GetSharedWebViewEnvironmentAsync(Path.Combine(moduleProfileRoot, "modules", "chaoxing")));
     private AiModuleRuntime? aiRuntime;
     private string currentShellView = "home";
     private string workspaceLayoutMode = "";
@@ -186,9 +192,8 @@ public partial class MainWindow : Window
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox", "WebView2");
             Trace("WebView2 network: direct");
             var uiEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "ui"));
-            var moduleEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "smoke"));
-            var courseEnvironmentTask = GetSharedWebViewEnvironmentAsync(Path.Combine(profileRoot, "modules", "chaoxing"));
-            moduleWebViewsReady = InitializeModuleWebViewsAsync(moduleEnvironmentTask, courseEnvironmentTask);
+            moduleProfileRoot = profileRoot;
+            // Home/Agent tabs only allocate their shell renderer. Business pages initialize on demand.
             var uiEnvironment = await uiEnvironmentTask;
             await ShellView.EnsureCoreWebView2Async(uiEnvironment);
             ConfigureShellView();
@@ -197,8 +202,7 @@ public partial class MainWindow : Window
             ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" ?
                 UiUrl + "?module=" + initialModule : UiUrl);
             Trace("UI navigation started");
-            await moduleWebViewsReady;
-            Trace("module and course WebViews ready");
+            if (initialModule is "course" or "homework" or "demo") await EnsureModuleWebViewsAsync();
         }
         catch (Exception error)
         {
@@ -321,12 +325,12 @@ public partial class MainWindow : Window
             PublishMessageWebHealth();
             if (activeModule == "homework") PublishHomeworkStatus(homeworkDetail);
             Trace("UI navigation completed");
-            if (initialModule is not null) await moduleWebViewsReady;
+            if (initialModule is "course" or "homework" or "demo") await EnsureModuleWebViewsAsync();
             ShellView.Visibility = Visibility.Visible;
             TaskLoadingSurface.Visibility = Visibility.Collapsed;
             if (tabSmokeChild) { taskWindowReady.TrySetResult(true); return; }
             taskWindowReady.TrySetResult(true);
-            if (smokeMode) await moduleWebViewsReady;
+            if (smokeMode && Environment.GetCommandLineArgs()[1] is not ("--agent-smoke" or "--ai-dialog-smoke")) await EnsureModuleWebViewsAsync();
             if (smokeMode && Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
             {
                 var preview = Path.Combine(root, ".cache", "ui-home-preview.png");
@@ -336,6 +340,7 @@ public partial class MainWindow : Window
             }
             if (smokeMode && Environment.GetCommandLineArgs()[1] == "--agent-smoke")
             {
+                await VerifyAgentPerformanceAsync();
                 agentProjectRoot = root;
                 try { ResolveAgentPath("..\\outside.txt", false); FailSmoke("Agent accepted a path outside the project"); return; }
                 catch (InvalidDataException) { }
@@ -815,6 +820,7 @@ public partial class MainWindow : Window
                 if (currentAgentSession.Id != originalSession ||
                     !currentAgentSession.Events.Any(entry => entry.Text == "Agent 可用"))
                 { FailSmoke("Agent session switch did not restore events"); return; }
+                await agentSessionStore!.FlushAsync();
                 var protectedSessions = File.ReadAllText(AgentSessionsPath);
                 if (protectedSessions.Contains("Agent 可用", StringComparison.Ordinal))
                 { FailSmoke("Agent conversation was stored as plaintext"); return; }
@@ -1036,7 +1042,7 @@ public partial class MainWindow : Window
                 "course.start" or "course.pause" or "course.stop" or "course.jump" or
                 "homework.open" or "homework.results" or "homework.explain" or "homework.start" or
                 "homework.activate" or "demo.activate")
-                await moduleWebViewsReady;
+                await EnsureModuleWebViewsAsync();
             switch (command)
             {
                 case "proxy.activate":
@@ -1398,6 +1404,9 @@ public partial class MainWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         CancelAgent();
+        // Worker never needs the dispatcher. Finish pending writes before profile cleanup/process exit.
+        agentSessionStore?.FlushAsync().GetAwaiter().GetResult();
+        if (agentSessionStore?.LastError is { } saveError) Trace("Agent sessions could not be saved: " + saveError);
         homeworkClosed = true;
         CancelHomeworkReview();
         if (!smokeMode || tabSmokeMode)

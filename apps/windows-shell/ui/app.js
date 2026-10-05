@@ -567,7 +567,12 @@
     input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
     input.addEventListener('blur', () => finish(true));
   }
+  let agentSessionListSignature = '';
   function renderAgentSessions(data) {
+    // Unchanged metadata must preserve focus, scroll and an in-progress rename.
+    const signature = JSON.stringify(data);
+    if (signature === agentSessionListSignature) return;
+    agentSessionListSignature = signature;
     const list = $('agent-session-list'); list.replaceChildren(); agentSessionMeta.clear();
     const groups = new Map();
     for (const session of data.sessions || []) {
@@ -956,6 +961,10 @@
         agentDrafts.set(activeAgentSessionId, {prompt: $('agent-prompt').value, images: agentImages, files: agentFiles});
       activeAgentSessionId = nextId;
       renderAgentSessions(message.extra || {});
+    }
+    if (message.kind === 'agent.session-meta') {
+      $('agent-task-title').textContent = message.extra?.title || '新任务';
+      $('agent-root').textContent = message.extra?.root || '未选择项目文件夹';
     }
     if (message.kind === 'agent.snapshot') {
       clearPendingAgentStream();

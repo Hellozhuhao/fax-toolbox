@@ -368,20 +368,20 @@ internal static class AiAnswerService
         var provider = AiProviderPresets.Match(settings).Id;
         var client = provider is "openai" or "custom" ? ProxyClient : DirectClient;
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
-            timeoutSource.Token);
+            timeoutSource.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             if (AiProviderPresets.Match(settings).Id == "ollama" && (int)response.StatusCode == 404)
                 throw new HttpRequestException("本地模型尚未下载，请先运行 ollama pull " + settings.Model);
             throw new HttpRequestException(DescribeHttpError((int)response.StatusCode));
         }
-        await using var stream = await response.Content.ReadAsStreamAsync(timeoutSource.Token);
+        await using var stream = await response.Content.ReadAsStreamAsync(timeoutSource.Token).ConfigureAwait(false);
         if (streaming)
-            return await ReadCompletionStreamAsync(stream, progress!, timeoutSource.Token);
+            return await ReadCompletionStreamAsync(stream, progress!, timeoutSource.Token).ConfigureAwait(false);
         using var buffer = new MemoryStream();
         var block = new byte[8192];
         int read;
-        while ((read = await stream.ReadAsync(block, timeoutSource.Token)) > 0)
+        while ((read = await stream.ReadAsync(block, timeoutSource.Token).ConfigureAwait(false)) > 0)
         {
             if (buffer.Length + read > 256 * 1024)
                 throw new InvalidDataException("AI 响应过长，已停止答题");
@@ -445,7 +445,7 @@ internal static class AiAnswerService
         var toolIds = new Dictionary<int, StringBuilder>();
         AiUsage? usage = null;
         var finished = false;
-        while (await reader.ReadLineAsync(cancellation) is { } line)
+        while (await reader.ReadLineAsync(cancellation).ConfigureAwait(false) is { } line)
         {
             if (!line.StartsWith("data: ", StringComparison.Ordinal)) continue;
             var data = line[6..];

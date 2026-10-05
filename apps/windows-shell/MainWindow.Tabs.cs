@@ -324,15 +324,6 @@ public partial class MainWindow
         if (!TaskWindows.Contains(target) || target.closingTask) return;
         // Keep the old HWND in front until the target has painted at its final size.
         if (!await target.taskWindowReady.Task) return;
-        if (target.ShellView.CoreWebView2 is not null)
-        {
-            try
-            {
-                await target.ShellView.CoreWebView2.ExecuteScriptAsync(
-                    "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))");
-            }
-            catch (InvalidOperationException) { return; }
-        }
         if (target.closingTask || !TaskWindows.Contains(target)) return;
         var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
         // Changing taskbar membership can recreate a WPF HWND. Do it before
@@ -365,20 +356,17 @@ public partial class MainWindow
             try
             {
                 await target.ShellView.CoreWebView2.ExecuteScriptAsync(
-                    "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))");
+                    "new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve(true))))")
+                    .WaitAsync(TimeSpan.FromMilliseconds(200));
             }
+            catch (TimeoutException) { /* Hidden/minimized renderers may throttle animation frames. */ }
             catch (InvalidOperationException) { return; }
         }
         if (target.closingTask || !TaskWindows.Contains(target)) return;
-        DwmFlush();
         target.Activate();
-        DwmFlush();
         Hide();
         target.UpdateTaskTabs();
     }
-
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmFlush();
 
     private async void NewTaskTab_Click(object sender, RoutedEventArgs e)
     {
@@ -422,9 +410,25 @@ public partial class MainWindow
         target.Close();
     }
 
-    private void Window_Closing(object? sender, CancelEventArgs e)
+    private bool agentStoreFlushedForClose;
+
+    private async void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (closingAsTab || smokeMode) return;
+        if (!agentStoreFlushedForClose && agentSessionStore is not null)
+        {
+            CancelAgent();
+            var flush = agentSessionStore.FlushAsync();
+            if (!flush.IsCompleted)
+            {
+                e.Cancel = true;
+                await flush;
+                agentStoreFlushedForClose = true;
+                if (IsLoaded) Close();
+                return;
+            }
+            agentStoreFlushedForClose = true;
+        }
         if (detachedWindow)
         {
             if (!TaskWindows.Any(window => !ReferenceEquals(window, this) && window.Visibility == Visibility.Visible))

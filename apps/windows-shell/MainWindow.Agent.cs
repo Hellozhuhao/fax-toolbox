@@ -29,6 +29,13 @@ public partial class MainWindow
         public string Effort { get; set; } = "normal";
         public string Background { get; set; } = "";
         public string MemoryPool { get; set; } = "";
+        public AgentSession Snapshot()
+        {
+            var copy = (AgentSession)MemberwiseClone();
+            copy.History = [.. History];
+            copy.Events = [.. Events];
+            return copy;
+        }
         public int MemoryCursor { get; set; }
         public long LastPromptTokens { get; set; }
         public List<AgentHistoryEntry> History { get; set; } = [];
@@ -68,6 +75,10 @@ public partial class MainWindow
     private static readonly object AgentSessionStorageGate = new();
     private static readonly Dictionary<string, List<AgentSession>> SharedAgentSessions =
         new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, BufferedEncryptedStore<AgentSession[]>> AgentSessionStores =
+        new(StringComparer.OrdinalIgnoreCase);
+    private BufferedEncryptedStore<AgentSession[]>? agentSessionStore;
+    private string? publishedAgentSessionId;
     private List<AgentSession> agentSessions = [];
     private AgentSession currentAgentSession = new();
     private List<AgentHistoryEntry> agentHistory => currentAgentSession.History;
@@ -98,6 +109,8 @@ public partial class MainWindow
         lock (AgentSessionStorageGate)
         {
             var path = AgentSessionsPath;
+            if (!AgentSessionStores.TryGetValue(path, out agentSessionStore))
+                AgentSessionStores[path] = agentSessionStore = new(path);
             if (SharedAgentSessions.TryGetValue(path, out var shared))
             {
                 agentSessions = shared;
@@ -129,23 +142,11 @@ public partial class MainWindow
 
     private void PersistAgentSessions()
     {
-        try
-        {
-            lock (AgentSessionStorageGate)
-            {
-                var path = AgentSessionsPath;
-                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                var temporary = path + ".tmp";
-                File.WriteAllText(temporary, VaultCrypto.Protect(JsonSerializer.Serialize(agentSessions)));
-                File.Move(temporary, path, true);
-            }
-        }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or
-            System.Security.Cryptography.CryptographicException)
-        { Trace("Agent sessions could not be saved: " + error.Message); }
+        // Immutable strings/records are shared; only mutable lists need copying on the UI thread.
+        agentSessionStore?.Queue(agentSessions.Select(item => item.Snapshot()).ToArray());
     }
 
-    private void PublishAgentSessions()
+    private void PublishAgentSessions(bool includeSnapshot = true)
     {
         if (!agentSessions.Contains(currentAgentSession))
             currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
@@ -153,6 +154,9 @@ public partial class MainWindow
             sessions = agentSessions.OrderBy(item => item.Archived).ThenByDescending(item => item.Pinned).ThenByDescending(item => item.UpdatedAt)
                 .Select(item => new { id = item.Id, title = item.Title, root = item.ProjectRoot, section = item.Section,
                     pinned = item.Pinned, unread = item.Unread, archived = item.Archived, updatedAt = item.UpdatedAt }).ToArray() });
+        PublishAgent("session-meta", extra: new { title = currentAgentSession.Title, root = agentProjectRoot });
+        if (!includeSnapshot && publishedAgentSessionId == currentAgentSession.Id) return;
+        publishedAgentSessionId = currentAgentSession.Id;
         PublishAgent("snapshot", extra: new { title = currentAgentSession.Title,
             root = agentProjectRoot, events = currentAgentSession.Events
                 .Select(item => new { type = item.Type, text = item.Text }).ToArray(),
@@ -249,10 +253,10 @@ public partial class MainWindow
 
     private void RefreshAgentSessionLists()
     {
-        if (smokeMode && !tabSmokeMode) { PublishAgentSessions(); return; }
+        if (smokeMode && !tabSmokeMode) { PublishAgentSessions(false); return; }
         foreach (var window in TaskWindows.Where(window => !window.closingTask &&
             ReferenceEquals(window.agentSessions, agentSessions)))
-            window.PublishAgentSessions();
+            window.PublishAgentSessions(false);
     }
 
     private void NewAgentSession()
@@ -513,7 +517,7 @@ public partial class MainWindow
         if (currentAgentSession.Title == "新任务") currentAgentSession.Title = prompt[..Math.Min(28, prompt.Length)];
         currentAgentSession.UpdatedAt = DateTimeOffset.UtcNow;
         PersistAgentSessions();
-        PublishAgentSessions();
+        RefreshAgentSessionLists();
         PublishAgent("event", displayPrompt, new { type = "user" });
         PublishAgent("state", "正在处理", new { busy = true });
         try
@@ -789,8 +793,9 @@ public partial class MainWindow
                 return "计划：\n" + string.Join("\n", steps.EnumerateArray()
                     .Select((value, index) => (index + 1) + ". " + value.GetString()));
             case "project_overview":
-                if (agentProjectRoot is null) return "请先选择项目文件夹。";
-                return "项目文件：\n" + ListAgentFiles("") + "\n可用模块操作：" +
+                var overviewRoot = agentProjectRoot;
+                if (overviewRoot is null) return "请先选择项目文件夹。";
+                return "项目文件：\n" + await Task.Run(() => ListAgentFiles(overviewRoot, ""), cancellation) + "\n可用模块操作：" +
                     string.Join("、", AgentModuleActions.Keys.OrderBy(key => key, StringComparer.Ordinal));
             case "module_status":
                 return JsonSerializer.Serialize((TaskWindows.Count > 0 ? TaskWindows : [this])
@@ -824,7 +829,9 @@ public partial class MainWindow
                 else PublishAgent("navigate", module);
                 return "已打开" + moduleTitle + "模块。";
             case "list_files":
-                return ListAgentFiles(AgentString(args, "path"));
+                var listRoot = agentProjectRoot;
+                var listPath = AgentString(args, "path");
+                return await Task.Run(() => ListAgentFiles(listRoot, listPath), cancellation);
             case "read_file":
                 var path = ResolveAgentPath(AgentString(args, "path"), false);
                 if (!File.Exists(path)) return "文件不存在。";
@@ -865,12 +872,14 @@ public partial class MainWindow
         }
     }
 
-    private string ResolveAgentPath(string relative, bool directory)
+    private string ResolveAgentPath(string relative, bool directory) => ResolveAgentPath(agentProjectRoot, relative, directory);
+
+    private static string ResolveAgentPath(string? projectRoot, string relative, bool directory)
     {
-        if (agentProjectRoot is null) throw new InvalidDataException("请先选择项目文件夹。");
+        if (projectRoot is null) throw new InvalidDataException("请先选择项目文件夹。");
         if (Path.IsPathRooted(relative)) throw new InvalidDataException("只能使用项目内相对路径。");
-        var full = Path.GetFullPath(Path.Combine(agentProjectRoot, relative));
-        var local = Path.GetRelativePath(agentProjectRoot, full);
+        var full = Path.GetFullPath(Path.Combine(projectRoot, relative));
+        var local = Path.GetRelativePath(projectRoot, full);
         if (local == ".." || local.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) ||
             Path.IsPathRooted(local)) throw new InvalidDataException("路径超出项目文件夹。");
         var parts = local.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
@@ -880,7 +889,7 @@ public partial class MainWindow
             part.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
             part.Contains("credential", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidDataException("该路径包含受保护的目录或密钥文件。");
-        var current = agentProjectRoot;
+        var current = projectRoot;
         if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
             throw new InvalidDataException("不支持链接项目目录。");
         foreach (var part in parts)
@@ -894,46 +903,77 @@ public partial class MainWindow
         return full;
     }
 
-    private string ListAgentFiles(string relative)
+    private static string ListAgentFiles(string? projectRoot, string relative)
     {
-        var directory = ResolveAgentPath(relative, true);
+        var directory = ResolveAgentPath(projectRoot, relative, true);
         var entries = Directory.EnumerateFileSystemEntries(directory).Take(100)
-            .Select(path => Path.GetRelativePath(agentProjectRoot!, path))
-            .Where(path => { try { ResolveAgentPath(path, false); return true; } catch (InvalidDataException) { return false; } })
-            .Select(path => Directory.Exists(Path.Combine(agentProjectRoot!, path)) ? path + "/" : path)
+            .Select(path => Path.GetRelativePath(projectRoot!, path))
+            .Where(path => { try { ResolveAgentPath(projectRoot, path, false); return true; } catch (InvalidDataException) { return false; } })
+            .Select(path => Directory.Exists(Path.Combine(projectRoot!, path)) ? path + "/" : path)
             .ToArray();
         return entries.Length == 0 ? "目录为空。" : string.Join("\n", entries);
     }
 
-    private async Task<string> SearchAgentFilesAsync(string relative, string query, CancellationToken cancellation)
+    private Task<string> SearchAgentFilesAsync(string relative, string query, CancellationToken cancellation)
     {
-        if (query.Length is < 2 or > 120) return "搜索文本长度须为 2 到 120 字符。";
-        var directory = ResolveAgentPath(relative, true);
-        var found = new List<string>();
-        var pending = new Queue<string>();
-        pending.Enqueue(directory);
-        var scanned = 0;
-        while (pending.Count > 0 && scanned < 200 && found.Count < 40)
+        var projectRoot = agentProjectRoot;
+        return Task.Run(async () =>
         {
-            cancellation.ThrowIfCancellationRequested();
-            var current = pending.Dequeue();
-            foreach (var entry in Directory.EnumerateFileSystemEntries(current))
+            if (query.Length is < 2 or > 120) return "搜索文本长度须为 2 到 120 字符。";
+            var directory = ResolveAgentPath(projectRoot, relative, true);
+            var files = new List<string>();
+            var pending = new Queue<string>();
+            pending.Enqueue(directory);
+            var inspected = 0;
+            var directories = 0;
+            // Bound empty-directory trees as well as files. Never traverse links/protected paths.
+            while (pending.Count > 0 && directories++ < 512 && inspected < 4096 && files.Count < 200)
             {
-                try { ResolveAgentPath(Path.GetRelativePath(agentProjectRoot!, entry), false); }
-                catch (InvalidDataException) { continue; }
-                if (Directory.Exists(entry)) { pending.Enqueue(entry); continue; }
-                if (++scanned > 200) break;
-                if (new FileInfo(entry).Length > 128 * 1024) continue;
-                var contents = await File.ReadAllTextAsync(entry, cancellation);
-                var index = contents.IndexOf(query, StringComparison.OrdinalIgnoreCase);
-                if (index < 0) continue;
-                var excerpt = contents[Math.Max(0, index - 80)..Math.Min(contents.Length, index + query.Length + 100)]
-                    .Replace('\r', ' ').Replace('\n', ' ');
-                found.Add(Path.GetRelativePath(agentProjectRoot!, entry) + ": " + excerpt);
-                if (found.Count >= 40) break;
+                cancellation.ThrowIfCancellationRequested();
+                var current = pending.Dequeue();
+                try
+                {
+                    foreach (var entry in Directory.EnumerateFileSystemEntries(current))
+                    {
+                        cancellation.ThrowIfCancellationRequested();
+                        if (++inspected > 4096 || files.Count >= 200) break;
+                        try
+                        {
+                            ResolveAgentPath(projectRoot, Path.GetRelativePath(projectRoot!, entry), false);
+                            if (Directory.Exists(entry)) { pending.Enqueue(entry); continue; }
+                            if (new FileInfo(entry).Length <= 128 * 1024) files.Add(entry);
+                        }
+                        catch (Exception error) when (error is InvalidDataException or IOException or UnauthorizedAccessException) { }
+                    }
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
             }
-        }
-        return found.Count == 0 ? "未找到。" : string.Join("\n", found);
+            var matches = new string?[files.Count];
+            await Parallel.ForEachAsync(Enumerable.Range(0, files.Count), new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 4, 2, 4),
+                CancellationToken = cancellation
+            }, async (index, token) =>
+            {
+                try
+                {
+                    var entry = files[index];
+                    ResolveAgentPath(projectRoot, Path.GetRelativePath(projectRoot!, entry), false);
+                    var contents = await File.ReadAllTextAsync(entry, token).ConfigureAwait(false);
+                    var position = contents.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+                    if (position < 0) return;
+                    var excerpt = contents[Math.Max(0, position - 80)..Math.Min(contents.Length, position + query.Length + 100)]
+                        .Replace('\r', ' ').Replace('\n', ' ');
+                    matches[index] = Path.GetRelativePath(projectRoot!, entry) + ": " + excerpt;
+                }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException) { }
+            }).ConfigureAwait(false);
+            var found = matches.Where(item => item is not null).Take(40).ToArray();
+            var result = found.Length == 0 ? "未找到。" : string.Join("\n", found);
+            if (pending.Count > 0 || inspected >= 4096 || files.Count >= 200)
+                result += "\n搜索已达到扫描上限，可指定子目录继续搜索。";
+            return result;
+        }, cancellation);
     }
 
     private async Task<string> CreateAgentFileAsync(JsonElement args, CancellationToken cancellation)
