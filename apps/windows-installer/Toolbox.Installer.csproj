@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>FaxToolbox.Setup</AssemblyName>
+    <Version>0.2.0-beta.1</Version>
+    <FileVersion>0.2.0.1</FileVersion>
+    <ApplicationIcon>../windows-shell/assets/fax-toolbox.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="../windows-shell/assets/fax-toolbox.png" Link="assets/fax-toolbox.png" />
+    <EmbeddedResource Include="$(PayloadPath)" LogicalName="FaxToolbox.Setup.Payload.exe" Condition="'$(PayloadPath)' != ''" />
+    <EmbeddedResource Include="$(SmokePayloadPath)" LogicalName="FaxToolbox.Setup.Smoke.exe" Condition="'$(SmokePayloadPath)' != ''" />
+    <AssemblyMetadata Include="PayloadSha256" Value="$(PayloadSha256)" />
+    <AssemblyMetadata Include="SmokePayloadSha256" Value="$(SmokePayloadSha256)" />
+  </ItemGroup>
+</Project>

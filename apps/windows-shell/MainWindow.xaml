@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="Fax Toolbox" Width="1280" Height="800" MinWidth="780" MinHeight="560"
+        Title="Fax Toolbox · Beta 版" Width="1280" Height="800" MinWidth="780" MinHeight="560"
         WindowStyle="None" ResizeMode="CanResize" Background="#F5F5F3" FontFamily="Microsoft YaHei UI"
         Loaded="Window_Loaded" Closing="Window_Closing" Closed="Window_Closed" StateChanged="Window_StateChanged">
     <shell:WindowChrome.WindowChrome>

@@ -33,14 +33,16 @@ powershell -ExecutionPolicy Bypass -File scripts/run-windows.ps1
 
 ## Windows 安装包与便携版
 
-安装器由 Inno Setup 7 编译。开发机安装官方 `JRSoftware.InnoSetup.7` 后运行：
+Beta 安装器采用 WPF 动画界面和 Inno Setup 7 安装引擎。开发机安装官方 `JRSoftware.InnoSetup.7` 后运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/build-installer.ps1 -Test
 powershell -ExecutionPolicy Bypass -File scripts/package-windows.ps1 -SkipPublish -Test
 ```
 
-第一条命令先发布 x64 自包含程序，再生成 `dist/FaxToolbox-Setup-v0.1.0-preview.1-win-x64.exe`，并用独立的测试安装标识完成安装、启动和卸载验证。第二条命令生成 `dist/FaxToolbox-Windows-win-x64.zip`，作为免安装便携版。两种产物都包含 Windows 前端、Rust 后端和运行所需页面资源；不需要另装 .NET 运行时。安装器面向当前用户，无需管理员权限，创建开始菜单入口并提供卸载，桌面快捷方式可选。缺少 WebView2 Runtime 时，安装器使用内置的微软签名引导程序联网补装；便携版需要用户自行安装 WebView2 Runtime。构建脚本在打包前检查发布目录，拒绝加入账号密码、答案缓存、浏览器配置、数据库和调试符号。编译器可用 `-InnoCompiler` 指定，WebView2 引导程序从微软官方下载并验签后缓存到 `.cache/installer-tools/`。
+版本信息统一记录在 `release-version.json`。第一条命令生成 `dist/FaxToolbox-Setup-v0.2.0-beta.1-win-x64.exe`，在独立的中文空格路径中验证安装、应用启动和卸载；第二条命令生成版本化便携 ZIP。安装器具有星轨动效、页面过渡和进度动画，可选择安装目录和桌面快捷方式，支持当前用户安装及 Windows 卸载。安装器与应用均为自包含程序，无需另装 .NET。缺少 WebView2 时，从微软下载引导程序并校验数字签名后安装；已有依赖则跳过下载。便携版需要已有 WebView2。安装和便携打包均检查并拒绝账号数据、浏览器配置、数据库、调试文件及测试缓存。发布说明与依赖测试边界见 [Beta Release 说明](docs/BETA_RELEASE_NOTES.md)。
+
+发布到 GitHub 前先验证并合并源码到 `main`，生成 `SHA256SUMS.txt`，再运行 `scripts/publish-github-release.ps1 -Mode Publish -TargetCommit <main 的完整 SHA>`。脚本先上传到草稿 Release，检查文件大小与 GitHub 返回的摘要，再发布为 Beta 预发布；不替换已经公开的同版本资产。
 
 当前 UI 采用紧凑活动栏、模块工作台与顶部快速入口，包含首页、模块列表、演示与学习通工作台、本次运行活动、系统选项和密码箱入口。按 `Ctrl+K` 可打开快速操作，直接切换模块或打开设置。深色/浅色偏好仅保存在工具箱 UI 的本地存储中；活动记录仅保留本次运行。
 
