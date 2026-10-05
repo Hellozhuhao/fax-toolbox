@@ -48,7 +48,11 @@ public partial class MainWindow
         ["course.start"] = new("开始学习通任务", target => target.StartCourseAsync()),
         ["course.pause"] = new("暂停学习通任务", target => target.CourseCommandAsync("pause")),
         ["course.stop"] = new("结束学习通任务", target => target.CourseCommandAsync("stop")),
-        ["homework.review"] = new("开始作业校对", target => target.StartHomeworkReviewAsync())
+        ["homework.review"] = new("开始作业校对", target => target.StartHomeworkReviewAsync()),
+        ["proxy.start"] = new("启动网络管家（按应用规则切换系统代理和代理环境变量）", target => target.RunProxyAgentActionAsync("Start")),
+        ["proxy.stop"] = new("停止网络管家并还原启用前的代理设置", target => target.RunProxyAgentActionAsync("Stop")),
+        ["proxy.on"] = new("启用本机代理并验证监听端口", target => target.RunProxyAgentActionAsync("Enable")),
+        ["proxy.off"] = new("切换直连并停止本模块启动的代理内核", target => target.RunProxyAgentActionAsync("Disable"))
     };
 
     internal static void RegisterAgentModuleAction(string module, string action, string title,
@@ -797,18 +801,20 @@ public partial class MainWindow
                             "course" => window.courseState,
                             "homework" => window.homeworkBusy ? "RUNNING" : "READY",
                             "ai" => window.agentCancellation is null ? "READY" : "RUNNING",
+                            "proxy" => window.proxyWatcherRunning ? "RUNNING" : "READY",
                             _ => window.state
                         },
                         detail = window.assignedModule switch
                         {
                             "course" => window.courseDetail,
                             "homework" => window.homeworkDetail,
+                            "proxy" => window.proxyWatcherDetail,
                             _ => window.detail
                         } }).ToArray());
             case "open_module":
                 var module = AgentString(args, "module");
-                if (module is not ("course" or "homework" or "ai")) return "无效模块。";
-                var moduleTitle = module switch { "course" => "学习通", "homework" => "作业校对", _ => "Agent" };
+                if (module is not ("course" or "homework" or "ai" or "proxy")) return "无效模块。";
+                var moduleTitle = module switch { "course" => "学习通", "homework" => "作业校对", "proxy" => "网络管家", _ => "Agent" };
                 if (!await ConfirmAgentActionAsync("打开" + moduleTitle,
                     "Agent 请求打开“" + moduleTitle + "”模块。", cancellation))
                     return "用户拒绝了打开模块。";

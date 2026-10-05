@@ -1,0 +1,44 @@
+.network-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+#view-proxy { max-width: 1160px; margin: 0 auto; }
+.network-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.network-heading h2, .network-heading h3 { margin: 0; }
+.network-heading p { margin: 8px 0 0; }
+.network-dashboard { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(230px, 1fr); gap: 18px; margin: 20px 0; }
+.network-dashboard .card { margin: 0; padding: 24px; border-radius: 22px; }
+.network-status-title { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; }
+.network-status-title .pill { margin-left: auto; font-size: 11px; }
+.network-status-title .pill { position: static; }
+.network-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--subtle); }
+.network-dot.running { background: #44b78b; box-shadow: 0 0 0 4px #44b78b18; }
+.network-status h3 { font-size: 24px; margin: 24px 0 8px; }
+.network-facts { display: grid; gap: 12px; padding: 18px 0; margin: 14px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.network-facts div { display: flex; align-items: center; justify-content: space-between; gap: 14px; min-width: 0; }
+.network-facts span { color: var(--subtle); font-size: 12px; flex-shrink: 0; }
+.network-facts strong, .network-facts code { overflow-wrap: anywhere; text-align: right; font-size: 13px; }
+.network-quick h3 { margin: 0 0 9px; }
+.network-quick .action-row { margin-bottom: 28px; }
+.network-note { font-size: 12px; line-height: 1.65; color: var(--subtle); }
+.network-feedback { min-height: 20px; margin: 14px 0 0; font-size: 13px; }
+#view-proxy .error { color: #d55b45; }
+.network-config { padding: 24px; border-radius: 22px; }
+.network-config fieldset { padding: 0; margin: 0; border: 0; min-width: 0; }
+.network-fields { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 18px; }
+.network-fields label { display: flex; flex-direction: column; gap: 8px; font-size: 12px; font-weight: 600; min-width: 0; }
+.network-fields input, .network-fields select, .network-fields textarea { width: 100%; margin: 0; font-size: 13px; font-weight: 400; box-sizing: border-box; }
+.network-path { display: flex; gap: 8px; }
+.network-path input { min-width: 0; flex: 1; }
+.network-path button { white-space: nowrap; flex-shrink: 0; padding: 8px 12px; min-height: 38px; }
+.network-config .network-path button, .network-dashboard .action-row button, .network-config .action-row button { width: auto; margin: 0; }
+.network-wide { grid-column: 1 / -1; }
+.network-checks { display: flex; gap: 20px; flex-wrap: wrap; margin: 22px 0 10px; }
+.network-checks label, .network-confirm label { display: flex; gap: 8px; align-items: center; font-size: 13px; }
+.network-checks input, .network-confirm input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+.network-config fieldset:disabled { opacity: .65; }
+.network-log { margin-top: 18px; border-radius: 22px; }
+.network-log pre { max-height: 280px; overflow: auto; white-space: pre-wrap; font-size: 12px; line-height: 1.7; color: var(--subtle); }
+.network-confirm { max-width: 480px; width: calc(100% - 48px); padding: 26px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 22px; box-shadow: 0 20px 60px #0003; }
+.network-confirm::backdrop { background: #0005; }
+.network-confirm p { font-size: 14px; line-height: 1.7; }
+.network-confirm .action-row { margin-top: 24px; justify-content: flex-end; }
+.network-confirm [hidden] { display: none; }
+@media (max-width: 760px) { .network-dashboard, .network-fields { grid-template-columns: minmax(0,1fr); } .network-heading { align-items: flex-start; } .network-heading h2 { font-size: 28px; } }

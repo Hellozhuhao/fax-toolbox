@@ -21,7 +21,7 @@
   let activityFilter = 'all';
   let developerMode = false;
   const stateNames = {STARTING: '启动中', READY: '就绪', CREATED: '正在创建', OBSERVING: '观察中', RUNNING: '运行中', PAUSED: '已暂停', STOPPED: '已停止', COMPLETE: '已完成', CANCELLED: '已取消', WAITING_LOGIN: '等待登录', CHOOSING_COURSE: '选择课程', NEEDS_INPUT: '等待人工操作', ERROR: '发生错误'};
-  const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'Agent', activity: '状态', settings: '设置', vault: '密码箱'};
+  const viewNames = {home: '首页', modules: '工具', workspace: '工作台', demo: '页面事件演示', course: '学习通', homework: '作业校对', ai: 'Agent', activity: '状态', settings: '设置', vault: '密码箱', proxy: '网络管家'};
   const confirmation = $('toolbox-confirm');
   let confirmationAction = null;
   let confirmationTrigger = null;
@@ -218,7 +218,7 @@
       incoming.hidden = false;
       if (previousView && !motionReduced.matches) incoming.classList.add('motion-enter');
     }
-    const navigation = ['course', 'homework', 'demo', 'ai', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
+    const navigation = ['course', 'homework', 'demo', 'ai', 'proxy', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
@@ -233,6 +233,7 @@
     else if (activeModule === 'homework') openHomework();
     else if (activeModule === 'demo') openDemo();
     else if (activeModule === 'ai') openAi();
+    else if (activeModule === 'proxy') openProxy();
     else show('workspace');
   }
   function logActivity(source, title, detail) {
@@ -302,6 +303,10 @@
     $('workspace-detail').textContent = '处理项目任务，并管理各模块的模型连接。';
     show('ai'); send('ai.activate'); send('ai.get-config');
   }
+  function openProxy() {
+    activeModule = 'proxy'; $('workspace-module').textContent = '网络管家';
+    show('proxy'); send('proxy.activate'); send('proxy.get');
+  }
   function goBack() {
     if (!viewHistory.length) return false;
     const previous = viewHistory.pop();
@@ -310,6 +315,7 @@
     else if (previous === 'homework') send('homework.activate');
     else if (previous === 'demo') send('demo.activate');
     else if (previous === 'ai') send('ai.activate');
+    else if (previous === 'proxy') send('proxy.activate');
     return true;
   }
   function setHomeworkBrowsing(browsing) {
@@ -953,7 +959,7 @@
     }
     if (message.kind === 'agent.approval') { agentApprovalId = message.extra?.id || ''; $('agent-approval-title').textContent = message.detail || '等待确认'; $('agent-approval-detail').textContent = message.extra?.preview || ''; $('agent-approval').hidden = false; }
     if (message.kind === 'agent.approval.clear') { agentApprovalId = ''; $('agent-approval').hidden = true; }
-    if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); }
+    if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); else if (message.detail === 'proxy') openProxy(); }
   }
   function renderHomeworkStatus(message) {
     $('homework-page').textContent = message.url || '尚未打开';
@@ -1058,15 +1064,17 @@
     else if (item.dataset.view === 'course') openCourse();
     else if (item.dataset.view === 'homework') openHomework();
     else if (item.dataset.view === 'ai') openAi();
+    else if (item.dataset.view === 'proxy') openProxy();
     else show(item.dataset.view);
   });
   $('open-tools-card').addEventListener('click', () => show('modules'));
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : openDemo());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : item.dataset.open === 'proxy' ? openProxy() : openDemo());
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
-  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, showHome: () => show('home'),
+  $('module-proxy').addEventListener('click', openProxy);
+  window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, openProxy, showHome: () => show('home'),
     goBack, applyThemeFromHost: theme => setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
     refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
@@ -1407,6 +1415,7 @@
   else if (initialModule === 'homework') openHomework();
   else if (initialModule === 'demo') openDemo();
   else if (initialModule === 'ai') openAi();
+  else if (initialModule === 'proxy') openProxy();
   else show('home');
   send('ai.get-config');
 })();

@@ -1,0 +1,10 @@
+{
+  "id": "proxy",
+  "name": "网络管家",
+  "category": "network",
+  "description": "按工作与游戏规则自动切换本机代理，支持状态、日志、开机启动和原设置还原。",
+  "platform": "windows",
+  "entry": "auto-switch.ps1",
+  "actions": ["start", "stop", "on", "off"],
+  "version": "1.0.0"
+}

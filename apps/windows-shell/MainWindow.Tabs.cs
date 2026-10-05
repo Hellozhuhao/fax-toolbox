@@ -193,6 +193,7 @@ public partial class MainWindow
                 "homework" => (window.homeworkBusy ? "● " : "") + "作业校对",
                 "demo" => (window.state == "OBSERVING" ? "● " : "") + "页面演示",
                 "ai" => "Agent",
+                "proxy" => "网络管家",
                 _ => "首页"
             };
             if (view.Label == label && view.Selected == selected && view.Dark == darkTaskTabs) continue;
@@ -308,7 +309,7 @@ public partial class MainWindow
     }
 
     private Task RestoreAssignedModuleUiAsync() =>
-        ShowTaskUiAsync(assignedModule switch { "course" => "openCourse", "homework" => "openHomework", "ai" => "openAi", _ => "openDemo" });
+        ShowTaskUiAsync(assignedModule switch { "course" => "openCourse", "homework" => "openHomework", "ai" => "openAi", "proxy" => "openProxy", _ => "openDemo" });
 
     private async Task ShowTaskUiAsync(string action)
     {

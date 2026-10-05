@@ -43,7 +43,7 @@ if ($LASTEXITCODE -ne 0) { throw '.NET self-contained publish failed' }
 Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Extension -in @('.pdb', '.xml') } |
     Remove-Item -Force
 
-foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'packages\page-agent')) {
+foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'modules\proxy-autoswitch', 'packages\page-agent')) {
     $source = Join-Path $root $relative
     $destination = Join-Path $dist $relative
     New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null

@@ -21,7 +21,7 @@ internal static class AgentToolSchemas
     [
         Function("plan", "列出需要连续执行的 2 到 8 个简短步骤。", new() { ["steps"] = Texts }, "steps"),
         Function("module_status", "查看工具箱模块的当前状态。"),
-        Function("open_module", "打开工具箱模块。", new() { ["module"] = new { type = "string", @enum = new[] { "course", "homework", "ai" } } }, "module"),
+        Function("open_module", "打开工具箱模块。proxy 是网络管家。", new() { ["module"] = new { type = "string", @enum = new[] { "course", "homework", "ai", "proxy" } } }, "module"),
         Function("project_overview", "查看所选项目概览。"),
         Function("list_files", "列出所选项目内文件。", new() { ["path"] = Text }, "path"),
         Function("read_file", "分段读取项目文本。offset 是从 0 开始的字符位置；结果会给出下一段位置。", new() {

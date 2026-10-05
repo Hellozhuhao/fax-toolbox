@@ -822,6 +822,21 @@ public partial class MainWindow : Window
                     UpdateAgentSession(archive.RootElement, "archive");
                 if (!agentSessions.Single(item => item.Id == forkId).Archived || currentAgentSession.Id != originalSession)
                 { FailSmoke("Agent archive did not move the conversation out of the active list"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi.openProxy()");
+                var networkReady = false;
+                for (var attempt = 0; attempt < 20 && !networkReady; attempt++)
+                {
+                    networkReady = await ShellView.CoreWebView2.ExecuteScriptAsync("!document.getElementById('view-proxy').hidden && document.getElementById('proxy-running').textContent==='自动切换已停止' && document.getElementById('proxy-url').value==='http://127.0.0.1:10809'") == "true";
+                    if (!networkReady) await Task.Delay(100);
+                }
+                if (!networkReady) { FailSmoke("Network manager did not load independently"); return; }
+                var networkConfirmation = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{document.getElementById('proxy-start').click();const open=document.getElementById('proxy-confirm').open;document.getElementById('proxy-confirm-cancel').click();return open&&!document.getElementById('proxy-confirm').open})()");
+                if (networkConfirmation != "true") { FailSmoke("Network manager confirmation was not displayed"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await using var networkOutput = File.Create(Path.Combine(root, ".cache", "network-manager-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, networkOutput);
+                }
                 PassSmoke();
             }
             else if (smokeMode && Environment.GetCommandLineArgs()[1] == "--ai-dialog-smoke")
@@ -964,6 +979,11 @@ public partial class MainWindow : Window
             var command = message.GetProperty("command").GetString();
             if (messageBytes > MaxPageMessage && command != "agent.send" &&
                 !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024)) return;
+            if (command is "proxy.get" or "proxy.save" or "proxy.start" or "proxy.stop" or "proxy.on" or "proxy.off" or "proxy.validate" or "proxy.pick" or "proxy.startup.on" or "proxy.startup.off")
+            {
+                await HandleProxyMessageAsync(command, message);
+                return;
+            }
             if (command is "session.start" or "session.cancel" or "course.open" or "course.activate" or
                 "course.start" or "course.pause" or "course.stop" or "course.jump" or
                 "homework.open" or "homework.results" or "homework.explain" or "homework.start" or
@@ -971,6 +991,24 @@ public partial class MainWindow : Window
                 await moduleWebViewsReady;
             switch (command)
             {
+                case "proxy.activate":
+                    if (assignedModule is not null && assignedModule != "proxy" && !smokeMode)
+                    {
+                        await RestoreAssignedModuleUiAsync();
+                        OpenModuleInNewTab("proxy");
+                    }
+                    else
+                    {
+                        assignedModule = "proxy";
+                        activeModule = "proxy";
+                        UpdateAllTaskTabs();
+                        catalogTimer.Stop();
+                        SetWorkspaceLayout(false);
+                        CourseView.Visibility = Visibility.Collapsed;
+                        ModuleView.Visibility = Visibility.Collapsed;
+                        CourseOverlay.Visibility = Visibility.Collapsed;
+                    }
+                    break;
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
                     currentShellView = message.GetProperty("view").GetString() ?? "home";
