@@ -53,7 +53,7 @@ public partial class MainWindow
         DeveloperBadge.BorderBrush = Brush(darkTaskTabs ? "#7159A8" : "#C7B4F3");
         DeveloperBadgeText.Foreground = Brush(darkTaskTabs ? "#DACBFF" : "#6844B3");
         TitleBar.Background = Brush(developerMode ? darkTaskTabs ? "#231D30" : "#F4EFFD" :
-            darkTaskTabs ? "#17181C" : "#F5F5F3");
+            darkTaskTabs ? "#17181C" : "#F7F7FC");
         Title = developerMode ? "Fax Toolbox · 开发者模式" : "Fax Toolbox";
     }
 

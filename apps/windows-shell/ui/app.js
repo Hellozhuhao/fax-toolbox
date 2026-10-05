@@ -17,6 +17,7 @@
   let balanceAvailable = false;
   let balanceLoading = false;
   const viewHistory = [];
+  const viewScrollPositions = new Map();
   let currentView = '';
   let restoringAgentSnapshot = false;
   let agentMode = 'chat', agentEffort = 'normal', agentProvider = '', agentModel = '';
@@ -213,6 +214,7 @@
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
+      if (previousView) viewScrollPositions.set(previousView, document.scrollingElement.scrollTop);
       // A new module tab starts without a previous view. Hide the default home
       // surface too; otherwise both sections remain visible in the narrow pane.
       if (!previousView) for (const surface of document.querySelectorAll('.content > .view')) surface.hidden = true;
@@ -225,6 +227,7 @@
       const incoming = $('view-' + view);
       incoming.hidden = false;
       if (previousView && !motionReduced.matches) incoming.classList.add('motion-enter');
+      document.scrollingElement.scrollTop = viewScrollPositions.get(view) || 0;
     }
     const navigation = ['course', 'homework', 'demo', 'ai', 'proxy', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
@@ -807,10 +810,43 @@
   function renderAgentMarkdown(container, source) {
     window.FaxAgentMarkdown.render(container, source, highlightAgentCode);
   }
+  let agentStreamFrame = 0;
+  let pendingAgentStream = null;
+  function clearPendingAgentStream() {
+    if (agentStreamFrame) cancelAnimationFrame(agentStreamFrame);
+    agentStreamFrame = 0;
+    pendingAgentStream = null;
+  }
+  function paintAgentStream() {
+    agentStreamFrame = 0;
+    const detail = pendingAgentStream;
+    pendingAgentStream = null;
+    if (detail === null) return;
+    const timeline = $('agent-timeline');
+    const follow = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    let draft = timeline.querySelector('.agent-stream');
+    if (!detail) { draft?.remove(); return; }
+    timeline.querySelector('.agent-empty')?.remove();
+    if (!draft) {
+      draft = document.createElement('div');
+      draft.className = 'agent-entry agent-assistant agent-stream';
+      const label = document.createElement('small'); label.textContent = 'Agent · 正在生成';
+      const body = document.createElement('p'); draft.append(label, body); timeline.append(draft);
+    }
+    const body = draft.querySelector('p');
+    if (body.textContent !== detail) body.textContent = detail;
+    if (follow) timeline.scrollTop = timeline.scrollHeight;
+  }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
-    if (type === 'assistant' || type === 'error' || type === 'step')
+    // New tools/status messages must not pull someone away from earlier text.
+    // Snapshot replay scrolls once, after all entries have been restored.
+    const follow = type === 'user' || timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    const followLatest = () => { if (!restoringAgentSnapshot && follow) timeline.scrollTop = timeline.scrollHeight; };
+    if (type === 'assistant' || type === 'error' || type === 'step') {
+      clearPendingAgentStream();
       timeline.querySelector('.agent-stream')?.remove();
+    }
     timeline.querySelector('.agent-empty')?.remove();
     if (type === 'step') {
       const [toolName, ...noteLines] = String(detail || '').split('\n');
@@ -823,7 +859,7 @@
       title.textContent = known ? ({plan: '任务计划', module_status: '模块状态', open_module: '打开模块', project_overview: '项目概览', list_files: '列出文件', read_file: '读取文件', search_files: '搜索文件', create_file: '创建文件', replace_text: '修改文件', run_command: '运行命令', module_action: '模块操作'})[toolName] : (detail || '执行工具');
       summary.append(icon, title);
       if (known && noteLines.join('\n').trim()) { const note = document.createElement('small'); note.textContent = noteLines.join('\n').trim(); summary.append(note); }
-      operation.append(summary); timeline.append(operation); timeline.scrollTop = timeline.scrollHeight; return;
+      operation.append(summary); timeline.append(operation); followLatest(); return;
     }
     if (type === 'tool') {
       const operations = [...timeline.querySelectorAll('.agent-operation[data-awaiting-output]')];
@@ -856,7 +892,7 @@
           if (data.after) { const added = document.createElement('pre'); added.className = 'agent-operation-diff agent-diff-added'; added.textContent = '+ ' + data.after.replaceAll('\n', '\n+ '); body.append(added); }
         } else if (data.result) { const output = document.createElement('pre'); output.textContent = data.result; body.append(output); }
         operation.append(body);
-        delete operation.dataset.awaitingOutput; timeline.scrollTop = timeline.scrollHeight; return;
+        delete operation.dataset.awaitingOutput; followLatest(); return;
       }
     }
     if (type === 'reasoning') {
@@ -868,7 +904,7 @@
       const title = document.createElement('span'); title.textContent = '思考';
       summary.append(icon, title);
       const body = document.createElement('p'); body.textContent = detail || '';
-      reasoning.append(summary, body); timeline.append(reasoning); timeline.scrollTop = timeline.scrollHeight; return;
+      reasoning.append(summary, body); timeline.append(reasoning); followLatest(); return;
     }
     const entry = document.createElement('div'); entry.className = 'agent-entry agent-' + (['user', 'assistant', 'step', 'tool', 'error', 'status'].includes(type) ? type : 'status');
     if (!restoringAgentSnapshot) animateNew(entry);
@@ -876,24 +912,15 @@
     entry.append(label);
     if (type === 'assistant') renderAgentMarkdown(entry, detail);
     else { const body = document.createElement('p'); body.textContent = detail || ''; entry.append(body); }
-    timeline.append(entry); timeline.scrollTop = timeline.scrollHeight;
+    timeline.append(entry); followLatest();
   }
   function renderAgentMessage(message) {
     if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
     if (message.kind === 'agent.stream') {
-      const timeline = $('agent-timeline');
-      const follow = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
-      let draft = timeline.querySelector('.agent-stream');
-      if (!message.detail) { draft?.remove(); return; }
-      timeline.querySelector('.agent-empty')?.remove();
-      if (!draft) {
-        draft = document.createElement('div');
-        draft.className = 'agent-entry agent-assistant agent-stream';
-        const label = document.createElement('small'); label.textContent = 'Agent · 正在生成';
-        const body = document.createElement('p'); draft.append(label, body); timeline.append(draft);
-      }
-      draft.querySelector('p').textContent = message.detail;
-      if (follow) timeline.scrollTop = timeline.scrollHeight;
+      // Multiple network chunks share a paint, instead of forcing a layout
+      // and scrollbar update for every callback.
+      pendingAgentStream = message.detail || '';
+      if (!agentStreamFrame) agentStreamFrame = requestAnimationFrame(paintAgentStream);
     }
     if (message.kind === 'agent.options') {
       agentMode = message.extra?.mode === 'code' ? 'code' : 'chat';
@@ -931,6 +958,7 @@
       renderAgentSessions(message.extra || {});
     }
     if (message.kind === 'agent.snapshot') {
+      clearPendingAgentStream();
       const data = message.extra || {};
       $('agent-task-title').textContent = data.title || '新任务';
       $('agent-root').textContent = data.root || '未选择项目文件夹';
@@ -944,6 +972,7 @@
       restoringAgentSnapshot = true;
       try { for (const entry of data.events || []) addAgentEvent(entry.type, entry.text); }
       finally { restoringAgentSnapshot = false; }
+      timeline.scrollTop = timeline.scrollHeight;
       if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';

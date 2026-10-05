@@ -16,11 +16,11 @@ internal sealed class VaultEntryDialog : Window
     {
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        var background = Brush(dark ? "#202126" : "#F5F5F3");
+        var background = Brush(dark ? "#202126" : "#F7F7FC");
         var surface = Brush(dark ? "#17181C" : "#FFFFFF");
         var text = Brush(dark ? "#F5F5F8" : "#171716");
-        var border = Brush(dark ? "#35363E" : "#E6E4E1");
-        var accent = Brush(dark ? "#7858EB" : "#D66B49");
+        var border = Brush(dark ? "#35363E" : "#E7EBF4");
+        var accent = Brush(dark ? "#4F8CF5" : "#387DF3");
         Owner = owner;
         FontFamily = owner.FontFamily;
         Title = "保存学习通账号";

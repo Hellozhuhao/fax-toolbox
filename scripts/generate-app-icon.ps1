@@ -21,12 +21,12 @@ try {
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.ScaleTransform(4, 4)
     $shape = New-RoundedPath 2 2 60 60 19
-    $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new([System.Drawing.Rectangle]::new(0,0,64,64),[Drawing.ColorTranslator]::FromHtml('#404e66'),[Drawing.ColorTranslator]::FromHtml('#242e42'),45.0)
-    $paper = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#fff4e2'))
-    $gold = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#f6d4a4'),3.5)
-    $seam = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#a58b6a'),1.8)
-    $coral = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#d17b59'))
-    $star = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#e49a71'))
+    $gradient = [System.Drawing.Drawing2D.LinearGradientBrush]::new([System.Drawing.Rectangle]::new(0,0,64,64),[Drawing.ColorTranslator]::FromHtml('#478cff'),[Drawing.ColorTranslator]::FromHtml('#326be6'),45.0)
+    $paper = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#ffffff'))
+    $gold = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#ffffff'),3.5)
+    $seam = [Drawing.Pen]::new([Drawing.ColorTranslator]::FromHtml('#8db5ff'),1.8)
+    $coral = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#387df3'))
+    $star = [Drawing.SolidBrush]::new([Drawing.ColorTranslator]::FromHtml('#b9d7ff'))
     $handle = New-RoundedPath 23 16 18 18 5
     $case = New-RoundedPath 13 26 40 26 7
     $clasp = New-RoundedPath 29 35 6 9 2

@@ -724,6 +724,34 @@ public partial class MainWindow : Window
                 }
                 if (frameReady != "true") { FailSmoke("Agent HTML animation preview did not load: " +
                     await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.agent-visual-preview iframe')?.contentDocument?.documentElement.outerHTML || 'no frame document'")); return; }
+                // Incoming tools and text must respect a user's reading position.
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const timeline = document.getElementById('agent-timeline');
+                      const spacer = document.createElement('div');
+                      spacer.id = 'scroll-regression-spacer'; spacer.style.minHeight = '1800px';
+                      timeline.append(spacer); timeline.scrollTop = 0;
+                    })()
+                    """);
+                PublishAgent("event", "滚动位置测试", new { type = "status" });
+                PublishAgent("stream", "流式更新一");
+                PublishAgent("stream", "流式更新二");
+                await Task.Delay(120);
+                if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "document.getElementById('agent-timeline').scrollTop < 1 && document.querySelector('.agent-stream p')?.textContent === '流式更新二'") != "true")
+                { FailSmoke("Agent incoming messages moved the user's reading position"); return; }
+                PublishAgent("event", "流式最终结果", new { type = "assistant" });
+                await Task.Delay(120);
+                if (await ShellView.CoreWebView2.ExecuteScriptAsync(
+                    "!document.querySelector('.agent-stream') && document.getElementById('agent-timeline').scrollTop < 1") != "true")
+                { FailSmoke("Agent final answer left a stale streaming draft or moved the scrollbar"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const spacer = document.getElementById('scroll-regression-spacer');
+                      while (spacer.nextElementSibling) spacer.nextElementSibling.remove();
+                      spacer.remove();
+                    })()
+                    """);
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                 {
                     await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.agent-timeline > :not(:last-child)').forEach(node=>node.style.display='none');document.querySelector('.agent-visual-preview iframe').style.height='160px';document.querySelector('.agent-composer').style.display='none';document.querySelector('.agent-timeline').scrollTop=0");
@@ -1229,26 +1257,26 @@ public partial class MainWindow : Window
     private void ApplyHostTheme(bool dark)
     {
         darkTaskTabs = dark;
-        Resources["ContextHoverBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#403554" : "#F5E5DD"));
-        Resources["ContextHoverTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#D8C9FF" : "#A94F33"));
+        Resources["ContextHoverBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#403554" : "#E8EFFF"));
+        Resources["ContextHoverTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#D8C9FF" : "#2A67D2"));
         Resources["ContextTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#F5F5F8" : "#171716"));
         UpdateTaskTabs();
         static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        Background = Brush(dark ? "#202126" : "#F5F5F3");
-        BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F5F5F3");
-        TitleBar.Background = Brush(dark ? "#17181C" : "#F5F5F3");
+        Background = Brush(dark ? "#202126" : "#F7F7FC");
+        BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
+        TitleBar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
         TitleName.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
         TitleStatus.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
-        var accent = Brush(dark ? "#7858EB" : "#D66B49");
+        var accent = Brush(dark ? "#4F8CF5" : "#387DF3");
         ToggleControlsButton.Background = Brush(dark ? "#24252C" : "#FFFFFF");
         ToggleControlsButton.Foreground = Brush(dark ? "#F5F5F8" : "#74716E");
         CourseRetryButton.Background = accent;
-        CourseOverlay.Background = Brush(dark ? "#202126" : "#F5F5F3");
+        CourseOverlay.Background = Brush(dark ? "#202126" : "#F7F7FC");
         CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
         CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F5F5F3");
+        TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F7F7FC");
         TaskLoadingTitle.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
         TaskLoadingDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
         UpdateDeveloperChrome();

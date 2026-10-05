@@ -30,7 +30,7 @@ public partial class MainWindow
                 VerticalOffset = args.Location.Y / VisualTreeHelper.GetDpi(view).DpiScaleY,
                 Background = Color(dark ? "#24252C" : "#FFFFFF"),
                 Foreground = Color(dark ? "#F5F5F8" : "#171716"),
-                BorderBrush = Color(dark ? "#454650" : "#E6E4E1"),
+                BorderBrush = Color(dark ? "#454650" : "#E7EBF4"),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(4),
                 MinWidth = 180,

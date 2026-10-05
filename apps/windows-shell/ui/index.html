@@ -10,15 +10,15 @@
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="theme.css">
   <link rel="stylesheet" href="workspace-redesign.css">
-  <link rel="stylesheet" href="motion.css">
   <link rel="stylesheet" href="focused-layout.css">
   <link rel="stylesheet" href="proxy.css">
   <link rel="stylesheet" href="visual-polish.css">
+  <link rel="stylesheet" href="dashboard.css">
+  <link rel="stylesheet" href="motion.css">
   <script defer src="vendor/katex/katex.min.js"></script>
   <script defer src="agent-markdown.js"></script>
   <script defer src="app.js"></script>
   <script defer src="proxy-ui.js"></script>
-  <script defer src="button-glow.js"></script>
 </head>
 <body>
   <div id="developer-toast" class="developer-toast" role="status" aria-live="polite" hidden><span class="developer-toast-dot"></span><span id="developer-toast-text"></span></div>
@@ -37,8 +37,8 @@
     <header class="command-bar"><div class="location"><strong id="location-name">首页</strong></div><span class="command-meta">FAX TOOLBOX / 工作区</span></header>
 
     <section id="view-home" class="view">
-      <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">WINDOWS PREVIEW</span></div>
-      <div class="hero"><div><span class="eyebrow">FAX TOOLBOX</span><h2>让每个工具，<br><span class="hero-accent">各司其职。</span></h2><p>所有工具与服务，从这里出发。</p><button id="open-tools-card" type="button">浏览工具　↗</button></div><div class="hero-art" aria-hidden="true"><img src="fax-mark.svg" alt=""></div></div>
+      <div class="topline"><span class="eyebrow">你的工作空间</span><span class="version">BETA 版</span></div>
+      <div class="hero"><div><span class="eyebrow">FAX TOOLBOX</span><h2>让工具协作，让灵感发生。</h2><p>对话、学习与网络，在一个工作空间里有序进行。</p><button id="open-tools-card" type="button">浏览工具　↗</button></div><div class="hero-art" aria-hidden="true"><img src="fax-mark.svg" alt=""></div></div>
       <div class="section-head"><div><span class="eyebrow">QUICK ACCESS</span><h2>常用模块</h2></div><button class="text-button" type="button" data-view="modules">查看全部模块 →</button></div>
       <div class="module-grid"><button class="module-card" type="button" data-open="ai"><span class="module-icon art-icon agent-icon"><img src="icon-agent.svg" alt="" aria-hidden="true"></span><span><strong>Agent</strong><small>项目任务 · 模块操作</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="course"><span class="module-icon art-icon course-icon"><img src="icon-course.svg" alt="" aria-hidden="true"></span><span><strong>学习通刷课</strong><small>课程工作台 · 手动登录后启动</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="homework"><span class="module-icon art-icon homework-icon"><img src="icon-homework.svg" alt="" aria-hidden="true"></span><span><strong>作业校对</strong><small>只读取题目 · 展示答案与解析</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="proxy"><span class="module-icon art-icon proxy-icon"><img src="icon-proxy.svg" alt="" aria-hidden="true"></span><span><strong>网络管家</strong><small>应用规则 · 代理切换</small></span><span class="arrow">↗</span></button><button class="module-card" type="button" data-open="demo" data-developer-tool hidden><span class="module-icon art-icon demo-icon"><img src="icon-demo.svg" alt="" aria-hidden="true"></span><span><strong>页面事件演示</strong><small>验证 WebView2 与 Rust 通信</small></span><span class="arrow">↗</span></button></div>
       <div class="section-head"><div><span class="eyebrow">OVERVIEW</span><h2>运行概览</h2></div></div>

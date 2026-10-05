@@ -201,20 +201,20 @@ public partial class MainWindow
             view.Selected = selected;
             view.Dark = darkTaskTabs;
             view.Open.Content = label;
-            view.Shell.Background = Color(selected ? darkTaskTabs ? "#7858EB" : "#F5E5DD" :
+            view.Shell.Background = Color(selected ? darkTaskTabs ? "#4F8CF5" : "#E8EFFF" :
                 darkTaskTabs ? "#24252C" : "#FFFFFF");
-            view.Shell.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
-            view.Open.Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#A94F33" :
+            view.Shell.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
+            view.Open.Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#2A67D2" :
                 darkTaskTabs ? "#F5F5F8" : "#171716");
             view.Close.Foreground = Color(selected && darkTaskTabs ? "#FFFFFF" :
                 darkTaskTabs ? "#A3A3AD" : "#74716E");
         }
         NewTaskTabButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
         NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
+        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
         BrowserBackButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
         BrowserBackButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E6E4E1");
+        BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
         BrowserReloadButton.Background = BrowserBackButton.Background;
         BrowserReloadButton.Foreground = BrowserBackButton.Foreground;
         BrowserReloadButton.BorderBrush = BrowserBackButton.BorderBrush;
@@ -242,7 +242,7 @@ public partial class MainWindow
         {
             Child = grid, Width = 164, Height = 37, Opacity = 1,
             RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1, 1),
-            CornerRadius = new CornerRadius(13, 13, 5, 5),
+            CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 5, 0), ClipToBounds = true
         };

@@ -2,8 +2,8 @@
    Keep large surfaces still: opacity and transform are the only animated
    properties on page transitions and newly inserted content. */
 :root {
-  --motion-quick: 140ms;
-  --motion-standard: 220ms;
+  --motion-quick: 300ms;
+  --motion-standard: 260ms;
   --motion-ease: cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -26,17 +26,18 @@ button:not(:disabled),
 .agent-session-row,
 .agent-attach {
   transition-duration: var(--motion-quick);
-  transition-timing-function: var(--motion-ease);
+  transition-timing-function: ease-in-out;
+  transition-property: background-color, color, border-color, box-shadow;
 }
-button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
+button:not(:disabled), button:not(:disabled):hover, button:not(:disabled):active { transform: none; }
 .sidebar .nav-item .nav-icon {
   transition: transform var(--motion-standard) var(--motion-ease);
 }
 .sidebar .nav-item.active .nav-icon { transform: scale(1.07); }
 .module-card {
-  transition-property: transform, border-color, background-color;
+  transition-property: border-color, background-color, box-shadow;
 }
-.module-card:active { transform: translate3d(0, -1px, 0) scale(.99); }
+.module-card:active { transform: none; box-shadow: inset 2px 2px 7px #6c80a015, inset -2px -2px 7px #ffffff80; }
 .module-card .module-icon {
   transition: transform var(--motion-standard) var(--motion-ease);
 }
@@ -44,11 +45,12 @@ button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
   transition-duration: var(--motion-standard);
   transition-timing-function: var(--motion-ease);
 }
-.nav-flyout button { transition-property: transform, background-color, color; }
+.nav-flyout button { transition-property: background-color, color; }
 @media (hover: hover) {
-  .module-card:hover { transform: translate3d(0, -3px, 0); }
-  .module-card:hover .module-icon { transform: scale(1.06); }
-  .nav-flyout button:hover { transform: translate3d(2px, 0, 0); }
+  .module-card:hover { transform: none; }
+  .module-card:hover .module-icon { transform: none; }
+  .module-card:hover .art-icon img, .library-card:hover .art-icon img { transform: scale(1.035); }
+  .nav-flyout button:hover { transform: none; }
 }
 .settings-menu button,
 .activity-filters button { transition-property: background-color, color, transform; }
@@ -69,6 +71,25 @@ button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
 }
 .toolbox-context-menu:not([hidden]) {
   animation: toolbox-panel-in 180ms var(--motion-ease) backwards;
+}
+.focus-panel:not([hidden]),
+#view-ai .agent-run-panel:not([hidden]),
+#view-ai .agent-plus-menu:not([hidden]),
+.network-confirm[open],
+.agent-scratch-dialog[open] {
+  animation: toolbox-panel-in var(--motion-standard) var(--motion-ease) backwards;
+}
+.network-confirm[open]::backdrop, .agent-scratch-dialog[open]::backdrop {
+  animation: toolbox-backdrop-in 160ms ease-out backwards;
+}
+/* Animate only the small disclosure body. Streaming text never re-enters. */
+@supports (interpolate-size: allow-keywords) {
+  .card.collapsible, .advanced, .agent-operation, .agent-reasoning { interpolate-size: allow-keywords; }
+  :is(.card.collapsible, .advanced, .agent-operation, .agent-reasoning)::details-content {
+    block-size: 0; opacity: 0; overflow: clip;
+    transition: block-size 240ms var(--motion-ease), opacity 180ms ease, content-visibility 240ms allow-discrete;
+  }
+  :is(.card.collapsible, .advanced, .agent-operation, .agent-reasoning)[open]::details-content { block-size: auto; opacity: 1; }
 }
 .developer-toast:not([hidden]) {
   animation: toolbox-toast-in 180ms var(--motion-ease) backwards;
@@ -104,6 +125,7 @@ button:not(:disabled):active { transform: translate3d(0, 0, 0) scale(.97); }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after, *::details-content { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .content .view.motion-enter:not([hidden]),
   .palette-backdrop:not([hidden]),
   .palette-backdrop:not([hidden]) .palette,

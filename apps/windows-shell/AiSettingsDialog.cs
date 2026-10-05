@@ -7,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 
 namespace FaxToolbox.Windows;
@@ -63,22 +64,26 @@ internal sealed class AiSettingsDialog : Window
         if (initialModelId is not null && AiProviderPresets.ModelsFor(selected.Id)
             .Any(option => option.Id == initialModelId)) selectedPresetModels[selected.Id] = initialModelId;
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
-        background = Brush(dark ? "#202126" : "#F5F5F3");
+        background = Brush(dark ? "#202126" : "#F7F7FC");
         surface = Brush(dark ? "#17181C" : "#FFFFFF");
         text = Brush(dark ? "#F5F5F8" : "#171716");
         subtle = Brush(dark ? "#A3A3AD" : "#74716E");
-        border = Brush(dark ? "#35363E" : "#E6E4E1");
-        accent = Brush(dark ? "#7858EB" : "#D66B49");
+        border = Brush(dark ? "#35363E" : "#E7EBF4");
+        accent = Brush(dark ? "#4F8CF5" : "#387DF3");
         Owner = owner; FontFamily = owner.FontFamily; Title = "配置 " + consumer.Name;
         Width = 620; Height = 625; MinWidth = 540; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.CanResize; ShowInTaskbar = false;
         WindowStyle = WindowStyle.None; AllowsTransparency = true;
         Background = Brushes.Transparent; Foreground = text;
+        Loaded += (_, _) => {
+            if (SystemParameters.MenuAnimation)
+                BeginAnimation(OpacityProperty, new DoubleAnimation(.7, 1, TimeSpan.FromMilliseconds(180)));
+        };
         KeyDown += (_, args) => { if (args.Key == Key.Escape) Close(); };
 
         var frame = new Border { Background = background, BorderBrush = border, BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(26), Margin = new Thickness(12),
+            CornerRadius = new CornerRadius(18), Margin = new Thickness(12),
             Effect = new DropShadowEffect { BlurRadius = 24, ShadowDepth = 7, Opacity = dark ? .45 : .18 } };
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -229,7 +234,7 @@ internal sealed class AiSettingsDialog : Window
     private Button PlainButton(string value)
     {
         var frame = new FrameworkElementFactory(typeof(Border));
-        frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(20));
+        frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(12));
         frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
         frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
         frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
@@ -295,7 +300,7 @@ internal sealed class AiSettingsDialog : Window
             var active = id == preset.Id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
+            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
         modelFields.Visibility = preset.Id is "custom" or "ollama" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
@@ -346,7 +351,7 @@ internal sealed class AiSettingsDialog : Window
         foreach (var (id, button) in categoryButtons)
         {
             var active = id == categoryId;
-            button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
+            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
             button.BorderBrush = active ? accent : border;
             button.Foreground = active ? accent : text;
         }
@@ -362,7 +367,7 @@ internal sealed class AiSettingsDialog : Window
             var active = optionId == id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
+            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
         }
         RefreshPromptFields();
     }
