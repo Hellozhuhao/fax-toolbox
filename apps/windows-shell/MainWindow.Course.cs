@@ -711,7 +711,13 @@ public partial class MainWindow
               const visible = [...document.querySelectorAll('.content > .view')].filter(view => getComputedStyle(view).display !== 'none');
               const expected = 'view-' + document.body.dataset.view;
               const view = document.getElementById(expected);
-              return visible.length === 1 && visible[0] === view && document.getElementById('view-home').hidden &&
+              const theme = document.documentElement.dataset.theme;
+              document.documentElement.dataset.theme = 'dark';
+              const rail = document.querySelector('.sidebar').getBoundingClientRect();
+              const content = document.querySelector('.content').getBoundingClientRect();
+              const darkFits = rail.right <= content.left + 1 && document.documentElement.scrollWidth <= innerWidth;
+              document.documentElement.dataset.theme = theme;
+              return darkFits && visible.length === 1 && visible[0] === view && document.getElementById('view-home').hidden &&
                 document.getElementById('view-home').getBoundingClientRect().height === 0 &&
                 view.getBoundingClientRect().width <= innerWidth && !!view.querySelector('.study-layout');
             })()

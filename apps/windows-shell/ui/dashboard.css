@@ -184,21 +184,21 @@ button:not(:disabled):not([aria-disabled="true"]):hover,
 :root[data-theme="dark"] button:not(:disabled):not([aria-disabled="true"]):hover { background-image: none; }
 @media (max-width: 1000px) {
   .app { grid-template-columns: 76px minmax(0, 1fr); }
-  .sidebar { width: 76px; padding: 23px 10px 17px; }
+  .sidebar, :root[data-theme="dark"] .sidebar { width: 76px; padding: 23px 10px 17px; }
   .sidebar .brand { justify-content: center; margin-bottom: 29px; }
   .sidebar .brand > div:last-child, .sidebar .nav-label, .sidebar .connection { display: none; }
-  .sidebar .nav-item { flex-direction: column; gap: 5px; min-height: 60px; padding: 9px 3px; font-size: 10px; }
+  .sidebar .nav-item, :root[data-theme="dark"] .sidebar .nav-item { flex-direction: column; gap: 5px; min-height: 60px; padding: 9px 3px; font-size: 10px; }
   .sidebar .sidebar-bottom { position: static; }
   .content .view { padding: 23px; }
-  .command-bar { padding: 0 23px; }
+  .command-bar, :root[data-theme="dark"] .command-bar { padding: 0 23px; }
 }
 @media (max-width: 680px) {
   .app, body[data-view="course"] .app, body[data-view="homework"] .app { display: grid; grid-template-columns: 54px minmax(0, 1fr); padding: 0; gap: 0; }
-  .sidebar, body[data-view="course"] .sidebar, body[data-view="homework"] .sidebar { width: 54px; height: 100vh; top: 0; padding: 14px 5px; border-radius: 0; }
+  .sidebar, :root[data-theme="dark"] .sidebar, body[data-view="course"] .sidebar, body[data-view="homework"] .sidebar { width: 54px; height: 100vh; top: 0; padding: 14px 5px; border-radius: 0; }
   .sidebar .brand-mark, body[data-view="course"] .brand-mark, body[data-view="homework"] .brand-mark { width: 32px; height: 32px; }
-  .sidebar .nav-item { min-height: 54px; font-size: 9px; }
+  .sidebar .nav-item, :root[data-theme="dark"] .sidebar .nav-item { min-height: 54px; font-size: 9px; }
   .sidebar .nav-item span:last-child { font-size: 9px; }
-  .command-bar, body[data-view="course"] .command-bar, body[data-view="homework"] .command-bar { min-height: 46px; height: 46px; padding: 0 16px; }
+  .command-bar, :root[data-theme="dark"] .command-bar, body[data-view="course"] .command-bar, body[data-view="homework"] .command-bar { min-height: 46px; height: 46px; padding: 0 16px; }
   .command-meta, .version { display: none; }
   .content .view { padding: 17px 16px; }
   .hero { min-height: 196px; padding: 24px; }
