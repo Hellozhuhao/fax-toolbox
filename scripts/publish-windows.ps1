@@ -13,8 +13,19 @@ $env:NUGET_PACKAGES = Join-Path $root '.cache\nuget-packages'
 if ($LASTEXITCODE -ne 0) { throw 'Windows development build failed' }
 
 $backend = Join-Path $root 'apps\rust-backend'
-& cargo build --release --locked --manifest-path (Join-Path $backend 'Cargo.toml')
-if ($LASTEXITCODE -ne 0) { throw 'Rust release build failed' }
+# Bundle the MSVC CRT into the backend so clean Windows installations do not
+# need a separate machine-wide Visual C++ redistributable / elevation prompt.
+$previousRustFlags = $env:RUSTFLAGS
+try {
+    $env:RUSTFLAGS = ($previousRustFlags + ' -C target-feature=+crt-static').Trim()
+    & cargo build --release --locked --target x86_64-pc-windows-msvc --manifest-path (Join-Path $backend 'Cargo.toml')
+    if ($LASTEXITCODE -ne 0) { throw 'Rust release build failed' }
+} finally { $env:RUSTFLAGS = $previousRustFlags }
+$releaseBackend = Join-Path $backend 'target\x86_64-pc-windows-msvc\release\toolbox-backend.exe'
+$imports = & dumpbin.exe /dependents $releaseBackend
+if ($LASTEXITCODE -ne 0 -or ($imports -join "`n") -match '(?i)(vcruntime|msvcp|msvcr)\d+[^\r\n]*\.dll') {
+    throw 'Release backend still requires an external Visual C++ runtime'
+}
 
 $project = Join-Path $root 'apps\windows-shell\Toolbox.Windows.csproj'
 $feed = Join-Path $root '.cache\nuget-feed'
@@ -63,7 +74,7 @@ foreach ($name in @('module.json', 'catalog-reader.js', 'homework-reader.js', 'p
 }
 $backendDestination = Join-Path $dist 'backend'
 New-Item -ItemType Directory -Path $backendDestination -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $backend 'target\release\toolbox-backend.exe') -Destination (Join-Path $backendDestination 'toolbox-backend.exe') -Force
+Copy-Item -LiteralPath $releaseBackend -Destination (Join-Path $backendDestination 'toolbox-backend.exe') -Force
 
 $executable = Join-Path $dist 'FaxToolbox.Windows.exe'
 if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Published EXE is missing' }

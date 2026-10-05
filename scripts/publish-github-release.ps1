@@ -15,11 +15,12 @@ function Invoke-JsonApi([string]$Method,[string]$Uri,$Body) {
     Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json)) -TimeoutSec 60
 }
 try {
-    $existing=@(Invoke-RestMethod -Uri ($api+'/releases') -Headers $headers)
+    $existing=Invoke-RestMethod -Uri ($api+'/releases') -Headers $headers
     if ($Mode -eq 'Inspect') { $existing | Select-Object id,tag_name,name,draft,prerelease,html_url; return }
     if (-not $TargetCommit -or $TargetCommit -notmatch '^[a-f0-9]{40}$') { throw 'Pass the verified main commit SHA as -TargetCommit' }
     $main=Invoke-RestMethod -Uri ($api+'/git/ref/heads/main') -Headers $headers
     if ($main.object.sha -ne $TargetCommit) { throw 'Release target does not match GitHub main' }
+    Write-Output 'Verified GitHub main commit.'
     $tag='v'+$version.version
     $assetNames=@(('FaxToolbox-Setup-'+$tag+'-win-x64.exe'),('FaxToolbox-Windows-'+$tag+'-win-x64.zip'),'SHA256SUMS.txt')
     foreach ($name in $assetNames) { if (-not (Test-Path -LiteralPath (Join-Path $root ('dist\'+$name)) -PathType Leaf)) { throw "Release asset missing: $name" } }
@@ -27,11 +28,14 @@ try {
     $release=$existing | Where-Object { $_.tag_name -eq $tag } | Select-Object -First 1
     if ($release -and -not $release.draft) { throw 'This version is already published; do not replace public assets' }
     if (-not $release) { $release=Invoke-JsonApi 'POST' ($api+'/releases') @{tag_name=$tag;target_commitish=$TargetCommit;name=$version.name;body=$notes;draft=$true;prerelease=$true} }
+    else { $release=Invoke-JsonApi 'PATCH' ($api+'/releases/'+$release.id) @{target_commitish=$TargetCommit;name=$version.name;body=$notes;draft=$true;prerelease=$true} }
+    Write-Output ('Prepared draft release: '+$release.id)
     foreach ($name in $assetNames) {
         $file=Join-Path $root ('dist\'+$name)
         $prior=@($release.assets | Where-Object { $_.name -eq $name })
         foreach ($asset in $prior) { Invoke-RestMethod -Method Delete -Uri ($api+'/releases/assets/'+$asset.id) -Headers $headers | Out-Null }
         $uri='https://uploads.github.com/repos/'+$repo+'/releases/'+$release.id+'/assets?name='+[Uri]::EscapeDataString($name)
+        Write-Output ('Uploading: '+$name)
         $uploaded=Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType 'application/octet-stream' -InFile $file -TimeoutSec 900
         if ($uploaded.size -ne (Get-Item -LiteralPath $file).Length -or $uploaded.state -ne 'uploaded') { throw "Upload incomplete: $name" }
         $sha=(Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -40,6 +44,8 @@ try {
     }
     $verified=Invoke-RestMethod -Uri ($api+'/releases/'+$release.id) -Headers $headers
     if (@($verified.assets | Where-Object { $_.name -in $assetNames }).Count -ne $assetNames.Count) { throw 'Release is missing uploaded assets' }
+    $currentMain=Invoke-RestMethod -Uri ($api+'/git/ref/heads/main') -Headers $headers
+    if ($currentMain.object.sha -ne $TargetCommit) { throw 'main changed during upload; keep this release as a draft' }
     $published=Invoke-JsonApi 'PATCH' ($api+'/releases/'+$release.id) @{draft=$false;prerelease=$true;make_latest='false'}
     $published | Select-Object tag_name,name,draft,prerelease,html_url
 } finally { $headers.Clear(); $credentials.Clear(); $credentialLines=$null }
