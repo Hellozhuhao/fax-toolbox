@@ -987,11 +987,18 @@
       $('agent-prompt').value = draft?.prompt || '';
       agentImages = draft?.images || []; agentFiles = draft?.files || []; renderAgentImages();
       renderAgentUsage(data);
+      $('agent-continue').hidden = !data.needsContinuation;
+      $('agent-continue').disabled = agentBusy;
+    }
+    if (message.kind === 'agent.continuation') {
+      $('agent-continue').hidden = !message.extra?.available;
+      $('agent-continue').disabled = agentBusy;
     }
     if (message.kind === 'agent.state') {
       agentBusy = !!message.extra?.busy; $('agent-state').textContent = agentBusy ? (message.detail || '正在处理') : '';
       $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
       $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
+      $('agent-continue').disabled = agentBusy;
       if (!agentBusy) $('agent-token-rate').hidden = true;
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
       for (const button of document.querySelectorAll('.agent-session-row button')) button.disabled = agentBusy;
@@ -1383,6 +1390,7 @@
     catch (error) { $('agent-state').textContent = error.message || '无法读取拖入内容'; }
   });
   $('agent-clear').addEventListener('click', () => send('agent.clear'));
+  $('agent-continue').addEventListener('click', () => { if (!agentBusy && !agentPreparingImages) send('agent.continue'); });
   $('agent-cancel').addEventListener('click', () => send('agent.cancel'));
   $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });

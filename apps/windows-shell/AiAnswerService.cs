@@ -27,7 +27,7 @@ internal sealed record AiUsage(long InputTokens, long OutputTokens, long? Cached
 
 internal sealed record AiFunctionCall(string Name, JsonElement Arguments, string? Id = null);
 internal sealed record AiCompletionResult(string Text, AiUsage? Usage, string? Reasoning = null,
-    IReadOnlyList<AiFunctionCall>? ToolCalls = null);
+    IReadOnlyList<AiFunctionCall>? ToolCalls = null, string? FinishReason = null);
 internal sealed record AiGenerationProgress(long EstimatedOutputTokens, double TokensPerSecond,
     bool Reasoning, string? PartialText = null);
 
@@ -302,14 +302,9 @@ internal static class AiAnswerService
             var level = reasoningEffort is "none" or "low" or "high" or "max" ? reasoningEffort : "low";
             body["thinking"] = new { type = level == "none" ? "disabled" : "enabled" };
             if (level != "none") body["reasoning_effort"] = level;
-            body["max_tokens"] = structured ? 8192 : level switch
-            {
-                "none" => 3072, "high" or "max" => 8192, _ => 4096
-            };
         }
         if (stream && provider is "deepseek" or "qwen" or "openai" or "siliconflow")
             body["stream_options"] = new { include_usage = true };
-        if (provider == "notrack") body["max_tokens"] = 8192;
         if (provider == "ollama" && structured)
             body["response_format"] = new { type = "json_object" };
         if (structured && provider == "deepseek")
@@ -377,13 +372,17 @@ internal static class AiAnswerService
         }
         await using var stream = await response.Content.ReadAsStreamAsync(timeoutSource.Token).ConfigureAwait(false);
         if (streaming)
+        {
+            // The timeout protects connection setup; active generation has an idle timeout only.
+            timeoutSource.CancelAfter(System.Threading.Timeout.InfiniteTimeSpan);
             return await ReadCompletionStreamAsync(stream, progress!, timeoutSource.Token).ConfigureAwait(false);
+        }
         using var buffer = new MemoryStream();
         var block = new byte[8192];
         int read;
         while ((read = await stream.ReadAsync(block, timeoutSource.Token).ConfigureAwait(false)) > 0)
         {
-            if (buffer.Length + read > 256 * 1024)
+            if (structured && buffer.Length + read > 256 * 1024)
                 throw new InvalidDataException("AI 响应过长，已停止答题");
             buffer.Write(block, 0, read);
         }
@@ -397,12 +396,18 @@ internal static class AiAnswerService
         var content = message.TryGetProperty("content", out var answerContent) &&
             answerContent.ValueKind == JsonValueKind.String ? answerContent.GetString() : null;
         var toolCalls = ParseToolCalls(message);
-        if (choices[0].TryGetProperty("finish_reason", out var finishReason) &&
-            finishReason.ValueKind == JsonValueKind.String && finishReason.GetString() == "length")
-            throw new InvalidDataException("模型达到本次输出上限，已停止；请缩小任务或降低思考档位。");
-        if (string.IsNullOrWhiteSpace(content) && toolCalls.Count == 0)
+        var completionReason = choices[0].TryGetProperty("finish_reason", out var finishReason) &&
+            finishReason.ValueKind == JsonValueKind.String ? finishReason.GetString() : null;
+        if (completionReason == "length" && toolCalls.Count > 0)
+            throw new InvalidDataException("服务商截断了工具调用，未执行不完整的操作。");
+        if (structured && completionReason == "length")
+            throw new InvalidDataException("服务商返回的 JSON 未完成，未执行操作；请重新生成完整结果。");
+        if (string.IsNullOrWhiteSpace(content) && toolCalls.Count == 0 && completionReason != "length")
             throw new InvalidDataException("AI 未返回答案，请人工检查");
-        return new AiCompletionResult(content ?? "", ParseUsage(result.RootElement), ParseReasoning(message), toolCalls);
+        var reasoning = ParseReasoning(message);
+        if (!structured && (RepeatedTail(new StringBuilder(content)) || RepeatedTail(new StringBuilder(reasoning))))
+            throw new InvalidDataException("模型连续重复生成且没有新进展，已熔断本次请求。");
+        return new AiCompletionResult(content ?? "", ParseUsage(result.RootElement), reasoning, toolCalls, completionReason);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSource.IsCancellationRequested)
         {
@@ -438,14 +443,14 @@ internal static class AiAnswerService
         var lastReport = 0L;
         var lastTokens = 0L;
         var outputBytes = 0L;
-        var reasoningBytes = 0L;
         var lastRepetitionCheck = 0;
         var toolNames = new Dictionary<int, StringBuilder>();
         var toolArguments = new Dictionary<int, StringBuilder>();
         var toolIds = new Dictionary<int, StringBuilder>();
         AiUsage? usage = null;
         var finished = false;
-        while (await reader.ReadLineAsync(cancellation).ConfigureAwait(false) is { } line)
+        string? completionReason = null;
+        while (await reader.ReadLineAsync(cancellation).AsTask().WaitAsync(TimeSpan.FromSeconds(90), cancellation).ConfigureAwait(false) is { } line)
         {
             if (!line.StartsWith("data: ", StringComparison.Ordinal)) continue;
             var data = line[6..];
@@ -454,12 +459,10 @@ internal static class AiAnswerService
             var root = chunk.RootElement;
             usage = ParseUsage(root) ?? usage;
             if (!root.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array ||
-                choices.GetArrayLength() == 0 || choices[0].ValueKind != JsonValueKind.Object ||
-                !choices[0].TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
-                continue;
+                choices.GetArrayLength() == 0 || choices[0].ValueKind != JsonValueKind.Object) continue;
             if (choices[0].TryGetProperty("finish_reason", out var finishReason) &&
-                finishReason.ValueKind == JsonValueKind.String && finishReason.GetString() == "length")
-                throw new InvalidDataException("模型达到本次输出上限，已停止；请缩小任务或降低思考档位。");
+                finishReason.ValueKind == JsonValueKind.String) completionReason = finishReason.GetString();
+            if (!choices[0].TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object) continue;
             if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
             {
                 var value = content.GetString() ?? "";
@@ -473,7 +476,6 @@ internal static class AiAnswerService
                 reasoning.Append(value);
                 var bytes = Encoding.UTF8.GetByteCount(value);
                 outputBytes += bytes;
-                reasoningBytes += bytes;
             }
             if (delta.TryGetProperty("tool_calls", out var calls) && calls.ValueKind == JsonValueKind.Array)
                 foreach (var call in calls.EnumerateArray())
@@ -501,12 +503,6 @@ internal static class AiAnswerService
                         outputBytes += Encoding.UTF8.GetByteCount(value);
                     }
                 }
-            if (answer.Length + reasoning.Length > 96_000)
-                throw new InvalidDataException("模型输出异常增长，已停止本次请求。");
-            if (outputBytes > 24_000)
-                throw new InvalidDataException("模型本次生成量异常，已熔断；实际用量以服务商账单为准。");
-            if (reasoningBytes > 8_000)
-                throw new InvalidDataException("模型思考过长，已熔断本次请求。请改用快速或标准档。");
             if (answer.Length + reasoning.Length - lastRepetitionCheck >= 512 &&
                 (RepeatedTail(answer) || RepeatedTail(reasoning)))
                 throw new InvalidDataException("模型重复生成相同内容，已熔断本次请求；实际用量以服务商账单为准。");
@@ -522,6 +518,8 @@ internal static class AiAnswerService
             lastReport = now;
         }
         if (!finished) throw new InvalidDataException("模型输出中断，已停止本次请求。");
+        if (RepeatedTail(answer) || RepeatedTail(reasoning))
+            throw new InvalidDataException("模型连续重复生成且没有新进展，已熔断本次请求。");
         var toolCalls = new List<AiFunctionCall>();
         foreach (var index in toolNames.Keys.Order())
         {
@@ -534,25 +532,31 @@ internal static class AiAnswerService
             toolCalls.Add(new AiFunctionCall(name, parsed.RootElement.Clone(),
                 toolIds.TryGetValue(index, out var id) ? id.ToString() : null));
         }
-        if (answer.Length == 0 && toolCalls.Count == 0)
+        if (completionReason == "length" && toolCalls.Count > 0)
+            throw new InvalidDataException("服务商截断了工具调用，未执行不完整的操作。");
+        if (answer.Length == 0 && toolCalls.Count == 0 && completionReason != "length")
             throw new InvalidDataException("模型只返回了思考内容，已停止本次请求。");
-        progress(new AiGenerationProgress(usage?.OutputTokens ?? lastTokens,
-            (usage?.OutputTokens ?? lastTokens) / Math.Max(0.1, watch.Elapsed.TotalSeconds), false,
+        progress(new AiGenerationProgress(usage?.OutputTokens ?? outputBytes / 3,
+            (usage?.OutputTokens ?? outputBytes / 3) / Math.Max(0.1, watch.Elapsed.TotalSeconds), false,
             answer.ToString()));
-        return new AiCompletionResult(answer.ToString(), usage, reasoning.ToString(), toolCalls);
+        return new AiCompletionResult(answer.ToString(), usage, reasoning.ToString(), toolCalls, completionReason);
     }
 
-    private static bool RepeatedTail(StringBuilder builder)
+    internal static bool RepeatedTail(StringBuilder builder)
     {
         if (builder.Length < 900) return false;
-        var recent = builder.ToString(Math.Max(0, builder.Length - 3000), Math.Min(3000, builder.Length));
+        var recent = builder.ToString(Math.Max(0, builder.Length - 8192), Math.Min(8192, builder.Length));
         recent = Regex.Replace(recent.ToLowerInvariant(), @"[^\p{L}\p{N}]+", "");
-        if (recent.Length < 240) return false;
-        var suffix = recent[^80..];
-        var first = recent.IndexOf(suffix, StringComparison.Ordinal);
-        if (first < 0 || first >= recent.Length - 160) return false;
-        var second = recent.IndexOf(suffix, first + suffix.Length, StringComparison.Ordinal);
-        return second >= 0 && second < recent.Length - 80;
+        // Require four adjacent identical blocks totalling at least 768 letters/digits.
+        // Common quotations or table cells separated by new information are not loops.
+        for (var period = 192; period <= Math.Min(2048, recent.Length / 4); period++)
+        {
+            var tail = recent.AsSpan(recent.Length - period, period);
+            if (tail.SequenceEqual(recent.AsSpan(recent.Length - 2 * period, period)) &&
+                tail.SequenceEqual(recent.AsSpan(recent.Length - 3 * period, period)) &&
+                tail.SequenceEqual(recent.AsSpan(recent.Length - 4 * period, period))) return true;
+        }
+        return false;
     }
 
     internal static IReadOnlyList<AiFunctionCall> ParseToolCalls(JsonElement message)

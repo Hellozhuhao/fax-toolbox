@@ -7,6 +7,62 @@ namespace FaxToolbox.Windows;
 
 public partial class MainWindow
 {
+    private async Task VerifyAgentContinuationUiAsync()
+    {
+        // No provider calls in this test: the host rejects a stale continuation button.
+        currentAgentSession.NeedsContinuation = false;
+        var eventsBefore = currentAgentSession.Events.ToArray();
+        var received = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        EventHandler<Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs> observe = (_, args) =>
+        {
+            using var request = JsonDocument.Parse(args.TryGetWebMessageAsString());
+            if (request.RootElement.GetProperty("command").GetString() == "agent.continue") received.TrySetResult(true);
+        };
+        ShellView.CoreWebView2.WebMessageReceived += observe;
+        try
+        {
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-prompt').value='待发送草稿'");
+            PublishAgent("continuation", extra: new { available = true });
+            await Task.Delay(100);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                (() => {
+                  const button = document.getElementById('agent-continue');
+                  if (button.hidden || button.disabled) return false;
+                  button.click(); return document.getElementById('agent-prompt').value === '待发送草稿';
+                })()
+                """) != "true") throw new InvalidDataException("Manual continuation was missing or discarded the composer draft.");
+            await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            if (agentCancellation is not null) throw new InvalidDataException("A stale continuation initiated a model request.");
+            PublishAgent("state", "处理中", new { busy = true });
+            await Task.Delay(100);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-continue').disabled") != "true")
+                throw new InvalidDataException("Continuation allowed overlapping model requests.");
+            PublishAgent("state", "", new { busy = false });
+            currentAgentSession.NeedsContinuation = true;
+            PublishAgentSessions();
+            await Task.Delay(100);
+            if (await ShellView.CoreWebView2.ExecuteScriptAsync("!document.getElementById('agent-continue').hidden") != "true")
+                throw new InvalidDataException("Restored conversation lost its continuation state.");
+            var longReply = string.Join("\n", Enumerable.Range(0, 800).Select(index => $"正常长回答的第 {index} 行，保留完整内容。"));
+            PublishAgent("event", longReply, new { type = "assistant" });
+            if (currentAgentSession.Events.Last().Text != longReply)
+                throw new InvalidDataException("A long answer was truncated in persisted conversation events.");
+            Trace("PASS long reply persistence and manual continuation UI (no automatic provider calls)");
+        }
+        finally
+        {
+            ShellView.CoreWebView2.WebMessageReceived -= observe;
+            currentAgentSession.NeedsContinuation = false;
+            currentAgentSession.Events.Clear();
+            currentAgentSession.Events.AddRange(eventsBefore);
+            PersistAgentSessions();
+            PublishAgentSessions();
+            PublishAgent("continuation", extra: new { available = false });
+            PublishAgent("state", "", new { busy = false });
+            await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-prompt').value=''");
+        }
+    }
+
     private async Task VerifyAgentPerformanceAsync()
     {
         if (ModuleView.CoreWebView2 is not null || CourseView.CoreWebView2 is not null)

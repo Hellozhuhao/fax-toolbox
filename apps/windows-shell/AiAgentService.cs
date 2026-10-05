@@ -32,7 +32,8 @@ internal static class AiAgentService
         AiConsumerRegistry.Require(consumer);
         using var client = new ToolboxChatClient(settings, timeout, images, structured, reasoningEffort, progress);
         var content = await RunWithClientAsync(consumer, client, instructions, prompt, cancellation);
-        return new AiCompletionResult(content, client.LastUsage, client.LastReasoning);
+        return client.LastCompletion is { } completion ? completion with { Text = content } :
+            new AiCompletionResult(content, client.LastUsage, client.LastReasoning);
     }
 
     internal static async Task<string> RunWithClientAsync(string consumer, IChatClient client,
@@ -63,7 +64,7 @@ internal static class AiAgentService
         Func<string, JsonElement, CancellationToken, Task<string>> invoke, CancellationToken cancellation)
     {
         var calls = 0;
-        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var recentResults = new List<string>();
         Exception? failure = null;
         async Task<string> GuardedInvoke(string name, JsonElement arguments, CancellationToken token)
         {
@@ -75,9 +76,19 @@ internal static class AiAgentService
                 var canonical = JsonSerializer.Serialize(arguments.EnumerateObject()
                     .OrderBy(property => property.Name, StringComparer.Ordinal)
                     .ToDictionary(property => property.Name, property => property.Value));
-                if (!seen.Add(name + "\n" + canonical))
-                    throw new InvalidDataException("模型重复调用相同工具，已熔断本轮任务。");
-                return await invoke(name, arguments, token);
+                var result = await invoke(name, arguments, token);
+                var fingerprint = name + "\n" + canonical + "\n" + Convert.ToHexString(
+                    System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(result)));
+                recentResults.Add(fingerprint);
+                if (recentResults.Count > 16) recentResults.RemoveAt(0);
+                for (var period = 1; period <= recentResults.Count / 4; period++)
+                {
+                    var start = recentResults.Count - period * 4;
+                    if (Enumerable.Range(start + period, period * 3).All(index =>
+                        recentResults[index] == recentResults[start + (index - start) % period]))
+                        throw new InvalidDataException("模型连续重复调用工具且结果没有变化，已熔断本轮任务。");
+                }
+                return result;
             }
             catch (Exception error) { failure = error; throw; }
         }
@@ -154,10 +165,10 @@ internal static class AiAgentService
         Action<AiGenerationProgress>? progress,
         Action<AiCompletionResult, DateTimeOffset, int>? observeResponse = null) : IChatClient
     {
+        public AiCompletionResult? LastCompletion { get; private set; }
         public AiUsage? LastUsage { get; private set; }
         public string? LastReasoning { get; private set; }
         private int requests;
-        private long outputTokens;
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
 
@@ -188,13 +199,13 @@ internal static class AiAgentService
                 tools, streamProgress is null ? progress : update => {
                     progress?.Invoke(update); streamProgress(update);
                 }, BuildConversation(input, options?.Instructions, images));
+            LastCompletion = result;
             LastUsage = result.Usage;
             LastReasoning = result.Reasoning;
             observeResponse?.Invoke(result, requestUtc, requests);
-            outputTokens += result.Usage?.OutputTokens ?? (long)Math.Ceiling(
-                Encoding.UTF8.GetByteCount(result.Text + result.Reasoning) / 3d);
-            if (outputTokens > 12_000) throw new InvalidDataException("本轮输出已超过 12,000 token，异常消耗熔断。");
-            var answer = new ChatMessage(ChatRole.Assistant, result.Text);
+            var displayText = result.FinishReason == "length" && string.IsNullOrWhiteSpace(result.Text) ?
+                "本次响应在思考阶段被服务商截断。点击“继续生成”接着回答。" : result.Text;
+            var answer = new ChatMessage(ChatRole.Assistant, displayText);
             if (!string.IsNullOrEmpty(result.Reasoning))
                 answer.AdditionalProperties = new() { ["reasoning_content"] = result.Reasoning };
             foreach (var call in result.ToolCalls ?? [])

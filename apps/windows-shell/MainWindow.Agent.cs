@@ -27,6 +27,7 @@ public partial class MainWindow
         public bool Archived { get; set; }
         public string Mode { get; set; } = "chat";
         public string Effort { get; set; } = "normal";
+        public bool NeedsContinuation { get; set; }
         public string Background { get; set; } = "";
         public string MemoryPool { get; set; } = "";
         public AgentSession Snapshot()
@@ -134,6 +135,10 @@ public partial class MainWindow
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException or
                 System.Security.Cryptography.CryptographicException or FormatException)
             { Trace("Agent sessions could not be restored: " + error.Message); }
+            foreach (var session in agentSessions)
+                if (session.Events.LastOrDefault() is { Type: "error" } last &&
+                    last.Text.StartsWith("模型达到本次输出上限", StringComparison.Ordinal))
+                    session.NeedsContinuation = true;
             if (agentSessions.Count == 0) agentSessions.Add(new AgentSession());
             currentAgentSession = agentSessions.Where(item => !item.Archived).OrderByDescending(item => item.UpdatedAt).FirstOrDefault() ?? agentSessions.OrderByDescending(item => item.UpdatedAt).First();
             SharedAgentSessions[path] = agentSessions;
@@ -162,6 +167,7 @@ public partial class MainWindow
                 .Select(item => new { type = item.Type, text = item.Text }).ToArray(),
             mode = currentAgentSession.Mode, effort = currentAgentSession.Effort,
             background = currentAgentSession.Background, memory = currentAgentSession.MemoryPool,
+            needsContinuation = currentAgentSession.NeedsContinuation,
             archived = currentAgentSession.MemoryCursor,
             input = agentInputTokens, output = agentOutputTokens,
             cached = agentCacheKnown ? agentCachedTokens : (long?)null,
@@ -430,7 +436,8 @@ public partial class MainWindow
         {
             var type = extra is null ? "status" : JsonSerializer.SerializeToElement(extra)
                 .TryGetProperty("type", out var value) ? value.GetString() ?? "status" : "status";
-            currentAgentSession.Events.Add(new AgentTimelineEntry(type, detail.Length > 12000 ? detail[..12000] : detail));
+            currentAgentSession.Events.Add(new AgentTimelineEntry(type, type is "assistant" or "reasoning" ? detail :
+                detail.Length > 12000 ? detail[..12000] : detail));
             if (currentAgentSession.Events.Count > 200) currentAgentSession.Events.RemoveAt(0);
             currentAgentSession.UpdatedAt = DateTimeOffset.UtcNow;
             PersistAgentSessions();
@@ -469,6 +476,17 @@ public partial class MainWindow
         if (message.TryGetProperty("approvalId", out var id) &&
             id.GetString() == agentApprovalId)
             agentApproval?.TrySetResult(approved);
+    }
+
+    private async Task ContinueAgentAsync()
+    {
+        if (!currentAgentSession.NeedsContinuation || agentCancellation is not null) return;
+        using var request = JsonSerializer.SerializeToDocument(new
+        {
+            prompt = "继续上一条未完成的回答，从断点接着写，不重复已输出的内容。",
+            continuing = true
+        });
+        await SendAgentAsync(request.RootElement);
     }
 
     private async Task SendAgentAsync(JsonElement message)
@@ -512,8 +530,12 @@ public partial class MainWindow
         var displayPrompt = (planOnly ? "[计划模式] " : "") + prompt + (images.Count > 0 ? $"\n附图 {images.Count} 张" : "") +
             (files.Count > 0 ? "\n附件：" + string.Join("、", files.Select(file => file.Name)) : "");
         var modelPrompt = prompt + fileText;
+        var continuing = message.TryGetProperty("continuing", out var continueValue) &&
+            continueValue.ValueKind == JsonValueKind.True && currentAgentSession.NeedsContinuation;
         var cancellation = new CancellationTokenSource();
         agentCancellation = cancellation;
+        currentAgentSession.NeedsContinuation = false;
+        PublishAgent("continuation", extra: new { available = false });
         if (currentAgentSession.Title == "新任务") currentAgentSession.Title = prompt[..Math.Min(28, prompt.Length)];
         currentAgentSession.UpdatedAt = DateTimeOffset.UtcNow;
         PersistAgentSessions();
@@ -523,7 +545,7 @@ public partial class MainWindow
         try
         {
             var answer = await aiRuntime!.RunAsync("agent", "chat", cancellation.Token,
-                () => RunAgentTurnAsync(settings, modelPrompt, images, cancellation.Token, planOnly));
+                () => RunAgentTurnAsync(settings, modelPrompt, images, cancellation.Token, planOnly, continuing));
             agentHistory.Add(new AgentHistoryEntry("Agent", answer));
             PublishAgent("event", answer, new { type = "assistant" });
             PublishDiagnostic("AI Agent", "完成任务", answer.Length > 180 ? answer[..180] : answer);
@@ -647,7 +669,7 @@ public partial class MainWindow
     }
 
     private async Task<string> RunAgentTurnAsync(AiSettings settings, string prompt,
-        IReadOnlyList<AiImageInput> images, CancellationToken cancellation, bool planOnly = false)
+        IReadOnlyList<AiImageInput> images, CancellationToken cancellation, bool planOnly = false, bool continuing = false)
     {
         var mode = planOnly ? "chat" : currentAgentSession.Mode == "code" ? "code" : "chat";
         var effort = currentAgentSession.Effort is "quick" or "deep" ? currentAgentSession.Effort : "normal";
@@ -670,7 +692,7 @@ public partial class MainWindow
             (mode == "code" && agentProjectRoot is not null ? "项目文件夹：已选择（路径由工具处理）\n" : "");
         if (local && currentRequest.Length > 5200)
             throw new InvalidDataException("这条消息太长，请分段发送。");
-        var reasoningEffort = AgentPromptCatalog.ReasoningEffort(settings, effort);
+        var reasoningEffort = continuing ? "none" : AgentPromptCatalog.ReasoningEffort(settings, effort);
         var context = AgentContextBuilder.Build(historyBlocks, currentRequest, [], contextBudget);
         agentHistory.Add(new AgentHistoryEntry("用户", prompt + (images.Count > 0 ? $"（附图 {images.Count} 张）" : "")));
         PersistAgentSessions();
@@ -687,6 +709,8 @@ public partial class MainWindow
             void ShowResponse() {
                 PublishAgent("stream", "");
                 RecordAgentUsage(completion.Usage, settings, requestUtc);
+                currentAgentSession.NeedsContinuation = completion.FinishReason == "length";
+                PublishAgent("continuation", extra: new { available = currentAgentSession.NeedsContinuation });
                 if (completion.Usage is { } measured) {
                     currentAgentSession.LastPromptTokens = measured.InputTokens;
                     PublishAgent("rate", extra: new { tokens = measured.OutputTokens,

@@ -148,7 +148,7 @@ using (var noTrackPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPa
     if (noTrackPayload.RootElement.GetProperty("model").GetString() != "notrack-uncensored" ||
         noTrackPayload.RootElement.TryGetProperty("response_format", out _) ||
         !noTrackPayload.RootElement.GetProperty("stream").GetBoolean() ||
-        noTrackPayload.RootElement.GetProperty("max_tokens").GetInt32() != 8192)
+        noTrackPayload.RootElement.TryGetProperty("max_tokens", out _))
         throw new Exception("NoTrack Chat did not send text-first Chat Completions payload");
 var imagePayload = AiAnswerService.BuildCompletionPayload(
     new AiSettings("https://api.deepseek.com/chat/completions", "deepseek-flash", ""),
@@ -281,7 +281,7 @@ using (var payload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
     structured: false, reasoningEffort: "low", stream: true)))
     if (payload.RootElement.GetProperty("thinking").GetProperty("type").GetString() != "enabled" ||
         payload.RootElement.GetProperty("reasoning_effort").GetString() != "low" ||
-        payload.RootElement.GetProperty("max_tokens").GetInt32() != 4096 ||
+        payload.RootElement.TryGetProperty("max_tokens", out _) ||
         !payload.RootElement.GetProperty("stream_options").GetProperty("include_usage").GetBoolean())
         throw new Exception("DeepSeek loop control payload is wrong");
 var toolDelta = JsonSerializer.Serialize(new { choices = new[] { new { delta = new {
@@ -314,6 +314,62 @@ using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
     if (answer.Text != "表格已生成" || updates.Last().PartialText != answer.Text)
         throw new Exception("Streaming answer text was not delivered to the interface");
 }
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " + toolDelta +
+    "\n\ndata: " + JsonSerializer.Serialize(new { choices = new[] { new { finish_reason = "length", delta = new { } } } }) +
+    "\n\ndata: [DONE]\n\n")))
+{
+    try { await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
+        throw new Exception("A provider-truncated tool response was accepted for execution"); }
+    catch (InvalidDataException error) when (error.Message.Contains("截断了工具调用")) { }
+}
+// Long non-repeating answers and thought streams must not trigger fixed quotas.
+var random = new Random(20261006);
+string VariedText(int count) => new(Enumerable.Range(0, count).Select(_ => (char)('a' + random.Next(26))).ToArray());
+var longText = VariedText(120_000);
+var longThought = VariedText(16_000);
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
+    JsonSerializer.Serialize(new { choices = new[] { new { delta = new { content = longText, reasoning_content = longThought },
+        finish_reason = "length" } }, usage = new { prompt_tokens = 100, completion_tokens = 45_000 } }) +
+    "\n\ndata: [DONE]\n\n")))
+{
+    var updates = new List<AiGenerationProgress>();
+    var result = await AiAnswerService.ReadCompletionStreamAsync(stream, updates.Add, CancellationToken.None);
+    if (result.Text != longText || result.Reasoning != longThought || result.FinishReason != "length" ||
+        result.Usage?.OutputTokens != 45_000 || updates.Last().PartialText != longText)
+        throw new Exception("A provider boundary or old generation quota discarded a normal long answer");
+}
+var repeatedQuote = VariedText(220);
+var separatedQuotes = new StringBuilder();
+for (var index = 0; index < 5; index++) separatedQuotes.Append(repeatedQuote).Append(VariedText(280));
+if (AiAnswerService.RepeatedTail(separatedQuotes))
+    throw new Exception("Non-adjacent quotations were incorrectly treated as a generation loop");
+var repeatBlock = VariedText(220);
+if (!AiAnswerService.RepeatedTail(new StringBuilder(string.Concat(Enumerable.Repeat(repeatBlock, 5)))))
+    throw new Exception("An adjacent paragraph loop was not detected");
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
+    JsonSerializer.Serialize(new { choices = new[] { new { delta = new { content = "已生成的正文" }, finish_reason = "length" } } }) +
+    "\n\ndata: [DONE]\n\n")))
+{
+    var updates = new List<AiGenerationProgress>();
+    var result = await AiAnswerService.ReadCompletionStreamAsync(stream, updates.Add, CancellationToken.None);
+    if (result.Text != "已生成的正文" || result.FinishReason != "length" || updates.Last().EstimatedOutputTokens <= 0)
+        throw new Exception("A length boundary discarded partial text or token-rate reporting");
+}
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
+    JsonSerializer.Serialize(new { choices = new[] { new { delta = new { content = "网络中断前的内容" } } } }) + "\n\n")))
+{
+    try { await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
+        throw new Exception("An interrupted SSE connection was incorrectly reported as complete"); }
+    catch (InvalidDataException) { }
+}
+using (var progressClient = new StubToolChatClient(callsBeforeAnswer: 6))
+{
+    var invoked = 0;
+    var result = await AiAgentService.RunToolAgentWithClientAsync(progressClient, "Use tools", "持续检查正在变化的状态",
+        (_, _, _) => Task.FromResult(++invoked == 1 ? "module-ready" : "module-ready-" + invoked), CancellationToken.None);
+    if (result != "模块已就绪" || invoked != 6)
+        throw new Exception("Repeated tool calls with changed results were incorrectly stopped");
+}
 using (var toolClient = new StubToolChatClient())
 {
     var requested = new TaskCompletionSource<bool>();
@@ -341,7 +397,7 @@ using (var repeatClient = new StubToolChatClient(repeat: true))
         throw new Exception("Repeated framework tool call was not stopped");
     }
     catch (InvalidDataException) { }
-    if (invoked != 1) throw new Exception("Repeated framework tool executed twice");
+    if (invoked != 4) throw new Exception("Stable repeated tool loop was not stopped after four identical results");
 }
 Console.WriteLine("PASS AI response validation");
 if (args.Contains("--live-local", StringComparer.Ordinal))
@@ -410,7 +466,7 @@ sealed class StubChatClient : IChatClient
     public void Dispose() { }
 }
 
-sealed class StubToolChatClient(bool repeat = false) : IChatClient
+sealed class StubToolChatClient(bool repeat = false, int callsBeforeAnswer = 1) : IChatClient
 {
     public int Requests { get; private set; }
     public object? GetService(Type serviceType, object? serviceKey = null) => null;
@@ -420,7 +476,7 @@ sealed class StubToolChatClient(bool repeat = false) : IChatClient
         Requests++;
         var input = messages.ToArray();
         if (options?.Tools?.Count != 11) throw new Exception("Framework did not expose registered tools");
-        if (Requests == 1 || repeat && Requests == 2)
+        if (Requests <= callsBeforeAnswer || repeat)
             return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
                 [new FunctionCallContent("module_call_" + Requests, "module_status", new Dictionary<string, object?>())]))
             { FinishReason = ChatFinishReason.ToolCalls });

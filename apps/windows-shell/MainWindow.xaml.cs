@@ -350,6 +350,7 @@ public partial class MainWindow : Window
                 var ready = await ShellView.CoreWebView2.ExecuteScriptAsync(
                     "!document.getElementById('view-ai').hidden && !!document.getElementById('agent-prompt') && document.querySelectorAll('[data-ai-consumer]').length===3");
                 if (ready != "true") { FailSmoke("Agent workspace or model selectors were not rendered"); return; }
+                await VerifyAgentContinuationUiAsync();
                 var conversationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (() => {
                       const workspace = document.querySelector('.agent-workspace').getBoundingClientRect();
@@ -1168,6 +1169,7 @@ public partial class MainWindow : Window
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
                 case "agent.folder": SelectAgentFolder(); break;
                 case "agent.send": await SendAgentAsync(message); break;
+                case "agent.continue": await ContinueAgentAsync(); break;
                 case "agent.clipboard": await PasteAgentClipboardAsync(); break;
                 case "agent.options": UpdateAgentOptions(message); break;
                 case "agent.background": UpdateAgentBackground(message, false); break;
