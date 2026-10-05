@@ -40,8 +40,7 @@ internal static class OllamaModelCatalog
     {
         if (AiProviderPresets.Match(settings).Id == "qwen" &&
             settings.Model is "qwen3.8-flash" or "qwen3.8-max") return 1_000_000;
-        if (AiProviderPresets.Match(settings).Id == "venice")
-            return settings.Model == "qwen-3-6-plus" ? 1_000_000 : 128_000;
+        if (AiProviderPresets.Match(settings).Id == "notrack") return 64_000;
         if (AiProviderPresets.Match(settings).Id != "ollama") return 128000;
         if (ContextCache.TryGetValue(settings.Model, out var cached)) return cached;
         try

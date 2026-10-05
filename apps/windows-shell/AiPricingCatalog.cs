@@ -13,8 +13,7 @@ internal static class AiPricingCatalog
 {
     private sealed record Prices(AiTokenPricing DeepSeekOffPeak, AiTokenPricing DeepSeekPeak,
         AiTokenPricing[] QwenTiers, AiTokenPricing QwenFlash, AiTokenPricing QwenMax,
-        AiTokenPricing SiliconFlow, AiTokenPricing OpenAi,
-        AiTokenPricing VeniceQwen, AiTokenPricing VeniceUncensored);
+        AiTokenPricing SiliconFlow, AiTokenPricing OpenAi, AiTokenPricing NoTrack);
 
     private static Prices prices = new(
         new("CNY", 1m, .02m, 4m), new("CNY", 2m, .04m, 8m),
@@ -22,7 +21,7 @@ internal static class AiPricingCatalog
             new("CNY", 4.8m, .96m, 48m)],
         new("CNY", .8m, .1m, 2.7m), new("CNY", 12m, 1.5m, 36m),
         new("CNY", 1.8m, 1.8m, 14.4m), new("USD", .4m, .1m, 1.6m),
-        new("USD", .63m, .06m, 3.75m), new("USD", .20m, .20m, .90m));
+        new("USD", .25m, .25m, 1m));
     private static readonly object Gate = new();
     private static readonly HttpClient Client = new(new SocketsHttpHandler { AllowAutoRedirect = true })
     { Timeout = TimeSpan.FromSeconds(8) };
@@ -47,7 +46,7 @@ internal static class AiPricingCatalog
             },
             "siliconflow" => current.SiliconFlow,
             "openai" => current.OpenAi,
-            "venice" => settings.Model == "qwen-3-6-plus" ? current.VeniceQwen : current.VeniceUncensored,
+            "notrack" => current.NoTrack,
             "ollama" => new AiTokenPricing("CNY", 0m, 0m, 0m),
             _ => settings.Pricing
         };
@@ -84,10 +83,8 @@ internal static class AiPricingCatalog
                 value => prices = prices with { SiliconFlow = value[0] }),
             RefreshOneAsync("https://developers.openai.com/api/docs/models/gpt-4.1-mini", ParseOpenAi,
                 value => prices = prices with { OpenAi = value[0] }),
-            RefreshOneAsync("https://venice.ai/models/qwen-3-6-plus", ParseVenice,
-                value => prices = prices with { VeniceQwen = value[0] }),
-            RefreshOneAsync("https://venice.ai/models/venice-uncensored-1-2", ParseVenice,
-                value => prices = prices with { VeniceUncensored = value[0] }));
+            RefreshOneAsync("https://notrack.ai/api", ParseNoTrack,
+                value => prices = prices with { NoTrack = value[0] }));
     }
 
     private static async Task RefreshOneAsync(string url, Func<string, AiTokenPricing[]?> parse,
@@ -226,12 +223,11 @@ internal static class AiPricingCatalog
             [new("USD", input.Value, cached.Value, output.Value)] : null;
     }
 
-    internal static AiTokenPricing[]? ParseVenice(string text)
+    internal static AiTokenPricing[]? ParseNoTrack(string text)
     {
-        var input = Number(text, @"Billed per token on Venice:\s*\$\s*(?<price>\d+(?:\.\d+)?)\s*per 1M input tokens");
-        var output = Number(text, @"Billed per token on Venice:[\s\S]{0,100}?\$\s*\d+(?:\.\d+)?\s*per 1M input tokens\s*and\s*\$\s*(?<price>\d+(?:\.\d+)?)\s*per 1M output tokens");
+        var input = Number(text, @"\$\s*(?<price>\d+(?:\.\d+)?)\s*/\s*1M\s*per 1M input tokens");
+        var output = Number(text, @"\$\s*(?<price>\d+(?:\.\d+)?)\s*/\s*1M\s*per 1M output tokens");
         if (input is null || output is null) return null;
-        var cached = Number(text, @"Cached input / 1M\s*\$\s*(?<price>\d+(?:\.\d+)?)") ?? input;
-        return [new("USD", input.Value, cached.Value, output.Value)];
+        return [new("USD", input.Value, input.Value, output.Value)];
     }
 }

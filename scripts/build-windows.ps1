@@ -34,14 +34,14 @@ if ($Test) {
 }
 
 $project = Join-Path $root 'apps\windows-shell\Toolbox.Windows.csproj'
-& dotnet restore $project --configfile $nugetConfig --nologo
+& dotnet restore $project --configfile $nugetConfig --ignore-failed-sources --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET restore failed' }
 & dotnet build $project --no-restore --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
     $aiTests = Join-Path $root 'tests\ai-answers\AiAnswers.csproj'
-    & dotnet restore $aiTests --configfile $nugetConfig --nologo
+    & dotnet restore $aiTests --configfile $nugetConfig --ignore-failed-sources --nologo
     if ($LASTEXITCODE -ne 0) { throw 'AI test restore failed' }
     & dotnet run --project $aiTests --no-restore
     if ($LASTEXITCODE -ne 0) { throw 'AI agent tests failed' }

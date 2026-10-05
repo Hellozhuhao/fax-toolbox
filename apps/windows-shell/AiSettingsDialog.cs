@@ -31,8 +31,7 @@ internal sealed class AiSettingsDialog : Window
     private readonly Dictionary<string, Button> presetModelButtons = [];
     private readonly Dictionary<string, string> selectedPresetModels = new()
     {
-        ["qwen"] = AiProviderPresets.QwenModels[0].Id,
-        ["venice"] = AiProviderPresets.VeniceModels[0].Id
+        ["qwen"] = AiProviderPresets.QwenModels[0].Id
     };
     private readonly StackPanel keyFields = new();
     private readonly TextBlock summary = new();
@@ -58,7 +57,7 @@ internal sealed class AiSettingsDialog : Window
         consumer = AiConsumerRegistry.Require(consumerId);
         previous = previousSettings;
         selected = AiProviderPresets.Match(previous);
-        if (selected.Id is "qwen" or "venice") selectedPresetModels[selected.Id] = previous!.Model;
+        if (selected.Id == "qwen") selectedPresetModels[selected.Id] = previous!.Model;
         var requested = AiProviderPresets.All.FirstOrDefault(item => item.Id == initialProviderId);
         if (requested is not null) selected = requested;
         if (initialModelId is not null && AiProviderPresets.ModelsFor(selected.Id)
@@ -140,7 +139,7 @@ internal sealed class AiSettingsDialog : Window
         modelFields.Children.Add(Label("模型名称")); model.Text = previous?.Model ?? "";
         StyleInput(model); modelInputFrame = InputFrame(model, new Thickness(0, 8, 0, 15));
         modelFields.Children.Add(modelInputFrame);
-        foreach (var option in AiProviderPresets.QwenModels.Concat(AiProviderPresets.VeniceModels))
+        foreach (var option in AiProviderPresets.QwenModels)
         {
             var card = PlainButton("");
             card.Padding = new Thickness(13, 11, 13, 11);
@@ -284,6 +283,9 @@ internal sealed class AiSettingsDialog : Window
         if (currentCategoryId != CategoryFor(preset.Id)) SelectCategory(CategoryFor(preset.Id), false);
         var changedProvider = selected.Id != preset.Id;
         selected = preset;
+        var compact = preset.Id is "notrack" or "openai" or "deepseek" or "siliconflow";
+        MinHeight = compact ? 470 : 550;
+        if (changedProvider || !IsLoaded) Height = compact ? 490 : 625;
         foreach (var (id, button) in providerButtons)
         {
             var active = id == preset.Id;
@@ -292,13 +294,13 @@ internal sealed class AiSettingsDialog : Window
             button.Background = active ? Brush(background.Color.R < 80 ? "#332B50" : "#F9ECE5") : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
-        modelFields.Visibility = preset.Id is "custom" or "ollama" or "venice" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
-        modelInputFrame.Visibility = preset.Id is "venice" or "qwen" ? Visibility.Collapsed : Visibility.Visible;
-        presetModelChoices.Visibility = preset.Id is "venice" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
+        modelFields.Visibility = preset.Id is "custom" or "ollama" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
+        modelInputFrame.Visibility = preset.Id == "qwen" ? Visibility.Collapsed : Visibility.Visible;
+        presetModelChoices.Visibility = preset.Id == "qwen" ? Visibility.Visible : Visibility.Collapsed;
         foreach (var (id, button) in presetModelButtons)
             button.Visibility = AiProviderPresets.ModelsFor(preset.Id).Any(option => option.Id == id) ?
                 Visibility.Visible : Visibility.Collapsed;
-        if (preset.Id is "venice" or "qwen") SelectPresetModel(selectedPresetModels[preset.Id]);
+        if (preset.Id == "qwen") SelectPresetModel(selectedPresetModels[preset.Id]);
         if (preset.Id == "ollama" && changedProvider)
             model.Text = previous is not null && AiProviderPresets.Match(previous).Id == "ollama" ?
                 previous.Model : preset.Model;
@@ -309,7 +311,7 @@ internal sealed class AiSettingsDialog : Window
             Visibility.Visible : Visibility.Collapsed;
         summary.Text = preset.Id == "custom" ? "填写兼容 Chat Completions 的 HTTPS 接口地址和模型名称。" :
             preset.Id == "ollama" ? "通过本机 Ollama 运行；填写已下载的模型名称。" :
-            preset.Id == "venice" ? "选择云端模型，填写 Venice API Key。" :
+            preset.Id == "notrack" ? "填写 NoTrack API Key。" :
             preset.Id == "qwen" ? "选择北京地域模型，填写百炼 API Key。" :
             $"默认模型：{preset.Model}\n接口：{preset.Endpoint}";
         summaryCard.Visibility = preset.Id is "custom" or "ollama" ? Visibility.Visible : Visibility.Collapsed;
@@ -324,7 +326,7 @@ internal sealed class AiSettingsDialog : Window
     private static string CategoryFor(string providerId) => providerId switch
     {
         "qwen" or "deepseek" or "siliconflow" => "domestic",
-        "openai" or "venice" => "overseas",
+        "openai" or "notrack" => "overseas",
         "ollama" => "local",
         _ => "custom"
     };
@@ -334,7 +336,7 @@ internal sealed class AiSettingsDialog : Window
         currentCategoryId = categoryId;
         providers.Children.Clear();
         var presets = AiProviderPresets.All.Where(item => CategoryFor(item.Id) == categoryId)
-            .OrderBy(item => item.Id switch { "qwen" or "venice" => 0,
+            .OrderBy(item => item.Id switch { "qwen" or "notrack" => 0,
                 "deepseek" or "openai" => 1, _ => 2 }).ToArray();
         foreach (var preset in presets) providers.Children.Add(providerButtons[preset.Id]);
         foreach (var (id, button) in categoryButtons)
@@ -365,7 +367,7 @@ internal sealed class AiSettingsDialog : Window
     {
         if (promptEditors.Count == 0) return;
         var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
-        var name = selected.Id is "venice" or "qwen" ? selectedPresetModels[selected.Id] :
+        var name = selected.Id == "qwen" ? selectedPresetModels[selected.Id] :
             selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
         var keyName = url + "\n" + name;
         if (promptLoadedKey == keyName) return;
@@ -379,7 +381,7 @@ internal sealed class AiSettingsDialog : Window
         try
         {
             var url = selected.Id == "custom" ? endpoint.Text.Trim() : selected.Endpoint;
-            var name = selected.Id is "venice" or "qwen" ? selectedPresetModels[selected.Id] :
+            var name = selected.Id == "qwen" ? selectedPresetModels[selected.Id] :
                 selected.Id is "custom" or "ollama" ? model.Text.Trim() : selected.Model;
             var sameService = previous is not null &&
                 string.Equals(previous.Endpoint, url, StringComparison.OrdinalIgnoreCase);

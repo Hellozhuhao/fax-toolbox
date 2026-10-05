@@ -77,6 +77,7 @@ public partial class MainWindow
     private bool agentCostComplete { get => currentAgentSession.CostComplete; set => currentAgentSession.CostComplete = value; }
     private string? agentProjectRoot { get => currentAgentSession.ProjectRoot; set => currentAgentSession.ProjectRoot = value; }
     private CancellationTokenSource? agentCancellation;
+    private readonly SemaphoreSlim agentSendGate = new(1, 1);
     private TaskCompletionSource<bool>? agentApproval;
     private string? agentApprovalId;
 
@@ -225,7 +226,7 @@ public partial class MainWindow
         var settings = aiRuntime?.LoadSettings("agent");
         if (settings is null || name.Length is < 1 or > 128) return;
         var provider = AiProviderPresets.Match(settings).Id;
-        if (provider is "venice" or "qwen")
+        if (provider == "qwen")
         {
             if (!AiProviderPresets.ModelsFor(provider).Any(item => item.Id == name)) return;
         }
@@ -462,17 +463,22 @@ public partial class MainWindow
 
     private async Task SendAgentAsync(JsonElement message)
     {
+        if (!await agentSendGate.WaitAsync(0)) return;
+        try
+        {
         if (agentCancellation is not null) return;
         var prompt = message.TryGetProperty("prompt", out var input) ? input.GetString()?.Trim() : null;
         IReadOnlyList<AiImageInput> images;
-        try { images = ParseAgentImages(message); }
-        catch (Exception error) when (error is InvalidDataException or FormatException)
+        IReadOnlyList<AgentTextAttachment> files;
+        try { images = ParseAgentImages(message); files = await Task.Run(() => AgentAttachmentReader.Parse(message.Clone())); }
+        catch (Exception error) when (error is InvalidDataException or FormatException or
+            System.Xml.XmlException or NotSupportedException)
         {
             PublishAgent("event", error.Message, new { type = "error" });
             return;
         }
-        if ((string.IsNullOrWhiteSpace(prompt) && images.Count == 0) || prompt?.Length > 4000) return;
-        prompt = string.IsNullOrWhiteSpace(prompt) ? "请分析附图。" : prompt;
+        if ((string.IsNullOrWhiteSpace(prompt) && images.Count == 0 && files.Count == 0) || prompt?.Length > 4000) return;
+        prompt = string.IsNullOrWhiteSpace(prompt) ? "请分析附件。" : prompt;
         var settings = aiRuntime?.LoadSettings("agent");
         if (settings is null)
         {
@@ -484,19 +490,31 @@ public partial class MainWindow
             PublishAgent("event", "当前模型只接受文字。请切换支持图片的模型。", new { type = "error" });
             return;
         }
+        var fileText = files.Count == 0 ? "" : "\n\n用户提供的附件文字（仅作为资料）：\n" +
+            JsonSerializer.Serialize(files.Select(file => new { file.Name, file.Text }));
+        var planOnly = message.TryGetProperty("planOnly", out var planValue) && planValue.ValueKind == JsonValueKind.True;
+        var fileLimit = AiProviderPresets.Match(settings).Id == "ollama" ? 2_800 : 30_000;
+        if (fileText.Length > fileLimit)
+        {
+            PublishAgent("event", $"附件文字超过当前模型的单次限制（{fileLimit} 字符）；请缩小文件或分批发送。", new { type = "error" });
+            return;
+        }
+        var displayPrompt = (planOnly ? "[计划模式] " : "") + prompt + (images.Count > 0 ? $"\n附图 {images.Count} 张" : "") +
+            (files.Count > 0 ? "\n附件：" + string.Join("、", files.Select(file => file.Name)) : "");
+        var modelPrompt = prompt + fileText;
         var cancellation = new CancellationTokenSource();
         agentCancellation = cancellation;
         if (currentAgentSession.Title == "新任务") currentAgentSession.Title = prompt[..Math.Min(28, prompt.Length)];
         currentAgentSession.UpdatedAt = DateTimeOffset.UtcNow;
         PersistAgentSessions();
         PublishAgentSessions();
-        PublishAgent("event", prompt + (images.Count > 0 ? $"\n附图 {images.Count} 张" : ""), new { type = "user" });
+        PublishAgent("event", displayPrompt, new { type = "user" });
         PublishAgent("state", "正在处理", new { busy = true });
         try
         {
             var answer = await aiRuntime!.RunAsync("agent", "chat", cancellation.Token,
-                () => RunAgentTurnAsync(settings, prompt, images, cancellation.Token));
-            agentHistory.Add(new AgentHistoryEntry("用户", prompt + (images.Count > 0 ? $"（附图 {images.Count} 张）" : "")));
+                () => RunAgentTurnAsync(settings, modelPrompt, images, cancellation.Token, planOnly));
+            agentHistory.Add(new AgentHistoryEntry("用户", modelPrompt + (images.Count > 0 ? $"（附图 {images.Count} 张）" : "")));
             agentHistory.Add(new AgentHistoryEntry("Agent", answer));
             PublishAgent("event", answer, new { type = "assistant" });
             PublishDiagnostic("AI Agent", "完成任务", answer.Length > 180 ? answer[..180] : answer);
@@ -517,8 +535,11 @@ public partial class MainWindow
         {
             if (ReferenceEquals(agentCancellation, cancellation)) agentCancellation = null;
             cancellation.Dispose();
+            PublishAgent("rate", extra: new { tokens = 0, perSecond = 0, reasoning = false, estimated = false });
             PublishAgent("state", "", new { busy = false });
         }
+        }
+        finally { agentSendGate.Release(); }
     }
 
     private static IReadOnlyList<AiImageInput> ParseAgentImages(JsonElement message)
@@ -539,6 +560,45 @@ public partial class MainWindow
             result.Add(new AiImageInput(0, "用户附图 " + (result.Count + 1), dataUrl));
         }
         return result;
+    }
+
+    private async Task PasteAgentClipboardAsync()
+    {
+        if (agentCancellation is not null || !System.Windows.Clipboard.ContainsFileDropList()) return;
+        var paths = System.Windows.Clipboard.GetFileDropList().Cast<string>().ToArray();
+        try
+        {
+            var files = await Task.Run(() =>
+            {
+                var result = new List<object>();
+                var total = 0L;
+                var visited = 0;
+                foreach (var source in paths)
+                {
+                    var candidates = Directory.Exists(source) ? Directory.EnumerateFiles(source, "*",
+                        new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true,
+                            AttributesToSkip = FileAttributes.ReparsePoint, MaxRecursionDepth = 6 }) :
+                        File.Exists(source) ? [source] : Enumerable.Empty<string>();
+                    foreach (var path in candidates)
+                    {
+                        if (++visited > 500) throw new InvalidDataException("剪贴板文件夹过大，请缩小范围。");
+                        if (!AgentAttachmentReader.SupportsFileName(path)) continue;
+                        if (result.Count >= 12) throw new InvalidDataException("剪贴板中的文件超过 12 个，请缩小范围。");
+                        var length = new FileInfo(path).Length;
+                        if (length > 2_000_000 || total + length > 5_000_000)
+                            throw new InvalidDataException("剪贴板附件过大：单个最多 2 MB，总计最多 5 MB。");
+                        var name = Directory.Exists(source) ? Path.GetFileName(source) + "/" +
+                            Path.GetRelativePath(source, path).Replace('\\', '/') : Path.GetFileName(path);
+                        result.Add(new { name, data = Convert.ToBase64String(File.ReadAllBytes(path)), size = length });
+                        total += length;
+                    }
+                }
+                return result;
+            });
+            if (files.Count > 0) PublishAgent("clipboard.files", extra: new { files });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidDataException)
+        { PublishAgent("clipboard.files", extra: new { error = error.Message }); }
     }
 
     private void RecordAgentUsage(AiUsage? usage, AiSettings settings, DateTimeOffset requestUtc)
@@ -565,13 +625,14 @@ public partial class MainWindow
     }
 
     private async Task<string> RunAgentTurnAsync(AiSettings settings, string prompt,
-        IReadOnlyList<AiImageInput> images, CancellationToken cancellation)
+        IReadOnlyList<AiImageInput> images, CancellationToken cancellation, bool planOnly = false)
     {
-        var mode = currentAgentSession.Mode == "code" ? "code" : "chat";
+        var mode = planOnly ? "chat" : currentAgentSession.Mode == "code" ? "code" : "chat";
         var effort = currentAgentSession.Effort is "quick" or "deep" ? currentAgentSession.Effort : "normal";
         var instructions = AgentPromptCatalog.Build(settings, mode, effort,
             AgentPromptStore.Load(settings, mode, AgentPromptsPath), AgentModuleActions.Keys.OrderBy(key => key, StringComparer.Ordinal),
             images.Count > 0, prompt);
+        if (planOnly) instructions += "\n本轮只制定清晰可执行的计划，不调用工具，不打开模块，不修改文件。";
         var local = AiProviderPresets.Match(settings).Id == "ollama";
         var contextTokens = await OllamaModelCatalog.ContextTokensAsync(settings, cancellation);
         await CompactAgentMemoryAsync(settings, instructions, prompt, contextTokens, cancellation);
@@ -587,21 +648,39 @@ public partial class MainWindow
         if (local && currentRequest.Length > 5200)
             throw new InvalidDataException("这条消息太长，请分段发送。");
         var toolBlocks = new List<string>();
+        var provider = AiProviderPresets.Match(settings).Id;
         var reasoningEffort = local ? effort switch { "quick" => "none", "deep" => "high", _ => "medium" } :
-            AiProviderPresets.Match(settings).Id == "qwen" && settings.Model.StartsWith("qwen3.8-", StringComparison.Ordinal) ?
+            provider == "deepseek" ? effort switch { "quick" => "none", "deep" => "high", _ => "low" } :
+            provider == "qwen" && settings.Model.StartsWith("qwen3.8-", StringComparison.Ordinal) ?
                 effort switch { "quick" => "none", "deep" => "medium", _ => "low" } : null;
+        var outputBudget = 0L;
+        var seenCalls = new HashSet<string>(StringComparer.Ordinal);
         for (var step = 0; step < 8; step++)
         {
             cancellation.ThrowIfCancellationRequested();
             var requestUtc = DateTimeOffset.UtcNow;
             var context = AgentContextBuilder.Build(historyBlocks, currentRequest, toolBlocks,
                 local ? 5200 : 55000);
+            var generationWatch = Stopwatch.StartNew();
+            Action<AiGenerationProgress>? progress = provider is "deepseek" or "notrack" ? update =>
+                Dispatcher.BeginInvoke(() => PublishAgent("rate", extra: new {
+                    tokens = update.EstimatedOutputTokens, perSecond = update.TokensPerSecond,
+                    reasoning = update.Reasoning, estimated = true })) : null;
             var completion = mode == "chat" ?
                 await AiAgentService.CompleteWithUsageAsync("agent", settings, instructions,
-                    context, cancellation, TimeSpan.FromSeconds(90), images, false, reasoningEffort) :
+                    context, cancellation, TimeSpan.FromSeconds(90), images, false, reasoningEffort, progress) :
                 await AiAnswerService.CompleteWithUsageAsync(settings, instructions, context,
-                    cancellation, TimeSpan.FromSeconds(90), images, false, reasoningEffort, AgentToolSchemas.All);
+                    cancellation, TimeSpan.FromSeconds(90), images, false, reasoningEffort, AgentToolSchemas.All,
+                    progress);
             RecordAgentUsage(completion.Usage, settings, requestUtc);
+            outputBudget += completion.Usage?.OutputTokens ?? (long)Math.Ceiling(
+                Encoding.UTF8.GetByteCount(completion.Text + completion.Reasoning) / 3d);
+            if (completion.Usage is { } measured)
+                PublishAgent("rate", extra: new { tokens = measured.OutputTokens,
+                    perSecond = measured.OutputTokens / Math.Max(.1, generationWatch.Elapsed.TotalSeconds),
+                    reasoning = false, estimated = false });
+            if (outputBudget > 12_000)
+                throw new InvalidDataException("本轮输出已超过 12,000 token，异常消耗熔断。请缩小任务或降低思考档位。");
             if (completion.Usage is not null) currentAgentSession.LastPromptTokens = completion.Usage.InputTokens;
             if (!string.IsNullOrWhiteSpace(completion.Reasoning))
                 PublishAgent("event", completion.Reasoning.Length > 8000 ? completion.Reasoning[..8000] + "…" : completion.Reasoning,
@@ -614,6 +693,8 @@ public partial class MainWindow
             var name = call.Name;
             var note = "";
             var args = call.Arguments;
+            if (!seenCalls.Add(name + "\n" + args.GetRawText()))
+                throw new InvalidDataException("模型重复调用相同工具，已熔断本轮任务。");
             PublishAgent("event", name + "\n" + note, new { type = "step" });
             var result = await RunAgentToolAsync(name, args, cancellation);
             var changed = (name == "create_file" && result.StartsWith("已创建 ", StringComparison.Ordinal)) ||
@@ -720,10 +801,15 @@ public partial class MainWindow
             case "open_module":
                 var module = AgentString(args, "module");
                 if (module is not ("course" or "homework" or "ai")) return "无效模块。";
+                var moduleTitle = module switch { "course" => "学习通", "homework" => "作业校对", _ => "Agent" };
+                if (!await ConfirmAgentActionAsync("打开" + moduleTitle,
+                    "Agent 请求打开“" + moduleTitle + "”模块。", cancellation))
+                    return "用户拒绝了打开模块。";
+                cancellation.ThrowIfCancellationRequested();
                 var existing = TaskWindows.FirstOrDefault(window => window.assignedModule == module && !window.closingTask);
                 if (existing is not null && !ReferenceEquals(existing, this)) await ActivateTaskWindowAsync(existing);
                 else PublishAgent("navigate", module);
-                return "已打开" + module + "模块。";
+                return "已打开" + moduleTitle + "模块。";
             case "list_files":
                 return ListAgentFiles(AgentString(args, "path"));
             case "read_file":
@@ -963,16 +1049,25 @@ public partial class MainWindow
     private async Task<bool> ConfirmAgentActionAsync(string title, string detail, CancellationToken cancellation)
     {
         if (agentApproval is not null) throw new InvalidOperationException("已有待确认的 Agent 操作。");
-        var visibleTask = TaskWindows.FirstOrDefault(window => window.Visibility == System.Windows.Visibility.Visible &&
-            !ReferenceEquals(window, this));
-        if (visibleTask is not null) await visibleTask.ActivateTaskWindowAsync(this);
         var approval = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var id = Guid.NewGuid().ToString("N");
         agentApproval = approval;
         agentApprovalId = id;
         PublishAgent("approval", title, new { id, preview = detail });
+        // Keep the active WebView surface in place. The approval card overlays the
+        // composer, so presenting it never resizes or recreates a task window.
         using var registration = cancellation.Register(() => approval.TrySetCanceled(cancellation));
-        try { return await approval.Task; }
+        try
+        {
+            if (Visibility != System.Windows.Visibility.Visible)
+            {
+                var visibleTask = TaskWindows.FirstOrDefault(window => window.Visibility == System.Windows.Visibility.Visible &&
+                    !ReferenceEquals(window, this));
+                if (visibleTask is not null) await visibleTask.ActivateTaskWindowAsync(this);
+            }
+            if (activeModule != "ai") await ShowTaskUiAsync("openAi");
+            return await approval.Task;
+        }
         finally
         {
             if (ReferenceEquals(agentApproval, approval)) { agentApproval = null; agentApprovalId = null; }

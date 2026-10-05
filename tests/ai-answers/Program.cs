@@ -1,7 +1,13 @@
 using System.IO;
+using System.IO.Compression;
+using System.Text;
 using System.Text.Json;
 using FaxToolbox.Windows;
 using Microsoft.Extensions.AI;
+using UglyToad.PdfPig;
+using UglyToad.PdfPig.Core;
+using UglyToad.PdfPig.Fonts.Standard14Fonts;
+using UglyToad.PdfPig.Writer;
 
 var snapshot = AiAnswerService.ParseSnapshot(JsonSerializer.Serialize(new
 {
@@ -105,7 +111,7 @@ if (AiPricingCatalog.ParseSiliconFlow("Qwen/Qwen3.6-27B 视觉输入 输入: ￥
 if (AiPricingCatalog.ParseOpenAi("GPT-4.1 Mini Pricing Text tokens Per 1M tokens Input $0.40 Cached input $0.10 Output $1.60") is not { Length: 1 } liveOpenAi ||
     liveOpenAi[0].CachedInputPerMillion != .1m)
     throw new Exception("Official OpenAI price refresh could not parse its model page");
-var venicePreset = AiProviderPresets.All.First(item => item.Id == "venice");
+var noTrackPreset = AiProviderPresets.All.First(item => item.Id == "notrack");
 var qwenPreset = AiProviderPresets.All.First(item => item.Id == "qwen");
 if (qwenPreset.Model != "qwen3.8-flash")
     throw new Exception("Cost-effective Qwen model is not the default");
@@ -126,27 +132,24 @@ using (var qwenPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPaylo
     if (qwenPayload.RootElement.GetProperty("reasoning_effort").GetString() != "none" ||
         qwenPayload.RootElement.TryGetProperty("response_format", out _))
         throw new Exception("Qwen Chat did not preserve the requested effort or text format");
-foreach (var option in AiProviderPresets.VeniceModels)
-{
-    var configured = new AiSettings(venicePreset.Endpoint, option.Id, "");
-    AiSettings.Validate(configured.Endpoint, configured.Model);
-    if (AiProviderPresets.Match(configured).Id != "venice")
-        throw new Exception("Venice model was not recognized: " + option.Id);
-}
-if (AiPricingCatalog.Resolve(new AiSettings(venicePreset.Endpoint, "qwen-3-6-plus", ""),
-    metered, fridayPeak) is not { Currency: "USD", OutputPerMillion: 3.75m } ||
-    AiPricingCatalog.Resolve(new AiSettings(venicePreset.Endpoint, "venice-uncensored-1-2", ""),
-    metered, fridayPeak)?.OutputPerMillion != .90m)
-    throw new Exception("Venice models were assigned the wrong price");
-if (AiPricingCatalog.ParseVenice("Billed per token on Venice: $0.63 per 1M input tokens and $3.75 per 1M output tokens. Cached input / 1M $0.06") is not { Length: 1 } venicePrice ||
-    venicePrice[0].CachedInputPerMillion != .06m)
-    throw new Exception("Official Venice price refresh could not parse its model page");
-using (var venicePayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
-    new AiSettings(venicePreset.Endpoint, "qwen-3-6-plus", ""), "instructions", "写一篇中文文章",
-    structured: false)))
-    if (venicePayload.RootElement.GetProperty("model").GetString() != "qwen-3-6-plus" ||
-        venicePayload.RootElement.TryGetProperty("response_format", out _))
-        throw new Exception("Venice Chat did not send text-first Chat Completions payload");
+var noTrackSettings = new AiSettings(noTrackPreset.Endpoint, noTrackPreset.Model, "");
+if (AiProviderPresets.Match(noTrackSettings).Id != "notrack" ||
+    AiProviderPresets.SupportsImages(noTrackSettings))
+    throw new Exception("NoTrack preset was not recognized as text-only");
+if (AiPricingCatalog.Resolve(noTrackSettings, metered, fridayPeak) is not
+    { Currency: "USD", InputPerMillion: .25m, OutputPerMillion: 1m })
+    throw new Exception("NoTrack price was not selected");
+if (AiPricingCatalog.ParseNoTrack("$0.25 / 1M per 1M input tokens $1.00 / 1M per 1M output tokens") is not
+    { Length: 1 } noTrackPrice || noTrackPrice[0].OutputPerMillion != 1m)
+    throw new Exception("NoTrack price parser failed");
+using (var noTrackPayload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    noTrackSettings, "instructions", "写一篇中文文章",
+    structured: false, stream: true)))
+    if (noTrackPayload.RootElement.GetProperty("model").GetString() != "notrack-uncensored" ||
+        noTrackPayload.RootElement.TryGetProperty("response_format", out _) ||
+        !noTrackPayload.RootElement.GetProperty("stream").GetBoolean() ||
+        noTrackPayload.RootElement.GetProperty("max_tokens").GetInt32() != 8192)
+        throw new Exception("NoTrack Chat did not send text-first Chat Completions payload");
 var imagePayload = AiAnswerService.BuildCompletionPayload(
     new AiSettings("https://api.deepseek.com/chat/completions", "deepseek-flash", ""),
     "instructions", "describe", [new AiImageInput(0, "用户附图 1", "data:image/jpeg;base64,/9j/")]);
@@ -230,6 +233,73 @@ var balance = AiBalanceService.Parse(JsonSerializer.SerializeToUtf8Bytes(new
 if (!balance.IsAvailable || balance.Entries.Length != 1 || balance.Entries[0].Total != 12.34m ||
     AiBalanceService.Supports(new AiSettings(AiProviderPresets.All[1].Endpoint, "qwen-plus", "")))
     throw new Exception("AI balance parsing or provider support is wrong");
+var attachmentText = Encoding.UTF8.GetBytes("附件中的中文内容");
+using var officeBytes = new MemoryStream();
+using (var zip = new ZipArchive(officeBytes, ZipArchiveMode.Create, true))
+using (var writer = new StreamWriter(zip.CreateEntry("word/document.xml").Open()))
+    writer.Write("<w:document xmlns:w=\"urn:test\"><w:t>Word 内容</w:t></w:document>");
+var attachments = AgentAttachmentReader.Parse(JsonSerializer.SerializeToElement(new { files = new[]
+{
+    new { name = "资料/note.txt", data = Convert.ToBase64String(attachmentText) },
+    new { name = "draft.docx", data = Convert.ToBase64String(officeBytes.ToArray()) }
+} }));
+if (attachments.Count != 2 || attachments[0].Text != "附件中的中文内容" ||
+    !attachments[1].Text.Contains("Word 内容"))
+    throw new Exception("Agent document attachments were not extracted");
+using var sheetBytes = new MemoryStream();
+using (var zip = new ZipArchive(sheetBytes, ZipArchiveMode.Create, true))
+{
+    using (var writer = new StreamWriter(zip.CreateEntry("xl/sharedStrings.xml").Open()))
+        writer.Write("<sst><si><t>课程名称</t></si></sst>");
+    using (var writer = new StreamWriter(zip.CreateEntry("xl/worksheets/sheet1.xml").Open()))
+        writer.Write("<worksheet><sheetData><row><c r=\"A1\" t=\"s\"><v>0</v></c><c r=\"B1\"><v>42</v></c></row></sheetData></worksheet>");
+}
+var sheetAttachment = AgentAttachmentReader.Parse(JsonSerializer.SerializeToElement(new { files = new[]
+    { new { name = "sheet.xlsx", data = Convert.ToBase64String(sheetBytes.ToArray()) } } }));
+if (!sheetAttachment[0].Text.Contains("A1=课程名称") || !sheetAttachment[0].Text.Contains("B1=42"))
+    throw new Exception("Spreadsheet cells were not extracted in row order");
+var pdfBuilder = new PdfDocumentBuilder();
+var pdfPage = pdfBuilder.AddPage(595, 842);
+var pdfFont = pdfBuilder.AddStandard14Font(Standard14Font.Helvetica);
+pdfPage.AddText("PDF attachment", 12, new PdfPoint(25, 700), pdfFont);
+var pdfAttachment = AgentAttachmentReader.Parse(JsonSerializer.SerializeToElement(new { files = new[]
+    { new { name = "sample.pdf", data = Convert.ToBase64String(pdfBuilder.Build()) } } }));
+if (pdfAttachment.Count != 1 || !pdfAttachment[0].Text.Contains("PDF attachment"))
+    throw new Exception("PDF attachment text was not extracted");
+try { AgentAttachmentReader.Parse(JsonSerializer.SerializeToElement(new { files = new[]
+    { new { name = "../secret.txt", data = Convert.ToBase64String(attachmentText) } } }));
+    throw new Exception("Unsafe attachment name was accepted"); }
+catch (InvalidDataException) { }
+var deepSeekPreset = AiProviderPresets.All.First(item => item.Id == "deepseek");
+using (var payload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
+    new AiSettings(deepSeekPreset.Endpoint, deepSeekPreset.Model, ""), "system", "prompt",
+    structured: false, reasoningEffort: "low", stream: true)))
+    if (payload.RootElement.GetProperty("thinking").GetProperty("type").GetString() != "enabled" ||
+        payload.RootElement.GetProperty("reasoning_effort").GetString() != "low" ||
+        payload.RootElement.GetProperty("max_tokens").GetInt32() != 4096 ||
+        !payload.RootElement.GetProperty("stream_options").GetProperty("include_usage").GetBoolean())
+        throw new Exception("DeepSeek loop control payload is wrong");
+var toolDelta = JsonSerializer.Serialize(new { choices = new[] { new { delta = new {
+    tool_calls = new[] { new { index = 0, function = new { name = "plan",
+        arguments = "{\"steps\":[\"先检查\",\"再执行\"]}" } } } } } } });
+var usageDelta = JsonSerializer.Serialize(new { choices = Array.Empty<object>(), usage = new {
+    prompt_tokens = 20, completion_tokens = 8, total_tokens = 28 } });
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(
+    "data: " + toolDelta + "\n\ndata: " + usageDelta + "\n\ndata: [DONE]\n\n")))
+{
+    var streamed = await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
+    if (streamed.ToolCalls is not { Count: 1 } || streamed.ToolCalls[0].Name != "plan" ||
+        streamed.Usage?.OutputTokens != 8)
+        throw new Exception("DeepSeek streaming tool call or usage was lost");
+}
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
+    JsonSerializer.Serialize(new { choices = new[] { new { delta = new { reasoning_content = new string('x', 1200) } } } }) +
+    "\n\ndata: [DONE]\n\n")))
+{
+    try { await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
+        throw new Exception("Repeated DeepSeek reasoning was not stopped"); }
+    catch (InvalidDataException) { }
+}
 Console.WriteLine("PASS AI response validation");
 if (args.Contains("--live-local", StringComparer.Ordinal))
 {

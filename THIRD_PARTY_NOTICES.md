@@ -1,5 +1,13 @@
 # Third-party notices
 
+## PdfPig
+
+Source: https://github.com/UglyToad/PdfPig
+Package: PdfPig 0.1.8
+License: Apache License 2.0, https://www.apache.org/licenses/LICENSE-2.0
+
+PdfPig is used locally to extract selectable text from PDF attachments.
+
 ## Microsoft Agent Framework
 
 Source: https://github.com/microsoft/agent-framework

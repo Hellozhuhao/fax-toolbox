@@ -141,6 +141,7 @@
     sideContent.append(agentHeader, newChat, $('agent-folder'), agentPanels);
     agentSide.replaceChildren(rail, sideContent);
     const composerActions = $('agent-form').lastElementChild;
+    composerActions.classList.add('agent-composer-actions');
     const runSettings = document.createElement('div'); runSettings.className = 'agent-run-settings';
     runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes" role="radiogroup" aria-label="Agent 模式"><label><input type="radio" name="agent-mode" value="chat" checked><span>Chat</span></label><label><input type="radio" name="agent-mode" value="code"><span>Code</span></label></div><div class="agent-run-label">模型</div><div id="agent-model-list" class="agent-model-list" aria-label="模型选择"></div><label for="agent-effort">思考深度 <strong id="agent-effort-label">标准</strong></label><div class="agent-effort-slider"><input id="agent-effort" type="range" min="0" max="2" step="1" value="1" aria-label="思考深度"></div><span id="agent-model-error" class="muted"></span></div>';
     composerActions.insertBefore(runSettings, $('agent-send'));
@@ -402,7 +403,7 @@
     if (!accounts.childElementCount) accounts.textContent = '暂无保存的账号';
   }
   function renderAiConfig(message) {
-    const modelLabel = name => ['qwen3.8-flash', 'qwen3.8-max', 'qwen-plus', 'qwen-3-6-plus', 'venice-uncensored-1-2'].includes(name) ? agentModelNames(name)[0] : name;
+    const modelLabel = name => ['qwen3.8-flash', 'qwen3.8-max', 'qwen-plus', 'notrack-uncensored'].includes(name) ? agentModelNames(name)[0] : name;
     const detail = message.error || (!message.configured ? '尚未配置模型' :
       `${message.provider} · ${modelLabel(message.model)}${message.requiresKey ? `\nAPI Key ${message.hasKey ? '已保存' : '未填写'}` : ''}`);
     const consumer = message.consumer || 'course';
@@ -414,7 +415,7 @@
       if (item.id === 'course') $('course-ai-summary').textContent = item.configured ? `${item.provider} · ${modelLabel(item.model)}` : '尚未配置学习通 AI';
       if (item.id === 'homework') $('homework-ai-summary').textContent = item.configured ? `${item.provider} · ${modelLabel(item.model)}` : '尚未配置作业 AI';
       if (item.id === 'agent') {
-        if (item.configured) { agentModel = item.model || ''; agentProvider = item.providerId || (item.provider === '本地模型' ? 'ollama' : item.provider === 'Venice' ? 'venice' : item.provider || ''); updateAgentRunOptions(); }
+        if (item.configured) { agentModel = item.model || ''; agentProvider = item.providerId || (item.provider === '本地模型' ? 'ollama' : item.provider === 'NoTrack' ? 'notrack' : item.provider || ''); updateAgentRunOptions(); }
         agentImagesSupported = item.supportsImages !== false;
         $('agent-image-file').disabled = !agentImagesSupported;
         $('agent-image-add').classList.toggle('disabled', !agentImagesSupported);
@@ -442,9 +443,8 @@
   let agentInstalledModels = [];
   function agentModelNames(name) {
     if (name === 'fax-toolbox-qwen3:8k') return ['Qwen3 8B · 长上下文', '本地模型 · 8K 上下文'];
-    if (name === 'huihui_ai/qwen3-abliterated:8b-v2') return ['Qwen3 8B · 默认配置', '本地模型 · 原始上下文'];
-    if (name === 'qwen-3-6-plus') return ['Qwen 3.6 Plus', 'Venice · 中文写作'];
-    if (name === 'venice-uncensored-1-2') return ['Venice Uncensored 1.2', 'Venice · 自由创作'];
+    if (name === 'qwen3:8b') return ['Qwen3 8B', '本地模型'];
+    if (name === 'notrack-uncensored') return ['NoTrack', '云端 · 自由创作'];
     if (name === 'qwen3.8-flash') return ['Qwen 3.8 Flash', '阿里百炼 · 性价比优先'];
     if (name === 'qwen3.8-max') return ['Qwen 3.8 Max', '阿里百炼 · 质量优先'];
     if (name === 'qwen-plus') return ['Qwen Plus', '阿里百炼 · 旧版配置'];
@@ -471,11 +471,11 @@
       recommended.append(copy, action); list.append(recommended);
     }
     const models = agentProvider === 'ollama' ? agentInstalledModels.slice() :
-      agentProvider === 'venice' ? [{name: 'qwen-3-6-plus'}, {name: 'venice-uncensored-1-2'}] :
+      agentProvider === 'notrack' ? [{name: 'notrack-uncensored'}] :
       agentProvider === 'qwen' ? [{name: 'qwen3.8-flash'}, {name: 'qwen3.8-max'}, {name: 'qwen-plus'}] : [];
     if (agentModel && !models.some(item => item.name === agentModel)) models.unshift({name: agentModel});
     if (models.length) heading(agentProvider === 'qwen' ? '国内云端 · 阿里百炼' :
-      agentProvider === 'ollama' ? '本地模型' : agentProvider === 'venice' ? '海外云端 · Venice' : '当前连接');
+      agentProvider === 'ollama' ? '本地模型' : agentProvider === 'notrack' ? '海外云端 · NoTrack' : '当前连接');
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'agent-model-choice'; button.dataset.agentModel = model.name;
@@ -515,6 +515,8 @@
   let agentApprovalId = '';
   let agentPreparingImages = false;
   let agentImages = [];
+  let agentFiles = [];
+  let agentPlanOnly = false;
   let agentImagesSupported = true;
   let activeAgentSessionId = '';
   const agentDrafts = new Map();
@@ -595,7 +597,7 @@
     $('agent-cost').replaceChildren(...(data.cost == null ? [] : [row('估算', `${data.currency === 'CNY' ? '¥' : '$'}${Number(data.cost).toFixed(6).replace(/0+$/, '').replace(/\.$/, '')}`)]));
   }
   function renderAgentImages(animateFrom = Number.POSITIVE_INFINITY) {
-    const tray = $('agent-attachments'); tray.replaceChildren(); tray.hidden = agentImages.length === 0;
+    const tray = $('agent-attachments'); tray.replaceChildren(); tray.hidden = agentImages.length === 0 && agentFiles.length === 0;
     agentImages.forEach((dataUrl, index) => {
       const item = document.createElement('div'); item.className = 'agent-image';
       if (index >= animateFrom) animateNew(item);
@@ -603,6 +605,14 @@
       const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除图片';
       remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
       item.append(preview, remove); tray.append(item);
+    });
+    agentFiles.forEach((file, index) => {
+      const item = document.createElement('div'); item.className = 'agent-file'; item.title = file.name;
+      const icon = document.createElement('span'); icon.textContent = file.name.includes('/') ? '▧' : '▤';
+      const name = document.createElement('span'); name.textContent = file.name;
+      const remove = document.createElement('button'); remove.type = 'button'; remove.textContent = '×'; remove.title = '移除附件';
+      remove.addEventListener('click', () => { agentFiles.splice(index, 1); renderAgentImages(); });
+      item.append(icon, name, remove); tray.append(item);
     });
   }
   async function addAgentImages(files) {
@@ -631,6 +641,130 @@
       renderAgentImages(initialImageCount); $('agent-state').textContent = '';
     } catch (error) { $('agent-state').textContent = error.message || '图片无法读取'; }
     finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; $('agent-image-file').value = ''; }
+  }
+  const allowedAgentDocuments = /\.(txt|md|csv|tsv|json|xml|html?|css|js|ts|py|cs|rs|go|java|ya?ml|toml|sql|log|pdf|docx|pptx|xlsx)$/i;
+  const agentDocumentTypes = '.txt,.md,.csv,.tsv,.json,.xml,.html,.htm,.css,.js,.ts,.py,.cs,.rs,.go,.java,.yaml,.yml,.toml,.sql,.log,.pdf,.docx,.pptx,.xlsx';
+  async function addAgentFiles(items) {
+    if (agentBusy || agentPreparingImages || !items.length) return;
+    let accepted = items.filter(item => allowedAgentDocuments.test(item.name) || /^image\/(jpeg|png|webp|gif)$/.test(item.file.type));
+    let skipped = items.length - accepted.length;
+    if (!agentImagesSupported) {
+      const textOnly = accepted.filter(item => !item.file.type.startsWith('image/'));
+      skipped += accepted.length - textOnly.length; accepted = textOnly;
+    }
+    if (!accepted.length) { $('agent-state').textContent = !agentImagesSupported && items.some(item => item.file.type.startsWith('image/')) ? '当前模型不支持图片' : '没有可读取的文档或图片'; return; }
+    items = accepted;
+    const images = items.map(item => item.file).filter(file => /^image\/(jpeg|png|webp|gif)$/.test(file.type));
+    const documents = items.filter(item => !/^image\/(jpeg|png|webp|gif)$/.test(item.file.type));
+    if (agentFiles.length + documents.length > 12) { $('agent-state').textContent = '一次最多添加 12 个文档'; return; }
+    agentPreparingImages = true; $('agent-send').disabled = true; $('agent-state').textContent = '正在读取附件…';
+    try {
+      let total = agentFiles.reduce((sum, item) => sum + item.size, 0);
+      const loaded = [];
+      for (const item of documents) {
+        const file = item.file;
+        if (!allowedAgentDocuments.test(item.name)) throw new Error('不支持这个文件格式：' + item.name);
+        if (file.size > 2_000_000) throw new Error('单个文档不能超过 2 MB');
+        total += file.size;
+        if (total > 5_000_000) throw new Error('文档总量不能超过 5 MB');
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader(); reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('无法读取 ' + item.name)); reader.readAsDataURL(file);
+        });
+        loaded.push({name: item.name.replaceAll('\\', '/'), data: String(dataUrl).split(',')[1], size: file.size});
+      }
+      agentFiles.push(...loaded);
+      renderAgentImages();
+      if (images.length) { agentPreparingImages = false; await addAgentImages(images); }
+      else $('agent-state').textContent = skipped ? `已跳过 ${skipped} 个不支持的文件` : '';
+    } catch (error) { $('agent-state').textContent = error.message || '附件无法读取'; }
+    finally { agentPreparingImages = false; $('agent-send').disabled = agentBusy; }
+  }
+  function setupAgentAddMenu() {
+    const form = $('agent-form'), actions = form.lastElementChild;
+    const conversation = form.parentElement;
+    new ResizeObserver(() => conversation.style.setProperty('--agent-composer-height', `${form.getBoundingClientRect().height}px`)).observe(form);
+    const oldAdd = $('agent-image-add'); oldAdd.style.display = 'none';
+    const documents = document.createElement('input'); documents.type = 'file'; documents.multiple = true;
+    documents.accept = agentDocumentTypes + ',image/png,image/jpeg,image/webp,image/gif'; documents.hidden = true;
+    const folders = document.createElement('input'); folders.type = 'file'; folders.multiple = true;
+    folders.setAttribute('webkitdirectory', ''); folders.hidden = true;
+    form.append(documents, folders);
+    const plus = document.createElement('button'); plus.type = 'button'; plus.className = 'agent-plus';
+    plus.textContent = '＋'; plus.title = '添加'; plus.setAttribute('aria-label', '添加'); plus.setAttribute('aria-expanded', 'false');
+    actions.insertBefore(plus, oldAdd);
+    const menu = document.createElement('div'); menu.className = 'agent-add-menu'; menu.hidden = true; form.insertBefore(menu, actions);
+    const heading = label => { const title = document.createElement('small'); title.textContent = label; menu.append(title); };
+    const option = (icon, label, description, action) => {
+      const button = document.createElement('button'); button.type = 'button';
+      button.innerHTML = `<span class="agent-add-icon" aria-hidden="true">${icon}</span><span><strong>${label}</strong><em>${description}</em></span>`;
+      button.addEventListener('click', () => { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); action(); });
+      menu.append(button);
+    };
+    heading('添加');
+    option('▤', '文件和文件夹', '文档、图片或文件夹', () => documents.click());
+    option('▧', '选择文件夹', '添加文件夹中的文档', () => folders.click());
+    option('◎', '目标', '设置本次对话的长期背景', () => {
+      document.querySelector('[data-agent-section="memory"]')?.click(); $('agent-background').focus();
+    });
+    option('☷', '计划模式', '下一条消息只制定计划', () => {
+      agentPlanOnly = !agentPlanOnly;
+      plus.classList.toggle('plan-active', agentPlanOnly);
+      plus.title = agentPlanOnly ? '计划模式已开启' : '添加';
+      $('agent-state').textContent = agentPlanOnly ? '计划模式：下一条消息只制定计划' : '';
+    });
+    option('✎', '绘图', '手绘后作为图片发送', openAgentSketch);
+    heading('工具箱');
+    option('◫', '学习通', '打开学习通模块', openCourse);
+    option('✓', '作业校对', '打开作业校对模块', openHomework);
+    plus.addEventListener('click', () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); });
+    document.addEventListener('click', event => { if (!form.contains(event.target)) { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); } });
+    documents.addEventListener('change', async () => { await addAgentFiles([...documents.files].map(file => ({file, name: file.name}))); documents.value = ''; });
+    folders.addEventListener('change', async () => { await addAgentFiles([...folders.files].map(file => ({file, name: file.webkitRelativePath || file.name}))); folders.value = ''; });
+    const rate = document.createElement('span'); rate.id = 'agent-token-rate'; rate.hidden = true;
+    actions.insertBefore(rate, $('agent-state'));
+  }
+  function openAgentSketch() {
+    if (!agentImagesSupported) { $('agent-state').textContent = '当前模型不支持图片，请切换视觉模型'; return; }
+    const dialog = document.createElement('dialog'); dialog.className = 'agent-sketch';
+    const title = document.createElement('strong'); title.textContent = '绘图';
+    const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 520;
+    const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = '#202126'; context.lineWidth = 3; context.lineCap = 'round'; context.lineJoin = 'round';
+    let drawing = false;
+    const point = event => { const box = canvas.getBoundingClientRect(); return [(event.clientX - box.left) * canvas.width / box.width, (event.clientY - box.top) * canvas.height / box.height]; };
+    canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture(event.pointerId); const [x, y] = point(event); context.beginPath(); context.moveTo(x, y); });
+    canvas.addEventListener('pointermove', event => { if (!drawing) return; const [x, y] = point(event); context.lineTo(x, y); context.stroke(); });
+    canvas.addEventListener('pointerup', () => { drawing = false; });
+    const actions = document.createElement('div');
+    const clear = document.createElement('button'); clear.type = 'button'; clear.textContent = '清空';
+    clear.addEventListener('click', () => { context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); });
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '取消'; cancel.addEventListener('click', () => dialog.close());
+    const attach = document.createElement('button'); attach.type = 'button'; attach.textContent = '加入对话';
+    attach.addEventListener('click', () => { if (agentImages.length >= 4) { $('agent-state').textContent = '最多添加 4 张图片'; return; } agentImages.push(canvas.toDataURL('image/jpeg', .85)); renderAgentImages(); dialog.close(); });
+    actions.append(clear, cancel, attach); dialog.append(title, canvas, actions); document.body.append(dialog);
+    dialog.addEventListener('close', () => dialog.remove()); dialog.showModal();
+  }
+  async function agentDroppedItems(transfer) {
+    const entries = [...(transfer.items || [])].map(item => item.webkitGetAsEntry?.()).filter(Boolean);
+    if (!entries.some(entry => entry.isDirectory)) return [...transfer.files].map(file => ({file, name: file.name}));
+    const result = [];
+    const visit = async (entry, parent = '', depth = 0) => {
+      if (result.length >= 100) throw new Error('文件夹文件过多，请缩小范围');
+      if (entry.isFile) {
+        const file = await new Promise((resolve, reject) => entry.file(resolve, reject));
+        result.push({file, name: parent + file.name}); return;
+      }
+      if (depth >= 6 || ['.git', 'node_modules', 'dist', 'bin', 'obj'].includes(entry.name)) return;
+      const reader = entry.createReader();
+      for (;;) {
+        const children = await new Promise((resolve, reject) => reader.readEntries(resolve, reject));
+        if (!children.length) break;
+        for (const child of children) await visit(child, parent + entry.name + '/', depth + 1);
+      }
+    };
+    for (const entry of entries) await visit(entry);
+    return result;
   }
   function highlightAgentCode(element, language) {
     const source = element.textContent;
@@ -771,10 +905,20 @@
       renderAgentModelList();
       $('agent-model-error').textContent = message.extra?.error || '';
     }
+    if (message.kind === 'agent.clipboard.files') {
+      if (message.extra?.error) $('agent-state').textContent = message.extra.error;
+      else {
+        const files = Array.isArray(message.extra?.files) ? message.extra.files : [];
+        if (agentFiles.length + files.length > 12 ||
+            agentFiles.reduce((sum, file) => sum + file.size, 0) + files.reduce((sum, file) => sum + file.size, 0) > 5_000_000)
+          $('agent-state').textContent = '附件超过 12 个或总量超过 5 MB';
+        else { agentFiles.push(...files); renderAgentImages(); $('agent-state').textContent = ''; }
+      }
+    }
     if (message.kind === 'agent.sessions') {
       const nextId = message.extra?.activeId || '';
       if (nextId !== activeAgentSessionId && activeAgentSessionId)
-        agentDrafts.set(activeAgentSessionId, {prompt: $('agent-prompt').value, images: agentImages});
+        agentDrafts.set(activeAgentSessionId, {prompt: $('agent-prompt').value, images: agentImages, files: agentFiles});
       activeAgentSessionId = nextId;
       renderAgentSessions(message.extra || {});
     }
@@ -795,18 +939,25 @@
       if (!timeline.childElementCount) { const empty = document.createElement('div'); empty.className = 'agent-empty'; const title = document.createElement('strong'); title.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话'; empty.append(title); timeline.append(empty); }
       const draft = agentDrafts.get(activeAgentSessionId);
       $('agent-prompt').value = draft?.prompt || '';
-      agentImages = draft?.images || []; renderAgentImages();
+      agentImages = draft?.images || []; agentFiles = draft?.files || []; renderAgentImages();
       renderAgentUsage(data);
     }
     if (message.kind === 'agent.state') {
       agentBusy = !!message.extra?.busy; $('agent-state').textContent = agentBusy ? (message.detail || '正在处理') : '';
       $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
       $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
+      if (!agentBusy) $('agent-token-rate').hidden = true;
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
       for (const button of document.querySelectorAll('.agent-session-row button')) button.disabled = agentBusy;
     }
     if (message.kind === 'agent.root') $('agent-root').textContent = message.detail || '未选择项目文件夹';
     if (message.kind === 'agent.usage') renderAgentUsage(message.extra || {});
+    if (message.kind === 'agent.rate') {
+      const rate = $('agent-token-rate'), speed = Number(message.extra?.perSecond || 0);
+      rate.hidden = !agentBusy || speed <= 0;
+      rate.textContent = rate.hidden ? '' : `${message.extra?.reasoning ? '思考 · ' : ''}${message.extra?.estimated ? '约 ' : ''}${Math.round(speed)} token/s`;
+      rate.title = rate.hidden ? '' : `本次输出 ${message.extra?.estimated ? '约 ' : ''}${Number(message.extra?.tokens || 0).toLocaleString()} token`;
+    }
     if (message.kind === 'agent.approval') { agentApprovalId = message.extra?.id || ''; $('agent-approval-title').textContent = message.detail || '等待确认'; $('agent-approval-detail').textContent = message.extra?.preview || ''; $('agent-approval').hidden = false; }
     if (message.kind === 'agent.approval.clear') { agentApprovalId = ''; $('agent-approval').hidden = true; }
     if (message.kind === 'agent.navigate') { if (message.detail === 'course') openCourse(); else if (message.detail === 'homework') openHomework(); else if (message.detail === 'ai') openAi(); }
@@ -1165,13 +1316,29 @@
   $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
   $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
   $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
+  setupAgentAddMenu();
   $('agent-image-file').addEventListener('change', event => addAgentImages([...event.target.files]));
-  $('agent-prompt').addEventListener('paste', event => { const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); addAgentImages(files); } });
+  $('agent-prompt').addEventListener('paste', event => {
+    const files = [...(event.clipboardData?.files || [])];
+    if (files.some(file => !allowedAgentDocuments.test(file.name) && !file.type.startsWith('image/') && file.size === 0)) {
+      event.preventDefault(); send('agent.clipboard'); return;
+    }
+    if (files.length) { event.preventDefault(); addAgentFiles(files.map(file => ({file, name: file.name}))); }
+    else send('agent.clipboard');
+  });
+  const dropZone = document.querySelector('#view-ai .agent-conversation');
+  dropZone.addEventListener('dragover', event => { if (![...(event.dataTransfer?.types || [])].includes('Files')) return; event.preventDefault(); dropZone.classList.add('agent-drop-target'); });
+  dropZone.addEventListener('dragleave', event => { if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove('agent-drop-target'); });
+  dropZone.addEventListener('drop', async event => {
+    event.preventDefault(); dropZone.classList.remove('agent-drop-target');
+    try { await addAgentFiles(await agentDroppedItems(event.dataTransfer)); }
+    catch (error) { $('agent-state').textContent = error.message || '无法读取拖入内容'; }
+  });
   $('agent-clear').addEventListener('click', () => send('agent.clear'));
   $('agent-cancel').addEventListener('click', () => send('agent.cancel'));
   $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
-  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if ((!prompt && !agentImages.length) || agentBusy || agentPreparingImages) return; const images = agentImages; agentImages = []; renderAgentImages(); $('agent-prompt').value = ''; agentDrafts.delete(activeAgentSessionId); send('agent.send', {prompt, images}); });
+  $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if ((!prompt && !agentImages.length && !agentFiles.length) || agentBusy || agentPreparingImages) return; const images = agentImages, files = agentFiles.map(({name, data}) => ({name, data})); const planOnly = agentPlanOnly; agentImages = []; agentFiles = []; agentPlanOnly = false; document.querySelector('.agent-plus').classList.remove('plan-active'); renderAgentImages(); $('agent-prompt').value = ''; agentDrafts.delete(activeAgentSessionId); send('agent.send', {prompt, images, files, planOnly}); });
   $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
   document.addEventListener('keydown', event => { if (currentView === 'ai' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); $('agent-clear').click(); $('agent-prompt').focus(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));

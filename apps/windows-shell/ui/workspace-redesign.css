@@ -164,7 +164,7 @@
   font-size: 15px;
 }
 #view-ai #agent-sidebar-toggle { display: none; }
-#view-ai .agent-conversation { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+#view-ai .agent-conversation { display: flex; flex: 1; flex-direction: column; min-height: 0; position: relative; }
 #view-ai .agent-timeline {
   flex: 1;
   min-height: 0;
@@ -206,10 +206,38 @@
   font-size: 12px;
 }
 #view-ai .agent-operation summary { cursor: pointer; overflow-wrap: anywhere; }
-#view-ai .agent-approval { width: min(850px, calc(100% - 36px)); margin: 0 auto 12px; }
-#view-ai .agent-composer { padding: 13px 18px 17px; }
+#view-ai .agent-approval {
+  position: absolute; z-index: 15; left: 18px; right: 18px;
+  bottom: calc(var(--agent-composer-height, 150px) + 10px);
+  width: auto; max-width: 850px; margin: 0 auto;
+  max-height: calc(100% - var(--agent-composer-height, 150px) - 24px); overflow: auto;
+  box-shadow: 0 12px 36px #0002;
+  contain: layout paint;
+}
+#view-ai .agent-composer { padding: 13px 18px 17px; position: relative; }
+#view-ai .agent-plus { width: 36px; min-width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 50%; font-size: 24px; line-height: 1; margin-right: 2px; }
+#view-ai .agent-plus.plan-active { border-color: var(--accent); color: var(--accent); }
+#view-ai .agent-composer > .agent-add-menu { display: block; position: absolute; z-index: 17; left: 16px; bottom: 58px; width: min(360px, calc(100% - 32px)); max-height: min(510px, 65vh); overflow: auto; margin: 0; padding: 9px; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); box-shadow: 0 16px 44px #0003; }
+#view-ai .agent-composer > .agent-add-menu[hidden] { display: none; }
+#view-ai .agent-add-menu small { display: block; margin: 8px 11px 5px; color: var(--subtle); font-size: 11px; }
+#view-ai .agent-add-menu button { display: flex; align-items: center; width: 100%; gap: 12px; margin: 0; padding: 9px 10px; min-height: 43px; border: 0; border-radius: 10px; background: transparent; color: var(--text); text-align: left; }
+#view-ai .agent-add-menu button:hover, #view-ai .agent-add-menu button:focus-visible { background: color-mix(in srgb, var(--accent) 10%, var(--panel)); }
+#view-ai .agent-add-icon { width: 22px; text-align: center; font-size: 17px; color: var(--subtle); }
+#view-ai .agent-add-menu strong, #view-ai .agent-add-menu em { display: block; font-style: normal; font-size: 12px; }
+#view-ai .agent-add-menu em { margin-top: 2px; color: var(--subtle); font-size: 10px; }
+#view-ai .agent-file { display: inline-flex; align-items: center; max-width: 220px; gap: 6px; padding: 6px 7px 6px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); font-size: 11px; }
+#view-ai .agent-file > span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#view-ai .agent-file button { width: 18px; min-width: 18px; min-height: 18px; padding: 0; font-size: 16px; line-height: 16px; background: transparent; color: var(--subtle); }
+#view-ai #agent-token-rate { color: var(--subtle); font-size: 11px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#view-ai #agent-token-rate[hidden] { display: none; }
+#view-ai .agent-conversation.agent-drop-target::after { content: '松开以添加文件、文件夹或图片'; position: absolute; z-index: 16; inset: 10px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 18px; background: color-mix(in srgb, var(--panel) 90%, transparent); color: var(--text); pointer-events: none; font-size: 15px; }
+.agent-sketch { width: min(94vw, 970px); padding: 20px; border: 1px solid var(--border); border-radius: 18px; background: var(--panel); color: var(--text); box-shadow: 0 25px 70px #0005; }
+.agent-sketch::backdrop { background: #0009; }
+.agent-sketch canvas { display: block; width: 100%; height: auto; margin: 13px 0; border: 1px solid var(--border); border-radius: 10px; cursor: crosshair; touch-action: none; }
+.agent-sketch > div { display: flex; justify-content: flex-end; gap: 8px; }
+.agent-sketch button { width: auto; margin: 0; }
 #view-ai .agent-composer textarea { min-height: 72px; max-height: 180px; }
-#view-ai .agent-composer > div:last-child { display: flex; align-items: center; }
+#view-ai .agent-composer > .agent-composer-actions { display: flex; align-items: center; }
 #view-ai #agent-state { margin-right: auto; }
 #view-ai #agent-send { width: auto; min-height: 35px; padding: 5px 18px; }
 #view-ai .agent-inspector { padding: 17px; overflow: auto; }

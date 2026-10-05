@@ -23,10 +23,11 @@ internal static class AiAgentService
     internal static async Task<AiCompletionResult> CompleteWithUsageAsync(string consumer, AiSettings settings,
         string instructions, string prompt, CancellationToken cancellation,
         TimeSpan? timeout = null, IReadOnlyList<AiImageInput>? images = null,
-        bool structured = true, string? reasoningEffort = null)
+        bool structured = true, string? reasoningEffort = null,
+        Action<AiGenerationProgress>? progress = null)
     {
         AiConsumerRegistry.Require(consumer);
-        using var client = new ToolboxChatClient(settings, timeout, images, structured, reasoningEffort);
+        using var client = new ToolboxChatClient(settings, timeout, images, structured, reasoningEffort, progress);
         var content = await RunWithClientAsync(consumer, client, instructions, prompt, cancellation);
         return new AiCompletionResult(content, client.LastUsage, client.LastReasoning);
     }
@@ -44,7 +45,8 @@ internal static class AiAgentService
     }
 
     private sealed class ToolboxChatClient(AiSettings settings, TimeSpan? timeout,
-        IReadOnlyList<AiImageInput>? images, bool structured, string? reasoningEffort) : IChatClient
+        IReadOnlyList<AiImageInput>? images, bool structured, string? reasoningEffort,
+        Action<AiGenerationProgress>? progress) : IChatClient
     {
         public AiUsage? LastUsage { get; private set; }
         public string? LastReasoning { get; private set; }
@@ -65,7 +67,7 @@ internal static class AiAgentService
             if (string.IsNullOrWhiteSpace(user))
                 throw new InvalidDataException("Agent 请求内容为空");
             var result = await AiAnswerService.CompleteWithUsageAsync(settings, system, user,
-                cancellationToken, timeout, images, structured, reasoningEffort);
+                cancellationToken, timeout, images, structured, reasoningEffort, progress: progress);
             LastUsage = result.Usage;
             LastReasoning = result.Reasoning;
             return new ChatResponse(new ChatMessage(ChatRole.Assistant, result.Text));

@@ -387,13 +387,56 @@ public partial class MainWindow : Window
                         """);
                     FailSmoke("Agent conversation layout or context menu failed: " + layoutDetail); return;
                 }
+                var addMenu = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const button = document.querySelector('.agent-plus'); button.click();
+                      const menu = document.querySelector('.agent-add-menu');
+                      const labels = [...menu.querySelectorAll('button')].map(item => item.textContent);
+                      return !menu.hidden && ['文件和文件夹', '选择文件夹', '目标', '计划模式', '绘图', '学习通', '作业校对']
+                        .every(label => labels.some(value => value.includes(label))) &&
+                        !!document.querySelector('#agent-form input[webkitdirectory]');
+                    })()
+                    """);
+                if (addMenu != "true") { FailSmoke("Agent add menu or folder picker was not rendered"); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await using var output = File.Create(Path.Combine(root, ".cache", "agent-add-menu-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const input = document.querySelector('#agent-form input[accept*=".docx"]');
+                      const files = new DataTransfer();
+                      files.items.add(new File(['附件中文内容'], 'note.txt', {type: 'text/plain'}));
+                      input.files = files.files; input.dispatchEvent(new Event('change', {bubbles: true}));
+                    })()
+                    """);
+                var documentAttached = false;
+                for (var attempt = 0; attempt < 20 && !documentAttached; attempt++)
+                {
+                    documentAttached = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('#agent-attachments .agent-file')?.textContent.includes('note.txt') === true") == "true";
+                    if (!documentAttached) await Task.Delay(100);
+                }
+                if (!documentAttached) { FailSmoke("Agent document attachment was not rendered"); return; }
+                await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.agent-plus').click()");
+                var approvalStable = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                    (() => {
+                      const composer = document.getElementById('agent-form');
+                      const before = composer.getBoundingClientRect();
+                      const approval = document.getElementById('agent-approval'); approval.hidden = false;
+                      const after = composer.getBoundingClientRect(); approval.hidden = true;
+                      return Math.abs(before.top - after.top) < 1 && Math.abs(before.height - after.height) < 1;
+                    })()
+                    """);
+                if (approvalStable != "true") { FailSmoke("Agent approval card changed composer layout"); return; }
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
                 ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
                 {
                     v = 1, kind = "agent.models", extra = new { models = new[]
                     {
-                        new { name = "fax-toolbox-qwen3:8k", size = 5_027_792_703L, family = "qwen3" },
-                        new { name = "huihui_ai/qwen3-abliterated:8b-v2", size = 5_027_793_060L, family = "qwen3" }
+                        new { name = "qwen3:8b", size = 5_027_792_703L, family = "qwen3" },
+                        new { name = "qwen3.5:4b", size = 3_027_793_060L, family = "qwen3" }
                     } }
                 }));
                 await Task.Delay(100);
@@ -411,8 +454,7 @@ public partial class MainWindow : Window
                           style.paddingLeft !== '0px' || style.paddingRight !== '0px' ||
                           rect.left < frame.left || rect.right > frame.right ||
                           panel.querySelectorAll('.agent-model-choice').length < 2 ||
-                          !panel.querySelector('.agent-model-choice.selected') ||
-                          !panel.textContent.includes('Qwen3 8B · 默认配置')) return false;
+                          !panel.querySelector('.agent-model-choice.selected')) return false;
                       range.value = '0'; range.dispatchEvent(new Event('input', {bubbles: true}));
                       if (document.getElementById('agent-effort-label').textContent !== '快速') return false;
                       range.value = '2'; range.dispatchEvent(new Event('input', {bubbles: true}));
@@ -421,7 +463,18 @@ public partial class MainWindow : Window
                       return true;
                     })()
                     """);
-                if (runControls != "true") { FailSmoke("Agent model and effort controls are misaligned"); return; }
+                if (runControls != "true")
+                {
+                    var controlsDetail = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                        (() => { const p=document.getElementById('agent-run-panel'),r=document.getElementById('agent-effort');
+                          const a=[...p.querySelectorAll('.agent-run-modes label')]; const b=p.getBoundingClientRect(),x=r.getBoundingClientRect();
+                          return JSON.stringify({hidden:p.hidden, labels:a.map(v=>({w:v.getBoundingClientRect().width,top:v.getBoundingClientRect().top})),
+                            padding:[getComputedStyle(r).paddingLeft,getComputedStyle(r).paddingRight],
+                            range:[x.left,x.right],panel:[b.left,b.right],cards:p.querySelectorAll('.agent-model-choice').length,
+                            selected:!!p.querySelector('.agent-model-choice.selected'),text:p.textContent.slice(0,250)}); })()
+                        """);
+                    FailSmoke("Agent model and effort controls are misaligned: " + controlsDetail); return;
+                }
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
                 {
                     await using var output = File.Create(Path.Combine(root, ".cache", "agent-run-controls-preview.png"));
@@ -430,18 +483,17 @@ public partial class MainWindow : Window
                 ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
                 {
                     v = 1, kind = "agent.options", extra = new { mode = "chat", effort = "normal",
-                        provider = "venice", model = "qwen-3-6-plus", systemPrompt = "" }
+                        provider = "notrack", model = "notrack-uncensored", systemPrompt = "" }
                 }));
                 await Task.Delay(100);
-                var veniceChoices = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                var noTrackChoices = await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (() => {
                       const cards = [...document.querySelectorAll('#agent-model-list .agent-model-choice')];
-                      return cards.length === 2 && cards[0].classList.contains('selected') &&
-                        cards[0].textContent.includes('Qwen 3.6 Plus') &&
-                        cards[1].textContent.includes('Venice Uncensored 1.2');
+                      return cards.some(card => card.classList.contains('selected') &&
+                        card.textContent.includes('NoTrack'));
                     })()
                     """);
-                if (veniceChoices != "true") { FailSmoke("Venice model choices were not rendered"); return; }
+                if (noTrackChoices != "true") { FailSmoke("NoTrack model choice was not rendered"); return; }
                 PublishAgentOptions();
                 await Task.Delay(100);
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
@@ -648,6 +700,18 @@ public partial class MainWindow : Window
                     if (await replace != "已修改 note.txt" || File.ReadAllText(documentPath) != "after")
                     { FailSmoke("Agent approved edit was not applied"); return; }
                 }
+                using (var opening = JsonDocument.Parse("{\"module\":\"course\"}"))
+                {
+                    var request = RunAgentToolAsync("open_module", opening.RootElement, CancellationToken.None);
+                    for (var attempt = 0; attempt < 20 && agentApproval is null; attempt++) await Task.Delay(50);
+                    if (agentApproval is null ||
+                        await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('view-course').hidden") != "true")
+                    { FailSmoke("Agent opened a module before approval"); return; }
+                    agentApproval.TrySetResult(false);
+                    if (await request != "用户拒绝了打开模块。" ||
+                        await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('view-course').hidden") != "true")
+                    { FailSmoke("Agent ignored a rejected module approval"); return; }
+                }
                 using (var command = JsonDocument.Parse("{\"program\":\"git\",\"args\":[\"status\",\"--short\"]}"))
                 {
                     Trace("Agent command smoke beginning");
@@ -726,19 +790,19 @@ public partial class MainWindow : Window
                 Directory.CreateDirectory(Path.GetDirectoryName(preview)!);
                 await using (var output = File.Create(preview)) encoder.Save(output);
                 dialog.Close();
-                var venice = AiProviderPresets.All.First(item => item.Id == "venice");
-                var veniceDialog = new AiSettingsDialog(this,
-                    new AiSettings(venice.Endpoint, AiProviderPresets.VeniceModels[1].Id, ""), "agent");
-                veniceDialog.Show();
+                var noTrack = AiProviderPresets.All.First(item => item.Id == "notrack");
+                var noTrackDialog = new AiSettingsDialog(this,
+                    new AiSettings(noTrack.Endpoint, noTrack.Model, ""), "agent");
+                noTrackDialog.Show();
                 await Task.Delay(200);
-                var veniceImage = new RenderTargetBitmap((int)veniceDialog.ActualWidth,
-                    (int)veniceDialog.ActualHeight, 96, 96, PixelFormats.Pbgra32);
-                veniceImage.Render(veniceDialog);
-                var veniceEncoder = new PngBitmapEncoder();
-                veniceEncoder.Frames.Add(BitmapFrame.Create(veniceImage));
-                await using (var output = File.Create(Path.Combine(root, ".cache", "ai-dialog-venice-preview.png")))
-                    veniceEncoder.Save(output);
-                veniceDialog.Close();
+                var noTrackImage = new RenderTargetBitmap((int)noTrackDialog.ActualWidth,
+                    (int)noTrackDialog.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+                noTrackImage.Render(noTrackDialog);
+                var noTrackEncoder = new PngBitmapEncoder();
+                noTrackEncoder.Frames.Add(BitmapFrame.Create(noTrackImage));
+                await using (var output = File.Create(Path.Combine(root, ".cache", "ai-dialog-notrack-preview.png")))
+                    noTrackEncoder.Save(output);
+                noTrackDialog.Close();
                 var qwen = AiProviderPresets.All.First(item => item.Id == "qwen");
                 var qwenDialog = new AiSettingsDialog(this,
                     new AiSettings(qwen.Endpoint, qwen.Model, ""), "agent");
@@ -963,6 +1027,7 @@ public partial class MainWindow : Window
                 case "ai.balance.refresh": await RefreshAiBalanceAsync(); break;
                 case "agent.folder": SelectAgentFolder(); break;
                 case "agent.send": await SendAgentAsync(message); break;
+                case "agent.clipboard": await PasteAgentClipboardAsync(); break;
                 case "agent.options": UpdateAgentOptions(message); break;
                 case "agent.background": UpdateAgentBackground(message, false); break;
                 case "agent.memory": UpdateAgentBackground(message, true); break;

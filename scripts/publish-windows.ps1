@@ -20,7 +20,7 @@ $feed = Join-Path $root '.cache\nuget-feed'
 $publishConfig = Join-Path $root '.cache\nuget-feed\Publish.NuGet.Config'
 $escapedFeed = [System.Security.SecurityElement]::Escape($feed)
 Set-Content -LiteralPath $publishConfig -Encoding UTF8 -Value "<?xml version=`"1.0`" encoding=`"utf-8`"?><configuration><packageSources><clear /><add key=`"local`" value=`"$escapedFeed`" /><add key=`"nuget.org`" value=`"https://api.nuget.org/v3/index.json`" /></packageSources></configuration>"
-& dotnet restore $project -r win-x64 --configfile $publishConfig --nologo
+& dotnet restore $project -r win-x64 --configfile $publishConfig --ignore-failed-sources --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET win-x64 restore failed' }
 
 $distRoot = [System.IO.Path]::GetFullPath((Join-Path $root 'dist'))
@@ -29,10 +29,9 @@ $resolvedDist = [System.IO.Path]::GetFullPath($dist)
 if (-not $resolvedDist.StartsWith($distRoot + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase)) {
     throw 'Unsafe publish directory'
 }
-$runningDistProcess = Get-CimInstance Win32_Process | Where-Object {
-    $_.Name -in @('FaxToolbox.Windows.exe', 'toolbox-backend.exe') -and
-    $_.ExecutablePath -and
-    $_.ExecutablePath.StartsWith($resolvedDist + [System.IO.Path]::DirectorySeparatorChar,
+$runningDistProcess = Get-Process -Name 'FaxToolbox.Windows', 'toolbox-backend' -ErrorAction SilentlyContinue | Where-Object {
+    $_.Path -and
+    $_.Path.StartsWith($resolvedDist + [System.IO.Path]::DirectorySeparatorChar,
         [System.StringComparison]::OrdinalIgnoreCase)
 }
 if ($runningDistProcess) { throw 'Close FaxToolbox.Windows.exe before publishing to dist/windows' }

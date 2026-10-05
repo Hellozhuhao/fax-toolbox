@@ -2,6 +2,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -27,6 +28,8 @@ internal sealed record AiUsage(long InputTokens, long OutputTokens, long? Cached
 internal sealed record AiFunctionCall(string Name, JsonElement Arguments);
 internal sealed record AiCompletionResult(string Text, AiUsage? Usage, string? Reasoning = null,
     IReadOnlyList<AiFunctionCall>? ToolCalls = null);
+internal sealed record AiGenerationProgress(long EstimatedOutputTokens, double TokensPerSecond,
+    bool Reasoning);
 
 internal sealed record AiSettings(string Endpoint, string Model, string EncryptedKey,
     AiTokenPricing? Pricing = null)
@@ -260,7 +263,7 @@ internal static class AiAnswerService
 
     internal static string BuildCompletionPayload(AiSettings settings, string systemPrompt,
         string userPrompt, IReadOnlyList<AiImageInput>? images = null, bool structured = true,
-        string? reasoningEffort = null, object[]? tools = null)
+        string? reasoningEffort = null, object[]? tools = null, bool stream = false)
     {
         var userContent = images is { Count: > 0 } ? new List<object> { new { type = "text", text = userPrompt } } : null;
         if (userContent is not null)
@@ -280,7 +283,7 @@ internal static class AiAnswerService
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = (object?)userContent ?? userPrompt }
             },
-            ["stream"] = false
+            ["stream"] = stream
         };
         var provider = AiProviderPresets.Match(settings).Id;
         if (tools is { Length: > 0 })
@@ -292,9 +295,21 @@ internal static class AiAnswerService
             body["reasoning_effort"] = reasoningEffort;
         if (provider == "qwen" && settings.Model.StartsWith("qwen3.8-", StringComparison.Ordinal))
             body["reasoning_effort"] = reasoningEffort ?? "low";
+        if (provider == "deepseek")
+        {
+            var level = reasoningEffort is "none" or "low" or "high" or "max" ? reasoningEffort : "low";
+            body["thinking"] = new { type = level == "none" ? "disabled" : "enabled" };
+            if (level != "none") body["reasoning_effort"] = level;
+            body["max_tokens"] = structured ? 8192 : level switch
+            {
+                "none" => 3072, "high" or "max" => 8192, _ => 4096
+            };
+            if (stream) body["stream_options"] = new { include_usage = true };
+        }
+        if (provider == "notrack") body["max_tokens"] = 8192;
         if (provider == "ollama" && structured)
             body["response_format"] = new { type = "json_object" };
-        if (structured && new Uri(settings.Endpoint).Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
+        if (structured && provider == "deepseek")
         {
             // Quiz answers need short JSON, not the provider's default thinking mode.
             body["thinking"] = new { type = "disabled" };
@@ -327,10 +342,14 @@ internal static class AiAnswerService
     internal static async Task<AiCompletionResult> CompleteWithUsageAsync(AiSettings settings, string systemPrompt,
         string userPrompt, CancellationToken cancellationToken, TimeSpan? timeout = null,
         IReadOnlyList<AiImageInput>? images = null, bool structured = true,
-        string? reasoningEffort = null, object[]? tools = null)
+        string? reasoningEffort = null, object[]? tools = null,
+        Action<AiGenerationProgress>? progress = null)
     {
         AiSettings.Validate(settings.Endpoint, settings.Model);
-        var payload = BuildCompletionPayload(settings, systemPrompt, userPrompt, images, structured, reasoningEffort, tools);
+        var streaming = AiProviderPresets.Match(settings).Id is "deepseek" or "notrack" &&
+            !structured && progress is not null;
+        var payload = BuildCompletionPayload(settings, systemPrompt, userPrompt, images, structured,
+            reasoningEffort, tools, streaming);
         using var request = new HttpRequestMessage(HttpMethod.Post, settings.Endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -343,7 +362,7 @@ internal static class AiAnswerService
         try
         {
         var provider = AiProviderPresets.Match(settings).Id;
-        var client = provider is "venice" or "openai" or "custom" ? ProxyClient : DirectClient;
+        var client = provider is "openai" or "custom" ? ProxyClient : DirectClient;
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead,
             timeoutSource.Token);
         if (!response.IsSuccessStatusCode)
@@ -353,6 +372,8 @@ internal static class AiAnswerService
             throw new HttpRequestException(DescribeHttpError((int)response.StatusCode));
         }
         await using var stream = await response.Content.ReadAsStreamAsync(timeoutSource.Token);
+        if (streaming)
+            return await ReadCompletionStreamAsync(stream, progress!, timeoutSource.Token);
         using var buffer = new MemoryStream();
         var block = new byte[8192];
         int read;
@@ -372,6 +393,9 @@ internal static class AiAnswerService
         var content = message.TryGetProperty("content", out var answerContent) &&
             answerContent.ValueKind == JsonValueKind.String ? answerContent.GetString() : null;
         var toolCalls = ParseToolCalls(message);
+        if (choices[0].TryGetProperty("finish_reason", out var finishReason) &&
+            finishReason.ValueKind == JsonValueKind.String && finishReason.GetString() == "length")
+            throw new InvalidDataException("模型达到本次输出上限，已停止；请缩小任务或降低思考档位。");
         if (string.IsNullOrWhiteSpace(content) && toolCalls.Count == 0)
             throw new InvalidDataException("AI 未返回答案，请人工检查");
         return new AiCompletionResult(content ?? "", ParseUsage(result.RootElement), ParseReasoning(message), toolCalls);
@@ -398,6 +422,116 @@ internal static class AiAnswerService
             if (message.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
                 return value.GetString();
         return null;
+    }
+
+    internal static async Task<AiCompletionResult> ReadCompletionStreamAsync(Stream stream,
+        Action<AiGenerationProgress> progress, CancellationToken cancellation)
+    {
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var answer = new StringBuilder();
+        var reasoning = new StringBuilder();
+        var watch = Stopwatch.StartNew();
+        var lastReport = 0L;
+        var lastTokens = 0L;
+        var outputBytes = 0L;
+        var lastRepetitionCheck = 0;
+        var toolNames = new Dictionary<int, StringBuilder>();
+        var toolArguments = new Dictionary<int, StringBuilder>();
+        AiUsage? usage = null;
+        var finished = false;
+        while (await reader.ReadLineAsync(cancellation) is { } line)
+        {
+            if (!line.StartsWith("data: ", StringComparison.Ordinal)) continue;
+            var data = line[6..];
+            if (data == "[DONE]") { finished = true; break; }
+            using var chunk = JsonDocument.Parse(data);
+            var root = chunk.RootElement;
+            usage = ParseUsage(root) ?? usage;
+            if (!root.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array ||
+                choices.GetArrayLength() == 0 || choices[0].ValueKind != JsonValueKind.Object ||
+                !choices[0].TryGetProperty("delta", out var delta) || delta.ValueKind != JsonValueKind.Object)
+                continue;
+            if (choices[0].TryGetProperty("finish_reason", out var finishReason) &&
+                finishReason.ValueKind == JsonValueKind.String && finishReason.GetString() == "length")
+                throw new InvalidDataException("模型达到本次输出上限，已停止；请缩小任务或降低思考档位。");
+            if (delta.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String)
+            {
+                var value = content.GetString() ?? "";
+                answer.Append(value);
+                outputBytes += Encoding.UTF8.GetByteCount(value);
+            }
+            if (delta.TryGetProperty("reasoning_content", out var thought) && thought.ValueKind == JsonValueKind.String)
+            {
+                var value = thought.GetString() ?? "";
+                reasoning.Append(value);
+                outputBytes += Encoding.UTF8.GetByteCount(value);
+            }
+            if (delta.TryGetProperty("tool_calls", out var calls) && calls.ValueKind == JsonValueKind.Array)
+                foreach (var call in calls.EnumerateArray())
+                {
+                    if (!call.TryGetProperty("index", out var indexValue) || !indexValue.TryGetInt32(out var index) ||
+                        index is < 0 or > 7)
+                        throw new InvalidDataException("模型工具调用流格式无效。");
+                    if (!call.TryGetProperty("function", out var function) || function.ValueKind != JsonValueKind.Object)
+                        continue;
+                    if (!toolNames.TryGetValue(index, out var toolName))
+                        toolNames[index] = toolName = new StringBuilder();
+                    if (!toolArguments.TryGetValue(index, out var arguments))
+                        toolArguments[index] = arguments = new StringBuilder();
+                    if (function.TryGetProperty("name", out var namePart) && namePart.ValueKind == JsonValueKind.String)
+                        toolName.Append(namePart.GetString());
+                    if (function.TryGetProperty("arguments", out var argumentPart) && argumentPart.ValueKind == JsonValueKind.String)
+                    {
+                        var value = argumentPart.GetString() ?? "";
+                        arguments.Append(value);
+                        outputBytes += Encoding.UTF8.GetByteCount(value);
+                    }
+                }
+            if (answer.Length + reasoning.Length > 96_000)
+                throw new InvalidDataException("模型输出异常增长，已停止本次请求。");
+            if (outputBytes > 24_000)
+                throw new InvalidDataException("模型本次生成量异常，已熔断；实际用量以服务商账单为准。");
+            if (answer.Length + reasoning.Length - lastRepetitionCheck >= 512 &&
+                (RepeatedTail(answer) || RepeatedTail(reasoning)))
+                throw new InvalidDataException("模型重复生成相同内容，已熔断本次请求；实际用量以服务商账单为准。");
+            if (answer.Length + reasoning.Length - lastRepetitionCheck >= 512)
+                lastRepetitionCheck = answer.Length + reasoning.Length;
+            var now = watch.ElapsedMilliseconds;
+            if (now - lastReport < 350) continue;
+            var estimated = outputBytes / 3;
+            var rate = (estimated - lastTokens) * 1000d / Math.Max(1, now - lastReport);
+            progress(new AiGenerationProgress(estimated, rate, answer.Length == 0));
+            lastTokens = estimated;
+            lastReport = now;
+        }
+        if (!finished) throw new InvalidDataException("模型输出中断，已停止本次请求。");
+        var toolCalls = new List<AiFunctionCall>();
+        foreach (var index in toolNames.Keys.Order())
+        {
+            var name = toolNames[index].ToString();
+            if (string.IsNullOrWhiteSpace(name) || !toolArguments.TryGetValue(index, out var raw))
+                throw new InvalidDataException("模型工具调用不完整。");
+            using var parsed = JsonDocument.Parse(raw.ToString());
+            if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("模型工具参数无效。");
+            toolCalls.Add(new AiFunctionCall(name, parsed.RootElement.Clone()));
+        }
+        if (answer.Length == 0 && toolCalls.Count == 0)
+            throw new InvalidDataException("模型只返回了思考内容，已停止本次请求。");
+        progress(new AiGenerationProgress(usage?.OutputTokens ?? lastTokens,
+            (usage?.OutputTokens ?? lastTokens) / Math.Max(0.1, watch.Elapsed.TotalSeconds), false));
+        return new AiCompletionResult(answer.ToString(), usage, reasoning.ToString(), toolCalls);
+    }
+
+    private static bool RepeatedTail(StringBuilder builder)
+    {
+        if (builder.Length < 900) return false;
+        var recent = builder.ToString(Math.Max(0, builder.Length - 3000), Math.Min(3000, builder.Length));
+        var suffix = recent[^120..];
+        var first = recent.IndexOf(suffix, StringComparison.Ordinal);
+        return first >= 0 && first < recent.Length - 360 &&
+            recent.IndexOf(suffix, first + suffix.Length, StringComparison.Ordinal) is var second &&
+            second >= 0 && second < recent.Length - 120;
     }
 
     internal static IReadOnlyList<AiFunctionCall> ParseToolCalls(JsonElement message)
@@ -428,6 +562,12 @@ internal static class AiAnswerService
 
     public static async Task TestConnectionAsync(AiSettings settings, CancellationToken cancellationToken)
     {
+        if (AiProviderPresets.Match(settings).Id == "notrack")
+        {
+            await CompleteWithUsageAsync(settings, "用中文简短回答。", "请回复：连接成功。",
+                cancellationToken, TimeSpan.FromSeconds(20), structured: false);
+            return;
+        }
         var question = new AiQuizQuestion(1, "single", "1 + 1 等于多少？",
             ["A. 1", "B. 2"], 0);
         await AnswerAsync(settings, new AiQuizSnapshot([question]), cancellationToken);
