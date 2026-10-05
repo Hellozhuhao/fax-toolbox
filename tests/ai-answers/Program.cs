@@ -271,6 +271,11 @@ try { AgentAttachmentReader.Parse(JsonSerializer.SerializeToElement(new { files 
     throw new Exception("Unsafe attachment name was accepted"); }
 catch (InvalidDataException) { }
 var deepSeekPreset = AiProviderPresets.All.First(item => item.Id == "deepseek");
+var deepSeekSettings = new AiSettings(deepSeekPreset.Endpoint, deepSeekPreset.Model, "");
+if (AgentPromptCatalog.ReasoningEffort(deepSeekSettings, "normal") != "none" ||
+    AgentPromptCatalog.ReasoningEffort(deepSeekSettings, "quick") != "none" ||
+    AgentPromptCatalog.ReasoningEffort(deepSeekSettings, "deep") != "low")
+    throw new Exception("DeepSeek default reasoning loop prevention was lost");
 using (var payload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
     new AiSettings(deepSeekPreset.Endpoint, deepSeekPreset.Model, ""), "system", "prompt",
     structured: false, reasoningEffort: "low", stream: true)))
@@ -280,7 +285,7 @@ using (var payload = JsonDocument.Parse(AiAnswerService.BuildCompletionPayload(
         !payload.RootElement.GetProperty("stream_options").GetProperty("include_usage").GetBoolean())
         throw new Exception("DeepSeek loop control payload is wrong");
 var toolDelta = JsonSerializer.Serialize(new { choices = new[] { new { delta = new {
-    tool_calls = new[] { new { index = 0, function = new { name = "plan",
+    tool_calls = new[] { new { index = 0, id = "call_plan", function = new { name = "plan",
         arguments = "{\"steps\":[\"先检查\",\"再执行\"]}" } } } } } } });
 var usageDelta = JsonSerializer.Serialize(new { choices = Array.Empty<object>(), usage = new {
     prompt_tokens = 20, completion_tokens = 8, total_tokens = 28 } });
@@ -289,7 +294,7 @@ using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(
 {
     var streamed = await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
     if (streamed.ToolCalls is not { Count: 1 } || streamed.ToolCalls[0].Name != "plan" ||
-        streamed.Usage?.OutputTokens != 8)
+        streamed.Usage?.OutputTokens != 8 || streamed.ToolCalls[0].Id != "call_plan")
         throw new Exception("DeepSeek streaming tool call or usage was lost");
 }
 using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
@@ -299,6 +304,44 @@ using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
     try { await AiAnswerService.ReadCompletionStreamAsync(stream, _ => { }, CancellationToken.None);
         throw new Exception("Repeated DeepSeek reasoning was not stopped"); }
     catch (InvalidDataException) { }
+}
+using (var stream = new MemoryStream(Encoding.UTF8.GetBytes("data: " +
+    JsonSerializer.Serialize(new { choices = new[] { new { delta = new { content = "表格已生成" } } } }) +
+    "\n\ndata: [DONE]\n\n")))
+{
+    var updates = new List<AiGenerationProgress>();
+    var answer = await AiAnswerService.ReadCompletionStreamAsync(stream, updates.Add, CancellationToken.None);
+    if (answer.Text != "表格已生成" || updates.Last().PartialText != answer.Text)
+        throw new Exception("Streaming answer text was not delivered to the interface");
+}
+using (var toolClient = new StubToolChatClient())
+{
+    var requested = new TaskCompletionSource<bool>();
+    var permission = new TaskCompletionSource<string>();
+    var run = AiAgentService.RunToolAgentWithClientAsync(toolClient, "Use tools", "查看模块状态",
+        async (name, arguments, cancellation) => {
+            if (name != "module_status" || arguments.ValueKind != JsonValueKind.Object)
+                throw new Exception("Framework dispatched the wrong tool");
+            requested.SetResult(true);
+            return await permission.Task.WaitAsync(cancellation);
+        }, CancellationToken.None);
+    await requested.Task.WaitAsync(TimeSpan.FromSeconds(5));
+    if (run.IsCompleted || toolClient.Requests != 1)
+        throw new Exception("Framework advanced before the tool completed");
+    permission.SetResult("module-ready");
+    if (await run != "模块已就绪" || toolClient.Requests != 2)
+        throw new Exception("Framework did not continue from the approved tool result");
+}
+using (var repeatClient = new StubToolChatClient(repeat: true))
+{
+    var invoked = 0;
+    try {
+        await AiAgentService.RunToolAgentWithClientAsync(repeatClient, "Use tools", "查看模块状态",
+            (_, _, _) => { invoked++; return Task.FromResult("module-ready"); }, CancellationToken.None);
+        throw new Exception("Repeated framework tool call was not stopped");
+    }
+    catch (InvalidDataException) { }
+    if (invoked != 1) throw new Exception("Repeated framework tool executed twice");
 }
 Console.WriteLine("PASS AI response validation");
 if (args.Contains("--live-local", StringComparer.Ordinal))
@@ -363,6 +406,41 @@ sealed class StubChatClient : IChatClient
     {
         var response = await GetResponseAsync(messages, options, cancellationToken);
         yield return new ChatResponseUpdate(ChatRole.Assistant, response.Text);
+    }
+    public void Dispose() { }
+}
+
+sealed class StubToolChatClient(bool repeat = false) : IChatClient
+{
+    public int Requests { get; private set; }
+    public object? GetService(Type serviceType, object? serviceKey = null) => null;
+    public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        Requests++;
+        var input = messages.ToArray();
+        if (options?.Tools?.Count != 11) throw new Exception("Framework did not expose registered tools");
+        if (Requests == 1 || repeat && Requests == 2)
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                [new FunctionCallContent("module_call_" + Requests, "module_status", new Dictionary<string, object?>())]))
+            { FinishReason = ChatFinishReason.ToolCalls });
+        var result = input.SelectMany(message => message.Contents).OfType<FunctionResultContent>().FirstOrDefault();
+        if (result?.CallId != "module_call_1" || result.Result?.ToString() != "module-ready")
+            throw new Exception("Framework lost the tool call ID or result");
+        using var native = JsonDocument.Parse(JsonSerializer.Serialize(AiAgentService.BuildConversation(input, "Use tools")));
+        if (!native.RootElement.EnumerateArray().Any(message => message.GetProperty("role").GetString() == "tool" &&
+            message.GetProperty("tool_call_id").GetString() == "module_call_1"))
+            throw new Exception("Native tool result was flattened into user text");
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "模块已就绪")));
+    }
+    public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+        IEnumerable<ChatMessage> messages, ChatOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var response = await GetResponseAsync(messages, options, cancellationToken);
+        var update = new ChatResponseUpdate { Role = ChatRole.Assistant, FinishReason = response.FinishReason };
+        foreach (var content in response.Messages.SelectMany(message => message.Contents)) update.Contents.Add(content);
+        yield return update;
     }
     public void Dispose() { }
 }

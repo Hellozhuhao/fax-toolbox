@@ -24,7 +24,9 @@ internal static class AgentToolSchemas
         Function("open_module", "打开工具箱模块。", new() { ["module"] = new { type = "string", @enum = new[] { "course", "homework", "ai" } } }, "module"),
         Function("project_overview", "查看所选项目概览。"),
         Function("list_files", "列出所选项目内文件。", new() { ["path"] = Text }, "path"),
-        Function("read_file", "读取所选项目内文本文件。", new() { ["path"] = Text }, "path"),
+        Function("read_file", "分段读取项目文本。offset 是从 0 开始的字符位置；结果会给出下一段位置。", new() {
+            ["path"] = Text, ["offset"] = new { type = "integer", minimum = 0 },
+            ["limit"] = new { type = "integer", minimum = 100, maximum = 2800 } }, "path"),
         Function("search_files", "在所选项目内搜索文本。", new() { ["text"] = Text, ["path"] = Text }, "text", "path"),
         Function("create_file", "创建所选项目内的新文件，执行前需用户确认。", new() { ["path"] = Text, ["content"] = Text }, "path", "content"),
         Function("replace_text", "替换所选项目文件中唯一出现的文本，执行前需用户确认。", new() { ["path"] = Text, ["old_text"] = Text, ["new_text"] = Text }, "path", "old_text", "new_text"),

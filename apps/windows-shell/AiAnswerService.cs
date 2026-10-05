@@ -25,11 +25,11 @@ internal sealed record AiUsage(long InputTokens, long OutputTokens, long? Cached
     }
 }
 
-internal sealed record AiFunctionCall(string Name, JsonElement Arguments);
+internal sealed record AiFunctionCall(string Name, JsonElement Arguments, string? Id = null);
 internal sealed record AiCompletionResult(string Text, AiUsage? Usage, string? Reasoning = null,
     IReadOnlyList<AiFunctionCall>? ToolCalls = null);
 internal sealed record AiGenerationProgress(long EstimatedOutputTokens, double TokensPerSecond,
-    bool Reasoning);
+    bool Reasoning, string? PartialText = null);
 
 internal sealed record AiSettings(string Endpoint, string Model, string EncryptedKey,
     AiTokenPricing? Pricing = null)
@@ -263,7 +263,8 @@ internal static class AiAnswerService
 
     internal static string BuildCompletionPayload(AiSettings settings, string systemPrompt,
         string userPrompt, IReadOnlyList<AiImageInput>? images = null, bool structured = true,
-        string? reasoningEffort = null, object[]? tools = null, bool stream = false)
+        string? reasoningEffort = null, object[]? tools = null, bool stream = false,
+        object[]? conversation = null)
     {
         var userContent = images is { Count: > 0 } ? new List<object> { new { type = "text", text = userPrompt } } : null;
         if (userContent is not null)
@@ -286,6 +287,7 @@ internal static class AiAnswerService
             ["stream"] = stream
         };
         var provider = AiProviderPresets.Match(settings).Id;
+        if (conversation is not null) body["messages"] = conversation;
         if (tools is { Length: > 0 })
         {
             body["tools"] = tools;
@@ -304,8 +306,9 @@ internal static class AiAnswerService
             {
                 "none" => 3072, "high" or "max" => 8192, _ => 4096
             };
-            if (stream) body["stream_options"] = new { include_usage = true };
         }
+        if (stream && provider is "deepseek" or "qwen" or "openai" or "siliconflow")
+            body["stream_options"] = new { include_usage = true };
         if (provider == "notrack") body["max_tokens"] = 8192;
         if (provider == "ollama" && structured)
             body["response_format"] = new { type = "json_object" };
@@ -343,13 +346,14 @@ internal static class AiAnswerService
         string userPrompt, CancellationToken cancellationToken, TimeSpan? timeout = null,
         IReadOnlyList<AiImageInput>? images = null, bool structured = true,
         string? reasoningEffort = null, object[]? tools = null,
-        Action<AiGenerationProgress>? progress = null)
+        Action<AiGenerationProgress>? progress = null, object[]? conversation = null)
     {
         AiSettings.Validate(settings.Endpoint, settings.Model);
-        var streaming = AiProviderPresets.Match(settings).Id is "deepseek" or "notrack" &&
-            !structured && progress is not null;
+        var streaming = !structured && progress is not null &&
+            AiProviderPresets.Match(settings).Id is "deepseek" or "notrack" or "qwen" or
+                "openai" or "siliconflow" or "ollama";
         var payload = BuildCompletionPayload(settings, systemPrompt, userPrompt, images, structured,
-            reasoningEffort, tools, streaming);
+            reasoningEffort, tools, streaming, conversation);
         using var request = new HttpRequestMessage(HttpMethod.Post, settings.Endpoint)
         {
             Content = new StringContent(payload, Encoding.UTF8, "application/json")
@@ -434,9 +438,11 @@ internal static class AiAnswerService
         var lastReport = 0L;
         var lastTokens = 0L;
         var outputBytes = 0L;
+        var reasoningBytes = 0L;
         var lastRepetitionCheck = 0;
         var toolNames = new Dictionary<int, StringBuilder>();
         var toolArguments = new Dictionary<int, StringBuilder>();
+        var toolIds = new Dictionary<int, StringBuilder>();
         AiUsage? usage = null;
         var finished = false;
         while (await reader.ReadLineAsync(cancellation) is { } line)
@@ -460,11 +466,14 @@ internal static class AiAnswerService
                 answer.Append(value);
                 outputBytes += Encoding.UTF8.GetByteCount(value);
             }
-            if (delta.TryGetProperty("reasoning_content", out var thought) && thought.ValueKind == JsonValueKind.String)
+            if ((delta.TryGetProperty("reasoning_content", out var thought) ||
+                delta.TryGetProperty("reasoning", out thought)) && thought.ValueKind == JsonValueKind.String)
             {
                 var value = thought.GetString() ?? "";
                 reasoning.Append(value);
-                outputBytes += Encoding.UTF8.GetByteCount(value);
+                var bytes = Encoding.UTF8.GetByteCount(value);
+                outputBytes += bytes;
+                reasoningBytes += bytes;
             }
             if (delta.TryGetProperty("tool_calls", out var calls) && calls.ValueKind == JsonValueKind.Array)
                 foreach (var call in calls.EnumerateArray())
@@ -472,6 +481,11 @@ internal static class AiAnswerService
                     if (!call.TryGetProperty("index", out var indexValue) || !indexValue.TryGetInt32(out var index) ||
                         index is < 0 or > 7)
                         throw new InvalidDataException("模型工具调用流格式无效。");
+                    if (call.TryGetProperty("id", out var idPart) && idPart.ValueKind == JsonValueKind.String)
+                    {
+                        if (!toolIds.TryGetValue(index, out var id)) toolIds[index] = id = new StringBuilder();
+                        id.Append(idPart.GetString());
+                    }
                     if (!call.TryGetProperty("function", out var function) || function.ValueKind != JsonValueKind.Object)
                         continue;
                     if (!toolNames.TryGetValue(index, out var toolName))
@@ -491,6 +505,8 @@ internal static class AiAnswerService
                 throw new InvalidDataException("模型输出异常增长，已停止本次请求。");
             if (outputBytes > 24_000)
                 throw new InvalidDataException("模型本次生成量异常，已熔断；实际用量以服务商账单为准。");
+            if (reasoningBytes > 8_000)
+                throw new InvalidDataException("模型思考过长，已熔断本次请求。请改用快速或标准档。");
             if (answer.Length + reasoning.Length - lastRepetitionCheck >= 512 &&
                 (RepeatedTail(answer) || RepeatedTail(reasoning)))
                 throw new InvalidDataException("模型重复生成相同内容，已熔断本次请求；实际用量以服务商账单为准。");
@@ -500,7 +516,8 @@ internal static class AiAnswerService
             if (now - lastReport < 350) continue;
             var estimated = outputBytes / 3;
             var rate = (estimated - lastTokens) * 1000d / Math.Max(1, now - lastReport);
-            progress(new AiGenerationProgress(estimated, rate, answer.Length == 0));
+            progress(new AiGenerationProgress(estimated, rate, answer.Length == 0,
+                answer.Length > 0 ? answer.ToString() : null));
             lastTokens = estimated;
             lastReport = now;
         }
@@ -514,12 +531,14 @@ internal static class AiAnswerService
             using var parsed = JsonDocument.Parse(raw.ToString());
             if (parsed.RootElement.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("模型工具参数无效。");
-            toolCalls.Add(new AiFunctionCall(name, parsed.RootElement.Clone()));
+            toolCalls.Add(new AiFunctionCall(name, parsed.RootElement.Clone(),
+                toolIds.TryGetValue(index, out var id) ? id.ToString() : null));
         }
         if (answer.Length == 0 && toolCalls.Count == 0)
             throw new InvalidDataException("模型只返回了思考内容，已停止本次请求。");
         progress(new AiGenerationProgress(usage?.OutputTokens ?? lastTokens,
-            (usage?.OutputTokens ?? lastTokens) / Math.Max(0.1, watch.Elapsed.TotalSeconds), false));
+            (usage?.OutputTokens ?? lastTokens) / Math.Max(0.1, watch.Elapsed.TotalSeconds), false,
+            answer.ToString()));
         return new AiCompletionResult(answer.ToString(), usage, reasoning.ToString(), toolCalls);
     }
 
@@ -527,11 +546,13 @@ internal static class AiAnswerService
     {
         if (builder.Length < 900) return false;
         var recent = builder.ToString(Math.Max(0, builder.Length - 3000), Math.Min(3000, builder.Length));
-        var suffix = recent[^120..];
+        recent = Regex.Replace(recent.ToLowerInvariant(), @"[^\p{L}\p{N}]+", "");
+        if (recent.Length < 240) return false;
+        var suffix = recent[^80..];
         var first = recent.IndexOf(suffix, StringComparison.Ordinal);
-        return first >= 0 && first < recent.Length - 360 &&
-            recent.IndexOf(suffix, first + suffix.Length, StringComparison.Ordinal) is var second &&
-            second >= 0 && second < recent.Length - 120;
+        if (first < 0 || first >= recent.Length - 160) return false;
+        var second = recent.IndexOf(suffix, first + suffix.Length, StringComparison.Ordinal);
+        return second >= 0 && second < recent.Length - 80;
     }
 
     internal static IReadOnlyList<AiFunctionCall> ParseToolCalls(JsonElement message)
@@ -554,7 +575,8 @@ internal static class AiAnswerService
             else arguments = raw.Clone();
             if (arguments.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException("模型工具参数格式无效。");
-            result.Add(new AiFunctionCall(name.GetString()!, arguments));
+            result.Add(new AiFunctionCall(name.GetString()!, arguments,
+                call.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() : null));
             if (result.Count > 8) throw new InvalidDataException("模型一次调用了过多工具。");
         }
         return result;

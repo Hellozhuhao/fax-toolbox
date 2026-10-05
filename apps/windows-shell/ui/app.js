@@ -790,37 +790,12 @@
     element.replaceChildren(fragment);
   }
   function renderAgentMarkdown(container, source) {
-    const lines = String(source || '').split(/\r?\n/);
-    let paragraph = [], list = null, listKind = '', code = null;
-    const inline = (target, value) => {
-      for (const part of value.split(/(`[^`]+`|\*\*[^*]+\*\*)/g)) {
-        if (!part) continue;
-        if (part.startsWith('`') && part.endsWith('`')) { const node = document.createElement('code'); node.textContent = part.slice(1, -1); target.append(node); }
-        else if (part.startsWith('**') && part.endsWith('**')) { const node = document.createElement('strong'); node.textContent = part.slice(2, -2); target.append(node); }
-        else target.append(document.createTextNode(part));
-      }
-    };
-    const flushParagraph = () => { if (!paragraph.length) return; const node = document.createElement('p'); inline(node, paragraph.join('\n')); container.append(node); paragraph = []; };
-    const closeList = () => { list = null; listKind = ''; };
-    for (const line of lines) {
-      if (line.trim().startsWith('```')) {
-        flushParagraph(); closeList();
-        if (code) { highlightAgentCode(code.firstChild, code.dataset.language); container.append(code); code = null; }
-        else { code = document.createElement('pre'); code.dataset.language = line.trim().slice(3).trim().toLowerCase(); const child = document.createElement('code'); code.append(child); }
-        continue;
-      }
-      if (code) { code.firstChild.textContent += (code.firstChild.textContent ? '\n' : '') + line; continue; }
-      if (!line.trim()) { flushParagraph(); closeList(); continue; }
-      const heading = /^(#{1,3})\s+(.+)$/.exec(line);
-      if (heading) { flushParagraph(); closeList(); const node = document.createElement('h' + Math.min(heading[1].length + 3, 6)); inline(node, heading[2]); container.append(node); continue; }
-      const item = /^\s*(?:([-*])|(\d+)[.)])\s+(.+)$/.exec(line);
-      if (item) { flushParagraph(); const kind = item[2] ? 'ol' : 'ul'; if (!list || listKind !== kind) { list = document.createElement(kind); container.append(list); listKind = kind; } const node = document.createElement('li'); inline(node, item[3]); list.append(node); continue; }
-      closeList(); paragraph.push(line);
-    }
-    flushParagraph(); if (code) { highlightAgentCode(code.firstChild, code.dataset.language); container.append(code); }
+    window.FaxAgentMarkdown.render(container, source, highlightAgentCode);
   }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
+    if (type === 'assistant' || type === 'error' || type === 'step')
+      timeline.querySelector('.agent-stream')?.remove();
     timeline.querySelector('.agent-empty')?.remove();
     if (type === 'step') {
       const [toolName, ...noteLines] = String(detail || '').split('\n');
@@ -844,6 +819,9 @@
         const body = document.createElement('div'); body.className = 'agent-operation-body';
         const completed = {plan: '已规划步骤', module_status: '已查看模块状态', open_module: '已打开模块', project_overview: '已查看项目', list_files: '已列出文件', read_file: '已读取文件', search_files: '已搜索文件', run_command: '已运行命令', module_action: '已执行模块操作'};
         if (completed[data.name]) operation.querySelector('.agent-operation-title').textContent = completed[data.name];
+        if (String(data.result || '').startsWith('用户拒绝')) operation.querySelector('.agent-operation-title').textContent = '已拒绝此操作';
+        else if (data.name === 'module_action' && !String(data.result || '').startsWith('模块操作已处理')) operation.querySelector('.agent-operation-title').textContent = '模块操作未执行';
+        else if (data.name === 'open_module' && !String(data.result || '').startsWith('已打开')) operation.querySelector('.agent-operation-title').textContent = '模块未打开';
         if (data.name === 'create_file' && String(data.result || '').startsWith('已创建 ')) operation.querySelector('.agent-operation-title').textContent = '已创建 1 个文件';
         if (data.name === 'replace_text' && String(data.result || '').startsWith('已修改 ')) operation.querySelector('.agent-operation-title').textContent = '已编辑 1 个文件';
         if (data.module) { const module = document.createElement('div'); module.className = 'agent-operation-file'; module.textContent = data.module; body.append(module); }
@@ -887,6 +865,21 @@
   }
   function renderAgentMessage(message) {
     if (message.kind === 'agent.event') addAgentEvent(message.extra?.type, message.detail);
+    if (message.kind === 'agent.stream') {
+      const timeline = $('agent-timeline');
+      const follow = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+      let draft = timeline.querySelector('.agent-stream');
+      if (!message.detail) { draft?.remove(); return; }
+      timeline.querySelector('.agent-empty')?.remove();
+      if (!draft) {
+        draft = document.createElement('div');
+        draft.className = 'agent-entry agent-assistant agent-stream';
+        const label = document.createElement('small'); label.textContent = 'Agent · 正在生成';
+        const body = document.createElement('p'); draft.append(label, body); timeline.append(draft);
+      }
+      draft.querySelector('p').textContent = message.detail;
+      if (follow) timeline.scrollTop = timeline.scrollHeight;
+    }
     if (message.kind === 'agent.options') {
       agentMode = message.extra?.mode === 'code' ? 'code' : 'chat';
       agentEffort = ['quick', 'normal', 'deep'].includes(message.extra?.effort) ? message.extra.effort : 'normal';

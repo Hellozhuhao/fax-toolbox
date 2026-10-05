@@ -230,10 +230,18 @@ public partial class MainWindow : Window
 #else
         ShellView.CoreWebView2.Settings.AreDevToolsEnabled = !smokeMode;
 #endif
-        ShellView.CoreWebView2.NewWindowRequested += (_, args) => args.Handled = true;
+        ShellView.CoreWebView2.NewWindowRequested += (_, args) =>
+        {
+            args.Handled = true;
+            if (smokeMode || !args.IsUserInitiated || !Uri.TryCreate(args.Uri, UriKind.Absolute, out var link) ||
+                link.Scheme is not ("http" or "https" or "mailto")) return;
+            try { Process.Start(new ProcessStartInfo(link.AbsoluteUri) { UseShellExecute = true }); }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException)
+            { PublishAgent("event", "无法打开链接：" + error.Message, new { type = "error" }); }
+        };
         ShellView.CoreWebView2.NavigationStarting += (_, args) =>
         {
-            if (!IsUiUrl(args.Uri)) args.Cancel = true;
+            if (!IsUiUrl(args.Uri)) { args.Cancel = true; Trace("UI navigation blocked: " + args.Uri); }
         };
         ShellView.CoreWebView2.WebMessageReceived += UiMessageReceived;
         ShellView.CoreWebView2.NavigationCompleted += ShellNavigationCompleted;
@@ -684,6 +692,45 @@ public partial class MainWindow : Window
                     await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.agent-operation').open = true");
                     await using var output = File.Create(Path.Combine(root, ".cache", "agent-operation-preview.png"));
                     await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, output);
+                }
+                PublishAgent("stream", "正在逐段生成回复");
+                var streamReady = "false";
+                for (var attempt = 0; attempt < 20 && streamReady != "true"; attempt++)
+                {
+                    streamReady = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.querySelector('.agent-stream p')?.textContent === '正在逐段生成回复'");
+                    if (streamReady != "true") await Task.Delay(50);
+                }
+                if (streamReady != "true") { FailSmoke("Agent streaming text was not displayed"); return; }
+                PublishAgent("event", "| 操作 | 模块 | 作用 |\n|---|---|---|\n" +
+                    "| `course.start` | 学习通 | [开始课程](https://www.chaoxing.com/) |\n" +
+                    "| `course.pause` | 学习通 | 暂停课程 |\n\n" +
+                    "```animation\n{\"title\":\"任务进度\",\"bars\":[{\"label\":\"已完成\",\"value\":65}]}\n```\n\n" +
+                    "```html\n<style>.orb{width:52px;height:52px;border-radius:50%;background:#e96b48;animation:drift 2s ease-in-out infinite alternate}" +
+                    "@keyframes drift{to{transform:translateX(200px)}}</style><div class=\"orb\" aria-label=\"运动演示\"></div>" +
+                    "<script>window.unsafePreview=true</script>\n```", new { type = "assistant" });
+                var richReady = "false";
+                for (var attempt = 0; attempt < 20 && richReady != "true"; attempt++)
+                {
+                    richReady = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{const frame=document.querySelector('.agent-visual-preview iframe');return document.querySelectorAll('.agent-table-scroll th').length===3 && document.querySelector('.agent-table-scroll a')?.href==='https://www.chaoxing.com/' && document.querySelector('.agent-animation-track span')?.style.getPropertyValue('--agent-bar-width')==='65%' && frame?.getAttribute('sandbox')==='allow-same-origin' && frame.srcdoc.includes('@keyframes') && !frame.srcdoc.includes('unsafePreview') && !document.querySelector('.agent-stream')})()");
+                    if (richReady != "true") await Task.Delay(100);
+                }
+                if (richReady != "true") { FailSmoke("Agent rich table, link, animation or preview was not rendered"); return; }
+                var frameReady = "false";
+                for (var attempt = 0; attempt < 20 && frameReady != "true"; attempt++)
+                {
+                    frameReady = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{const frame=document.querySelector('.agent-visual-preview iframe');const orb=frame?.contentDocument?.querySelector('.orb');return !!orb && orb.getBoundingClientRect().width===52})()");
+                    if (frameReady != "true") await Task.Delay(100);
+                }
+                if (frameReady != "true") { FailSmoke("Agent HTML animation preview did not load: " +
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelector('.agent-visual-preview iframe')?.contentDocument?.documentElement.outerHTML || 'no frame document'")); return; }
+                if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
+                {
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.agent-timeline > :not(:last-child)').forEach(node=>node.style.display='none');document.querySelector('.agent-visual-preview iframe').style.height='160px';document.querySelector('.agent-composer').style.display='none';document.querySelector('.agent-timeline').scrollTop=0");
+                    await Task.Delay(200);
+                    await using var richOutput = File.Create(Path.Combine(root, ".cache", "agent-rich-content-preview.png"));
+                    await ShellView.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, richOutput);
+                    await ShellView.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.agent-timeline > *').forEach(node=>node.style.removeProperty('display'));document.querySelector('.agent-composer').style.removeProperty('display')");
                 }
                 var project = Path.Combine(smokeDataDirectory!, "agent-project");
                 Directory.CreateDirectory(project);
