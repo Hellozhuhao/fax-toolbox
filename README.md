@@ -22,6 +22,12 @@
 
 ## Windows 主线：C# + Rust
 
+新增“安卓投屏”内置工作台，支持 USB 设备选择、Android 无线配对与连接、
+键鼠控制、声音及应用虚拟显示。首次开发运行前执行
+`powershell -ExecutionPolicy Bypass -File scripts/setup-scrcpy.ps1`；
+发布脚本自动携带投屏组件。使用步骤和验证边界见
+[安卓投屏](modules/android-mirror/README.md)。
+
 在 PowerShell 中进入项目根目录，运行：
 
 ```powershell
@@ -95,3 +101,9 @@ node --test tests\starter.test.cjs
 - [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md)：产品目标、界面流程、MVP 和阶段验收。
 - [TOOLCHAIN.md](TOOLCHAIN.md)：已安装的 Windows 工具链、验证结果和开发环境入口。
 
+
+## 工具箱皮肤
+
+在 **状态 → 皮肤** 选择内置皮肤、导入或导出 `.faxskin` 文件；支持全局统一及模块独立覆盖。皮肤属于工具箱核心功能。开发者可调整设计变量、布局、局部 CSS、快捷键和操作绑定，也可用隔离的 HTML/JavaScript 界面重写工作流。
+
+开发文档：[皮肤规范 v1](docs/SKINS.md)；[JSON Schema](schemas/fax-toolbox-skin.schema.json)；[可导入示例](examples/skins)。恢复默认快捷键：`Ctrl+Shift+F12`。

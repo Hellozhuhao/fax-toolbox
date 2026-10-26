@@ -21,7 +21,8 @@ public partial class MainWindow : Window
         value is "https://ui.toolbox.invalid/index.html?module=course" or
             "https://ui.toolbox.invalid/index.html?module=homework" or
             "https://ui.toolbox.invalid/index.html?module=demo" or
-            "https://ui.toolbox.invalid/index.html?module=ai";
+            "https://ui.toolbox.invalid/index.html?module=ai" or
+            "https://ui.toolbox.invalid/index.html?module=proxy";
     private const string ModuleUrl = "https://module.toolbox.invalid/smoke.html";
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
@@ -76,6 +77,7 @@ public partial class MainWindow : Window
     private string state = "STARTING";
     private string detail = "正在启动…";
     private string root = "";
+    private AndroidMirrorWindow? androidMirrorWindow;
     private readonly string? smokeDataDirectory;
     private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
@@ -117,6 +119,7 @@ public partial class MainWindow : Window
             if (smokeOutput is not null) File.WriteAllText(smokeOutput, "FAIL XAML: " + error);
             throw;
         }
+        PreviewKeyDown += SkinRecoveryKeyDown;
         ApplyHostTheme(ReadStoredHostTheme());
         NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
         NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
@@ -1033,7 +1036,13 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
             var command = message.GetProperty("command").GetString();
             if (messageBytes > MaxPageMessage && command != "agent.send" &&
-                !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024)) return;
+                !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024) &&
+                !(command == "skins.update" && messageBytes <= SkinStore.MaxStateBytes + 1024)) return;
+            if (command is "skins.get" or "skins.update" or "skins.reset")
+            {
+                HandleSkinMessage(command, message);
+                return;
+            }
             if (command is "proxy.get" or "proxy.save" or "proxy.start" or "proxy.stop" or "proxy.on" or "proxy.off" or "proxy.validate" or "proxy.pick" or "proxy.startup.on" or "proxy.startup.off" or "proxy.install" or "proxy.restore-xray" or "proxy.detect")
             {
                 await HandleProxyMessageAsync(command, message);
@@ -1064,12 +1073,28 @@ public partial class MainWindow : Window
                         CourseOverlay.Visibility = Visibility.Collapsed;
                     }
                     break;
+                case "android.open":
+                    if (androidMirrorWindow is null)
+                    {
+                        androidMirrorWindow = new AndroidMirrorWindow(root) { Owner = this };
+                        androidMirrorWindow.Closed += (_, _) => androidMirrorWindow = null;
+                        ApplyAndroidSkin();
+                        androidMirrorWindow.Show();
+                    }
+                    else
+                    {
+                        if (androidMirrorWindow.WindowState == WindowState.Minimized)
+                            androidMirrorWindow.WindowState = WindowState.Normal;
+                        androidMirrorWindow.Activate();
+                    }
+                    break;
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
                     currentShellView = message.GetProperty("view").GetString() ?? "home";
                     shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
                     UpdateBrowserBackButton();
                     UpdateTaskTabs();
+                    ApplyNativeSkin();
                     break;
                 case "ui.clipboard.copy":
                     var copyText = message.GetProperty("text").GetString() ?? "";
@@ -1405,6 +1430,7 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        androidMirrorWindow?.Close();
         CancelAgent();
         // Worker never needs the dispatcher. Finish pending writes before profile cleanup/process exit.
         agentSessionStore?.FlushAsync().GetAwaiter().GetResult();

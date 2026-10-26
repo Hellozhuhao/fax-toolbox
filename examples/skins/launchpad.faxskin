@@ -1,0 +1,39 @@
+{
+  "format": "fax-toolbox.skin",
+  "version": 1,
+  "id": "example.launchpad",
+  "name": "自定义启动台",
+  "author": "Fax Toolbox",
+  "description": "用独立 HTML 和 JavaScript 重写工具箱启动界面",
+  "appearance": "dark",
+  "targets": [
+    "shell"
+  ],
+  "tokens": {
+    "background": "#101a28",
+    "panel": "#1c2b40",
+    "surface": "#273b54",
+    "text": "#f1f5fc",
+    "muted": "#a7bad2",
+    "accent": "#8fc9ff",
+    "border": "#3a526e",
+    "navigation": "#142236",
+    "radius": 18,
+    "fontFamily": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif"
+  },
+  "extension": {
+    "mode": "replace",
+    "title": "自定义启动台",
+    "actions": [
+      "module.ai.open",
+      "module.course.open",
+      "module.homework.open",
+      "module.proxy.open",
+      "module.android.open",
+      "navigation.activity"
+    ],
+    "html": "<main><small>FAX TOOLBOX / STUDIO</small><h1>你的工具，你的工作流。</h1><p>这个界面来自一个标准皮肤文件。</p><div id=\"tools\"></div></main>",
+    "css": "body { margin:0; background:#101a28; color:#f1f5fc; font:16px sans-serif; } main { padding:48px; } h1 { font-size:36px; } #tools { display:flex; flex-wrap:wrap; gap:12px; } button { padding:18px; background:#273b54; color:#f1f5fc; border:1px solid #8fc9ff; border-radius:12px; cursor:pointer; }",
+    "script": "const tools = [['Agent','module.ai.open'],['学习通','module.course.open'],['作业校对','module.homework.open'],['网络管家','module.proxy.open'],['安卓投屏','module.android.open'],['状态与皮肤','navigation.activity']]; for (const [label, action] of tools) { const button=document.createElement('button'); button.textContent=label; button.onclick=()=>ToolboxSkin.invoke(action).catch(error=>alert(error.message)); document.getElementById('tools').append(button); }"
+  }
+}

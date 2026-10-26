@@ -234,6 +234,7 @@
     for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
     document.body.dataset.view = view;
+    window.dispatchEvent(new CustomEvent('fax:view-changed', {detail: {view}}));
     send('ui.layout', {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
       ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
@@ -344,7 +345,7 @@
   function setTheme(theme, notifyHost = true) {
     const value = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = value;
-    for (const item of document.querySelectorAll('[data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
+    for (const item of document.querySelectorAll('.theme-switch [data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
     try { localStorage.setItem('fax-toolbox-theme', value); } catch (_) { /* UI remains usable without storage. */ }
     if (notifyHost) send('ui.theme', {theme: value});
   }
@@ -1084,6 +1085,8 @@
       const input = contextPasteTarget; contextPasteTarget = null; input.focus();
       document.execCommand('insertText', false, message.text || '');
     }
+    if (message.kind === 'skins.state') window.dispatchEvent(new CustomEvent('fax:skin-state', {detail: message.state}));
+    if (message.kind === 'skins.error') window.dispatchEvent(new CustomEvent('fax:skin-error', {detail: message.detail}));
     if (message.kind === 'status') {
       $('state').textContent = message.state || '';
       $('home-backend').textContent = stateName(message.state);
@@ -1112,6 +1115,7 @@
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
     if (message.kind.startsWith('agent.')) renderAgentMessage(message);
+    window.dispatchEvent(new Event('fax:ui-state-changed'));
   });
   for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => {
     if (item.dataset.view === 'workspace') showWorkspace();
@@ -1122,14 +1126,32 @@
     else show(item.dataset.view);
   });
   $('open-tools-card').addEventListener('click', () => show('modules'));
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : item.dataset.open === 'proxy' ? openProxy() : openDemo());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'android' ? send('android.open') : item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : item.dataset.open === 'proxy' ? openProxy() : openDemo());
+  $('module-android').addEventListener('click', () => send('android.open'));
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
   $('module-proxy').addEventListener('click', openProxy);
   window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, openProxy, showHome: () => show('home'),
-    goBack, applyThemeFromHost: theme => setTheme(theme, false),
+    goBack, showActivity: () => show('activity'),
+    confirmSkinReplace: (name, action) => confirmAction('更新皮肤', '替换已导入的“' + name + '”皮肤文件？', action, {confirmLabel: '更新'}),
+    skinSnapshot: scope => ({title: viewNames[currentView] || '工具箱', backend: $('state').textContent,
+      courseState, courseReady, fields: scope === 'ai' ? {prompt: $('agent-prompt').value} : {},
+      conversation: scope === 'ai' ? $('agent-timeline').innerText.slice(-12000) : ''}),
+    skinActions: Object.freeze({
+      ...Object.fromEntries(['home', 'modules', 'activity', 'settings'].map(view => ['navigation.' + view, {scopes: ['*'], run: () => show(view)}])),
+      ...Object.fromEntries(Object.entries({ai: openAi, course: openCourse, homework: openHomework, proxy: openProxy, demo: openDemo,
+        android: () => send('android.open')}).map(([id, run]) => ['module.' + id + '.open', {scopes: ['*'], run}])),
+      'agent.focus': {scopes: ['ai'], run: () => $('agent-prompt').focus()},
+      'agent.new-chat': {scopes: ['ai'], run: () => $('agent-clear').click()},
+      'agent.input': {scopes: ['ai'], validate: args => typeof args.text === 'string' && args.text.length <= 4000,
+        run: args => { $('agent-prompt').value = args.text; $('agent-prompt').dispatchEvent(new Event('input', {bubbles: true})); }},
+      'agent.send': {scopes: ['ai'], run: () => $('agent-form').requestSubmit()},
+      'course.pause': {scopes: ['course'], run: () => { if (!$('course-pause').disabled) $('course-pause').click(); }},
+      'course.stop': {scopes: ['course'], run: () => { if (!$('course-stop').disabled) $('course-stop').click(); }}
+    }),
+    applyThemeFromHost: theme => window.FaxToolboxSkins ? window.FaxToolboxSkins.applyThemeFromHost(theme) : setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
     refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
   const contextMenu = $('toolbox-context-menu');
@@ -1462,9 +1484,9 @@
     if (!toolGroup.contains(document.activeElement)) toolGroup.classList.remove('flyout-open');
   }, 0));
   toolGroup.querySelectorAll('.nav-flyout button').forEach(button => button.addEventListener('click', () => { suppressFlyoutUntilLeave = true; hideFlyoutNow(); }));
-  for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
+  for (const item of document.querySelectorAll('.theme-switch [data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
-  setTheme(savedTheme);
+  setTheme(savedTheme, false);
   const initialModule = new URLSearchParams(location.search).get('module');
   if (initialModule === 'course') openCourse();
   else if (initialModule === 'homework') openHomework();

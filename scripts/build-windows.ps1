@@ -29,6 +29,11 @@ $backend = Join-Path $root 'apps\rust-backend'
 & cargo build --locked --manifest-path (Join-Path $backend 'Cargo.toml')
 if ($LASTEXITCODE -ne 0) { throw 'Rust build failed' }
 if ($Test) {
+    $skinTests = Join-Path $root 'tests\skins\SkinStore.Tests.csproj'
+    & dotnet restore $skinTests --configfile $nugetConfig --ignore-failed-sources --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Skin test restore failed' }
+    & dotnet run --project $skinTests --no-restore -- $root
+    if ($LASTEXITCODE -ne 0) { throw 'Skin tests failed' }
     & cargo test --locked --manifest-path (Join-Path $backend 'Cargo.toml')
     if ($LASTEXITCODE -ne 0) { throw 'Rust tests failed' }
 }
@@ -41,6 +46,12 @@ if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
     $aiTests = Join-Path $root 'tests\ai-answers\AiAnswers.csproj'
+    & (Join-Path $PSScriptRoot 'setup-scrcpy.ps1')
+    $mirrorTests = Join-Path $root 'tests\android-mirror\AndroidMirror.Tests.csproj'
+    & dotnet restore $mirrorTests --configfile $nugetConfig --ignore-failed-sources --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Android mirror test restore failed' }
+    & dotnet run --project $mirrorTests --no-restore -- $root
+    if ($LASTEXITCODE -ne 0) { throw 'Android mirror tests failed' }
     & dotnet restore $aiTests --configfile $nugetConfig --ignore-failed-sources --nologo
     if ($LASTEXITCODE -ne 0) { throw 'AI test restore failed' }
     & dotnet run --project $aiTests --no-restore
