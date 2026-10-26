@@ -138,7 +138,6 @@ public partial class MainWindow
 
     private void UpdateTaskTabs()
     {
-        static Brush Color(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
         MainWindow[] windows = smokeMode && !tabSmokeMode ? [this] : TaskWindows.ToArray();
         foreach (var stale in taskTabVisuals.Keys.Where(window => !windows.Contains(window)).ToArray())
         {
@@ -196,25 +195,18 @@ public partial class MainWindow
                 "proxy" => "网络管家",
                 _ => "首页"
             };
-            if (view.Label == label && view.Selected == selected && view.Dark == darkTaskTabs) continue;
             view.Label = label;
             view.Selected = selected;
             view.Dark = darkTaskTabs;
             view.Open.Content = label;
-            view.Shell.Background = Color(selected ? darkTaskTabs ? "#4F8CF5" : "#E8EFFF" :
-                darkTaskTabs ? "#24252C" : "#FFFFFF");
-            view.Shell.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
-            view.Open.Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#2A67D2" :
-                darkTaskTabs ? "#F5F5F8" : "#171716");
-            view.Close.Foreground = Color(selected && darkTaskTabs ? "#FFFFFF" :
-                darkTaskTabs ? "#A3A3AD" : "#74716E");
+            view.Shell.Background = NativeUi.Brush(this, selected ? "Surface" : "Panel");
+            view.Shell.BorderBrush = NativeUi.Brush(this, "Border");
+            view.Open.Foreground = NativeUi.Brush(this, selected ? "Accent" : "Text");
+            view.Close.Foreground = NativeUi.Brush(this, "Muted");
         }
-        NewTaskTabButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
-        NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
-        BrowserBackButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
-        BrowserBackButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
+        NewTaskTabButton.Background = BrowserBackButton.Background = NativeUi.Brush(this, "Panel");
+        NewTaskTabButton.Foreground = BrowserBackButton.Foreground = NativeUi.Brush(this, "Muted");
+        NewTaskTabButton.BorderBrush = BrowserBackButton.BorderBrush = NativeUi.Brush(this, "Border");
         BrowserReloadButton.Background = BrowserBackButton.Background;
         BrowserReloadButton.Foreground = BrowserBackButton.Foreground;
         BrowserReloadButton.BorderBrush = BrowserBackButton.BorderBrush;

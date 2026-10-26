@@ -5,6 +5,7 @@
   const scopes = new Map(), actions = new Map(), frames = new Map();
   let state, bindingsController, busy = false, writeTimer, initialTimer, view = document.body.dataset.view || 'home';
   const builtinIds = new Set();
+  let undoSettings, pendingFeedback, pendingFocus;
   const send = (command, extra = {}) => window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra}));
   const feedback = (message, error = false) => { $('skin-feedback').textContent = message; $('skin-feedback').classList.toggle('skin-error', error); };
   const defaultSettings = () => ({globalId: Core.DEFAULT, overrides: {}});
@@ -19,6 +20,11 @@
       element.style.setProperty('--skin-' + name.replace(/[A-Z]/g, letter => '-' + letter.toLowerCase()), name === 'radius' ? value + 'px' : value);
       if (aliases[name]) element.style.setProperty('--' + aliases[name], value);
     }
+    element.style.setProperty('--skin-color-scheme', skin.appearance);
+    element.style.setProperty('--skin-font-family', skin.tokens.fontFamily || '"Fax Sans", "Microsoft YaHei UI", sans-serif');
+    const rgb=skin.tokens.accent.slice(1).match(/../g).map(value=>{const n=parseInt(value,16)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;});
+    const light=rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+    element.style.setProperty('--on-accent', (light+.05)/.05 > 1.05/(light+.05) ? '#101820' : '#ffffff');
     element.style.setProperty('--skin-card-padding', skin.layout?.density === 'compact' ? '14px' : '20px');
     element.dataset.skinDensity = skin.layout?.density || 'comfortable';
     element.dataset.skinMotion = skin.layout?.motion || 'system';
@@ -120,10 +126,11 @@
       if (!actions.has(binding.action)) throw new Error('未注册的皮肤操作：' + binding.action);
       if (binding.selector !== ':scope') surface.querySelector(binding.selector); // Validate selectors before enabling bindings.
       let invoking = false;
-      surface.addEventListener(binding.event, event => {
+      const listenerTarget=binding.event==='keydown'?document:surface;
+      listenerTarget.addEventListener(binding.event, event => {
         if (invoking || moduleScope() !== scope) return;
         if (binding.event === 'keydown' && (!matchesKey(event, binding.key) || event.repeat)) return;
-        const element = event.target instanceof Element ? event.target.closest(binding.selector === ':scope' ? '*' : binding.selector) : null;
+        const element = binding.event==='keydown'&&binding.selector===':scope'?surface:event.target instanceof Element ? event.target.closest(binding.selector === ':scope' ? '*' : binding.selector) : null;
         if (!element || !surface.contains(element) || element.closest(':disabled,[aria-disabled="true"]')) return;
         event.preventDefault(); event.stopImmediatePropagation(); invoking = true;
         try { Promise.resolve(invoke(binding.action, binding.args || {}, scope)).catch(error => feedback(error.message, true)); }
@@ -172,18 +179,38 @@
     }
     try { localStorage.setItem('fax-toolbox-theme', global.appearance); } catch (_) {}
     updateView(); renderManager();
+    window.dispatchEvent(new Event('fax:skin-applied'));
   }
   function option(skin) { const node = document.createElement('option'); node.value = skin.id; node.textContent = skin.name + (builtinIds.has(skin.id) ? ' · 内置' : ' · 导入'); return node; }
   function renderManager() {
+    const active=document.activeElement;
+    const focused=pendingFocus || (active?.matches('input[name="skin-choice"]') ? {radio:active.value} : null);
+    pendingFocus=null;
     const global = $('skin-global'); global.replaceChildren(...state.skins.filter(skin => Core.supports(skin, 'shell')).map(option)); global.value = state.settings.globalId;
     const selected = state.skins.find(skin => skin.id === global.value);
+    const gallery=$('skin-gallery'); gallery.replaceChildren();
+    for(const skin of state.skins.filter(skin=>Core.supports(skin,'shell'))) {
+      const choice=document.createElement('label');choice.className='skin-choice';
+      const radio=document.createElement('input');radio.type='radio';radio.name='skin-choice';radio.value=skin.id;radio.checked=skin.id===selected.id;radio.setAttribute('aria-label',skin.name);
+      radio.addEventListener('change',()=>{if(radio.checked&&!busy){global.value=skin.id;global.dispatchEvent(new Event('change',{bubbles:true}));}});
+      const preview=document.createElement('span');preview.className='skin-mini';preview.setAttribute('aria-hidden','true');
+      for(const [role,token] of Object.entries({bg:'background',panel:'panel',surface:'surface',nav:'navigation',border:'border',text:'text',muted:'muted',accent:'accent'}))preview.style.setProperty('--preview-'+role,skin.tokens[token]);
+      preview.innerHTML='<span class="skin-mini-nav"><i></i><i></i><i></i></span><span class="skin-mini-body"><strong></strong><i></i><span class="skin-mini-paper"><i></i><i></i></span></span>';
+      const caption=document.createElement('span');caption.className='skin-choice-caption';caption.textContent=skin.name;caption.insertAdjacentHTML('beforeend',window.FaxIcons.svg('check'));
+      const note=document.createElement('small');note.textContent=builtinIds.has(skin.id)?'内置皮肤':'已导入';
+      choice.append(radio,preview,caption,note);gallery.append(choice);
+    }
+    $('home-skin-name').textContent=selected.name;
     $('skin-description').textContent = [selected.description, selected.author && '作者：' + selected.author].filter(Boolean).join(' · ');
     const swatches = $('skin-swatches'); swatches.replaceChildren();
     for (const name of ['background', 'panel', 'accent', 'text']) { const swatch = document.createElement('span'); swatch.style.background = selected.tokens[name]; swatch.title = name + ' ' + selected.tokens[name]; swatches.append(swatch); }
     const rows = $('skin-module-list'); rows.replaceChildren();
     for (const [scope, descriptor] of scopes) {
       const label = document.createElement('label'); label.className = 'skin-module-row';
-      const name = document.createElement('span'); name.textContent = descriptor.label;
+      const name = document.createElement('span'); name.className='skin-module-name';
+      name.innerHTML=window.FaxIcons.svg(scope==='ai'?'agent':scope);
+      const text=document.createElement('span');text.append(document.createTextNode(descriptor.label));
+      const hint=document.createElement('small');hint.textContent=state.settings.overrides[scope]?'独立选择':'继承全局';text.append(hint);name.append(text);
       const select = document.createElement('select'); select.dataset.skinModule = scope; select.setAttribute('aria-label', descriptor.label + '的皮肤');
       const inherit = document.createElement('option'); inherit.value = ''; inherit.textContent = '跟随全局'; select.append(inherit);
       select.append(...state.skins.filter(skin => Core.supports(skin, scope)).map(option)); select.value = state.settings.overrides[scope] || '';
@@ -192,30 +219,42 @@
         if (select.value) settings.overrides[scope] = select.value; else delete settings.overrides[scope];
         save({...state, settings}, '模块皮肤已保存');
       });
+      label.hidden=scope==='demo'&&!$('developer-mode').checked;
       label.append(name, select); rows.append(label);
     }
     const manage = $('skin-manage'); manage.replaceChildren(...state.skins.map(option)); manage.value = selected.id;
     setBusy(false); updateManage();
+    $('skin-undo').hidden=!undoSettings;
+    window.FaxUi?.refresh();
+    if(focused && $('skin-manager').checkVisibility() && (document.activeElement===document.body || $('skin-manager').contains(document.activeElement))) {
+      const target=focused.radio ? [...gallery.querySelectorAll('input')].find(input=>input.value===focused.radio) : [...rows.querySelectorAll('select')].find(select=>select.dataset.skinModule===focused.module)?.parentElement.querySelector('[role="combobox"]');
+      if(target&&!target.disabled)target.focus({preventScroll:true});
+    }
   }
-  function updateManage() { $('skin-remove').disabled = busy || !state?.importedIds.includes($('skin-manage').value); }
+  function updateManage() { $('skin-remove').disabled = busy || !state?.importedIds.includes($('skin-manage').value); $('skin-unify').disabled=busy||!Object.keys(state?.settings.overrides||{}).length; }
   function setBusy(value) {
     busy = value;
     for (const element of $('skin-manager').querySelectorAll('button,select,input')) element.disabled = value;
     if (!value && state) updateManage();
   }
-  function save(next, message) {
+  function save(next, message, allowUndo = true) {
     if (busy) return;
     try {
+      const focused=document.activeElement;
+      const module=focused?.closest('.skin-module-row')?.querySelector('select')?.dataset.skinModule;
+      pendingFocus=focused?.matches('input[name="skin-choice"]') ? {radio:focused.value} : module ? {module} : null;
       next.settings = Core.normalizeSettings(next.settings, next.skins);
       const stored = editable(next);
+      if(allowUndo && JSON.stringify(state.settings)!==JSON.stringify(next.settings)) undoSettings=structuredClone(state.settings);
+      pendingFeedback=message;
       if (new TextEncoder().encode(JSON.stringify(stored)).length > 4 * 1024 * 1024) throw new Error('皮肤库不能超过 4 MiB');
       if (native) {
         setBusy(true); feedback('正在保存…'); send('skins.update', {state: stored});
         writeTimer = setTimeout(() => { setBusy(false); feedback('保存尚未确认，请重新读取皮肤配置', true); send('skins.get'); }, 10000);
       } else {
-        localStorage.setItem('fax-toolbox-skins-v1', JSON.stringify(stored)); apply(next); feedback(message);
+        localStorage.setItem('fax-toolbox-skins-v1', JSON.stringify(stored)); apply(next); feedback(message); $('skin-undo').hidden=!undoSettings;
       }
-    } catch (error) { feedback(error.message, true); if (state) renderManager(); }
+    } catch (error) { feedback(error.message, true); if (state) renderManager(); pendingFocus=null; }
   }
   function recover() {
     if (native) { setBusy(true); send('skins.reset'); }
@@ -234,14 +273,16 @@
   // Android has a native WPF surface and uses the same persisted scope selection.
   const androidMarker = document.createElement('span'); androidMarker.hidden = true; document.body.append(androidMarker); registerScope('android', '安卓投屏', androidMarker);
   const customStyle = document.createElement('style'); customStyle.id = 'skin-custom-styles'; document.head.append(customStyle);
+  $('developer-mode').addEventListener('change',()=>{if(state&&!busy)renderManager();});
   $('skin-global').addEventListener('change', event => save({...state, settings: {...state.settings, globalId: event.target.value}}, '全局皮肤已保存'));
   $('skin-unify').addEventListener('click', () => save({...state, settings: {globalId: state.settings.globalId, overrides: {}}}, '所有模块已跟随全局皮肤'));
-  $('skin-reset').addEventListener('click', recover); $('skin-recovery-reset').addEventListener('click', recover);
+  $('skin-reset').addEventListener('click', async () => {if(await window.FaxToolboxUi.confirm({title:'恢复默认外观？',message:'全局与各模块将恢复默认选择，已导入的皮肤会保留，当前任务不会结束。',confirmLabel:'恢复默认'}))recover();}); $('skin-recovery-reset').addEventListener('click', recover);
   $('skin-recovery-open').addEventListener('click', () => { window.FaxToolboxUi.showActivity(); $('skin-manager').scrollIntoView({block: 'start'}); });
   $('settings-open-skins').addEventListener('click', () => { window.FaxToolboxUi.showActivity(); $('skin-manager').scrollIntoView({block: 'start'}); });
+  $('skin-undo').addEventListener('click',()=>{if(!undoSettings||busy)return;const settings=Core.normalizeSettings(undoSettings,state.skins);undoSettings=null;save({...state,settings},'已撤销皮肤选择',false);});
   $('skin-import').addEventListener('click', () => $('skin-file').click());
-  $('skin-file').addEventListener('change', async event => {
-    const file = event.target.files[0]; event.target.value = ''; if (!file || busy) return;
+  async function importFile(file) {
+    if(!file||busy)return;
     try {
       if (file.size > Core.MAX_PACKAGE_BYTES) throw new Error('单个皮肤不能超过 1 MiB');
       const skin = Core.validatePackage(await file.text());
@@ -255,19 +296,27 @@
       const next = {...state, skins: [...state.skins.filter(item => item.id !== skin.id), skin], importedIds: [...new Set([...state.importedIds, skin.id])]};
       if (existing) window.FaxToolboxUi.confirmSkinReplace(skin.name, () => save(next, '皮肤已更新')); else save(next, '皮肤已导入，请在列表中选择');
     } catch (error) { feedback('导入失败：' + error.message, true); }
-  });
+    }
+  $('skin-file').addEventListener('change',event=>{const file=event.target.files[0];event.target.value='';importFile(file);});
+  $('skin-manager').addEventListener('dragover',event=>{if([...event.dataTransfer.types].includes('Files')){event.preventDefault();$('skin-manager').classList.add('drag-over');}});
+  $('skin-manager').addEventListener('dragleave',event=>{if(!$('skin-manager').contains(event.relatedTarget))$('skin-manager').classList.remove('drag-over');});
+  $('skin-manager').addEventListener('drop',event=>{event.preventDefault();$('skin-manager').classList.remove('drag-over');if(event.dataTransfer.files.length!==1){feedback('请一次导入一个皮肤文件',true);return;}importFile(event.dataTransfer.files[0]);});
   $('skin-manage').addEventListener('change', updateManage);
   $('skin-export').addEventListener('click', () => {
     const skin = state.skins.find(item => item.id === $('skin-manage').value);
     const url = URL.createObjectURL(new Blob([JSON.stringify(skin, null, 2) + '\n'], {type: 'application/json'}));
     const link = document.createElement('a'); link.href = url; link.download = skin.id + '.faxskin'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
-  $('skin-remove').addEventListener('click', () => {
+  $('skin-remove').addEventListener('click', async () => {
     const id = $('skin-manage').value; if (!state.importedIds.includes(id)) return;
+    const affected=[...(state.settings.globalId===id?['全局外观']:[]),...Object.entries(state.settings.overrides).filter(([,value])=>value===id).map(([scope])=>scopes.get(scope)?.label||scope)];
+    const name=state.skins.find(skin=>skin.id===id).name;
+    if(!await window.FaxToolboxUi.confirm({title:'移除皮肤“'+name+'”？',message:affected.length?'正在使用的范围：'+affected.join('、')+'。移除后将恢复默认或继承全局，当前任务会保留。':'该皮肤文件将从本机皮肤库移除。',confirmLabel:'移除皮肤',destructive:true}))return;
+    undoSettings=null;
     const settings = structuredClone(state.settings);
     if (settings.globalId === id) settings.globalId = Core.DEFAULT;
     for (const scope of Object.keys(settings.overrides)) if (settings.overrides[scope] === id) delete settings.overrides[scope];
-    save({...state, settings, skins: state.skins.filter(skin => skin.id !== id), importedIds: state.importedIds.filter(value => value !== id)}, '皮肤已移除');
+    save({...state, settings, skins: state.skins.filter(skin => skin.id !== id), importedIds: state.importedIds.filter(value => value !== id)}, '皮肤已移除',false);
   });
   let stateFrame = 0;
   const scheduleState = () => { if (!stateFrame) stateFrame = requestAnimationFrame(() => { stateFrame = 0; if (state) postState(); }); };
@@ -278,7 +327,7 @@
     clearTimeout(writeTimer); clearTimeout(initialTimer);
     try {
       for (const skin of event.detail.skins) if (!event.detail.importedIds.includes(skin.id)) builtinIds.add(skin.id);
-      apply(event.detail); feedback(event.detail.warning || '皮肤设置已同步', !!event.detail.warning);
+      apply(event.detail); feedback(event.detail.warning || pendingFeedback || '皮肤设置已同步', !!event.detail.warning);pendingFeedback=null;
     } catch (error) {
       setBusy(false); document.body.classList.remove('skin-shell-replaced');
       $('skin-recovery').hidden = false; feedback('皮肤无法应用，请恢复默认：' + error.message, true);

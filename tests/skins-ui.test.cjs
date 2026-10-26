@@ -22,16 +22,16 @@ test('skin manager: persistence, independent modules, import/export, custom GUI,
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.waitForFunction(() => window.FaxToolboxSkins?.getSelection());
-    const status = () => page.locator('.sidebar button[data-view="activity"]').click();
+    const status = async () => { await page.locator('.sidebar [data-view="activity"]').click(); await page.locator('#status-tab-skins').click(); };
     await status();
     assert.equal(await page.locator('#skin-global option').count(), 3);
     assert.equal(await page.locator('[data-skin-module]').count(), 6);
     assert.equal(await page.locator('#view-modules #skin-manager').count(), 0);
-    await page.locator('#skin-global').selectOption('fax.midnight');
+    await page.locator('#skin-global').selectOption('fax.midnight', {force: true});
     assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
-    await page.locator('[data-skin-module="ai"]').selectOption('fax.ocean');
+    await page.locator('[data-skin-module="ai"]').selectOption('fax.ocean', {force: true});
     assert.deepEqual(await page.evaluate(() => [getComputedStyle(document.getElementById('view-ai')).getPropertyValue('--skin-accent'), getComputedStyle(document.getElementById('view-course')).getPropertyValue('--skin-accent')]), ['#087b86', '#b5a0ff']);
-    await page.locator('#skin-global').selectOption('fax.classic');
+    await page.locator('#skin-global').selectOption('fax.classic', {force: true});
     assert.equal(await page.locator('[data-skin-module="ai"]').inputValue(), 'fax.ocean');
     await page.reload(); await page.waitForFunction(() => window.FaxToolboxSkins?.getSelection()); await status();
     assert.equal(await page.locator('[data-skin-module="ai"]').inputValue(), 'fax.ocean');
@@ -43,9 +43,9 @@ test('skin manager: persistence, independent modules, import/export, custom GUI,
     }
     await page.locator('#skin-file').setInputFiles(path.join(root, 'examples/skins/studio.faxskin'));
     await page.waitForFunction(() => [...document.getElementById('skin-global').options].some(option => option.value === 'example.studio'));
-    await page.locator('#skin-global').selectOption('example.studio');
+    await page.locator('#skin-global').selectOption('example.studio', {force: true});
     assert.equal(await page.locator('.app').getAttribute('data-skin-navigation'), 'top');
-    await page.locator('[data-skin-module="ai"]').selectOption('fax.midnight');
+    await page.locator('[data-skin-module="ai"]').selectOption('fax.midnight', {force: true});
     assert.deepEqual(await page.evaluate(() => [getComputedStyle(document.querySelector('#view-ai .card')).borderTopStyle, getComputedStyle(document.querySelector('#view-course .card')).borderTopStyle]), ['solid', 'dashed']);
     await page.locator('#skin-unify').click();
     await page.keyboard.press('Alt+1');
@@ -61,8 +61,8 @@ test('skin manager: persistence, independent modules, import/export, custom GUI,
     assert.equal(await page.locator('#skin-global').inputValue(), 'example.studio');
     await page.locator('#skin-file').setInputFiles(path.join(root, 'examples/skins/launchpad.faxskin'));
     await page.waitForFunction(() => [...document.getElementById('skin-global').options].some(option => option.value === 'example.launchpad'));
-    await page.locator('#skin-global').selectOption('example.launchpad');
-    await page.locator('.sidebar button[data-view="home"]').click();
+    await page.locator('#skin-global').selectOption('example.launchpad', {force: true});
+    await page.locator('.sidebar [data-view="home"]').click();
     await page.waitForFunction(() => document.body.classList.contains('skin-shell-replaced'));
     const frame = page.frames().find(item => item.url().includes('/skin-frame.html'));
     assert.ok(frame, 'Custom GUI frame is missing');
@@ -81,18 +81,18 @@ test('skin manager: persistence, independent modules, import/export, custom GUI,
     await page.locator('#skin-recovery-reset').click();
     assert.equal(await page.locator('#skin-global').inputValue(), 'fax.classic');
     assert.equal(await page.locator('#skin-global option').count(), 5);
-    await page.locator('[data-skin-module="ai"]').selectOption('example.studio');
-    await page.locator('#skin-manage').selectOption('example.studio'); await page.locator('#skin-remove').click();
+    await page.locator('[data-skin-module="ai"]').selectOption('example.studio', {force: true});
+    await page.locator('#skin-manage').selectOption('example.studio', {force: true}); await page.locator('#skin-remove').click(); await page.locator('#toolbox-confirm-accept').click();
     assert.equal(await page.locator('[data-skin-module="ai"]').inputValue(), '');
     assert.equal(await page.locator('#skin-global option').count(), 4);
     const broken = JSON.parse(fs.readFileSync(path.join(root, 'examples/skins/launchpad.faxskin'), 'utf8'));
     broken.id = 'example.broken'; broken.extension.script = 'throw new Error("intentional extension failure")';
     await page.locator('#skin-file').setInputFiles({name: 'broken.faxskin', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken))});
     await page.waitForFunction(() => [...document.getElementById('skin-global').options].some(option => option.value === 'example.broken'));
-    await page.locator('#skin-global').selectOption('example.broken');
+    await page.locator('#skin-global').selectOption('example.broken', {force: true});
     await page.waitForFunction(() => document.getElementById('skin-feedback').textContent.includes('扩展已停用'));
     assert.equal(await page.locator('.app').isVisible(), true);
-    await page.locator('#skin-reset').click();
+    await page.locator('#skin-reset').click(); await page.locator('#toolbox-confirm-accept').click();
     assert.equal(await page.locator('#skin-global').inputValue(), 'fax.classic');
     assert.deepEqual(errors.filter(message => !message.includes('intentional extension failure')), []);
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }

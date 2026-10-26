@@ -4,10 +4,13 @@
   "scripts": {
     "test": "node --test tests/starter.test.cjs tests/agent-markdown.test.cjs tests/skins.test.cjs",
     "test:skins:ui": "node --test tests/skins-ui.test.cjs",
-    "validate:skins": "node scripts/validate-skin.cjs examples/skins/studio.faxskin examples/skins/launchpad.faxskin"
+    "validate:skins": "node scripts/validate-skin.cjs examples/skins/studio.faxskin examples/skins/launchpad.faxskin",
+    "test:ui": "node --test tests/ui-system.test.cjs"
   },
   "devDependencies": {
     "playwright": "1.62.1"
   },
-  "engines": {"node": ">=22"}
+  "engines": {
+    "node": ">=22"
+  }
 }

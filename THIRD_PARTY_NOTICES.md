@@ -50,3 +50,7 @@ The Windows package includes the unmodified official Mihomo v1.19.32 Windows amd
 Copyright MetaCubeX and contributors. Licensed under GPL-3.0.
 Source, license and corresponding release: https://github.com/MetaCubeX/mihomo/tree/v1.19.32
 The source is available from the above versioned repository. The toolbox launches the executable as a separate process.
+
+## Noto Sans SC / Fax Sans interface subset
+
+The interface fonts in `apps/windows-shell/ui/fonts` and `apps/windows-shell/assets/fonts` are renamed, static subsets of Noto Sans SC by the Noto Project authors, distributed under the SIL Open Font License 1.1. The original copyright and license are included in `ui/fonts/OFL.txt`. Source: https://github.com/notofonts/noto-cjk/tree/main/Sans/Variable/TTF/Subset . Subsetting preserves the application interface glyphs; other text falls back to the Windows system fonts.

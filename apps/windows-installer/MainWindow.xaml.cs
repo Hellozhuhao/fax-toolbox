@@ -27,9 +27,6 @@ public partial class MainWindow : Window
         {
             if (SystemParameters.ClientAreaAnimation)
             {
-                OrbitRotation.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(24)) { RepeatBehavior = RepeatBehavior.Forever });
-                var pulse = new DoubleAnimation(0.92, 1.06, TimeSpan.FromSeconds(2.8)) { AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
-                SparkScale.BeginAnimation(ScaleTransform.ScaleXProperty, pulse); SparkScale.BeginAnimation(ScaleTransform.ScaleYProperty, pulse);
                 AnimatePage();
             }
         };
@@ -45,7 +42,7 @@ public partial class MainWindow : Window
     }
     private async void Install_Click(object sender, RoutedEventArgs e)
     {
-        if (complete) { if (LaunchAfterInstall.IsChecked == true) LaunchToolbox(); Close(); return; }
+        if (complete) { if (LaunchAfterInstall.IsChecked == true && !LaunchToolbox()) return; Close(); return; }
         if (busy) return;
         try
         {
@@ -80,15 +77,17 @@ public partial class MainWindow : Window
         InstallButton.Content = LaunchAfterInstall.IsChecked == true ? "打开工具箱  →" : "完成";
         Footnote.Text = "可以从 Windows 设置中卸载。"; AnimatePage();
     }
-    private void LaunchToolbox()
+    private bool LaunchToolbox()
     {
-        try { Process.Start(new ProcessStartInfo(Path.Combine(installedDirectory, "FaxToolbox.Windows.exe")) { UseShellExecute = true, WorkingDirectory = installedDirectory }); }
-        catch (Exception error) { ErrorText.Text = "工具箱已安装，但启动失败：" + error.Message; ErrorPanel.Visibility = Visibility.Visible; }
+        try { Process.Start(new ProcessStartInfo(Path.Combine(installedDirectory, "FaxToolbox.Windows.exe")) { UseShellExecute = true, WorkingDirectory = installedDirectory }); return true; }
+        catch (Exception error) { ErrorText.Text = "工具箱已安装，但启动失败：" + error.Message; ErrorPanel.Visibility = Visibility.Visible; return false; }
     }
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
     private void Window_Closing(object? sender, CancelEventArgs e) { if (busy) { e.Cancel = true; Footnote.Text = "正在安装，请等待完成后关闭。"; } }
     internal async Task SavePreviewAsync(string path, string state)
     {
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        if (state == "error") { ErrorPanel.Visibility = Visibility.Visible; ErrorText.Text = "无法写入此目录，请选择你有写入权限的文件夹。"; InstallButton.Content = "重试安装"; }
         if (state == "progress") { OptionsPanel.Visibility = Visibility.Collapsed; ProgressPanel.Visibility = Visibility.Visible; UpdateProgress(new(2, "正在安装工具箱，请稍候…")); InstallButton.Content = "正在安装…"; InstallButton.IsEnabled = false; }
         if (state == "complete") { installedDirectory = InstallPath.Text; ShowComplete(); }
         await Task.Delay(600); UpdateLayout();

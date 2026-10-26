@@ -139,7 +139,10 @@
     $('proxy-confirm-text').textContent = description;
     const legacy = ['proxy.start','proxy.startup.on'].includes(command) && !!state?.legacyRunning;
     $('proxy-takeover-row').hidden = !legacy; $('proxy-takeover').checked = legacy;
+    window.FaxUi?.inherit($('view-proxy'),$('proxy-confirm'));
+    $('proxy-confirm-ok').textContent=title;
     $('proxy-confirm').showModal();
+    $('proxy-confirm-cancel').focus();
   }
   $('proxy-install').addEventListener('click', () => confirm('proxy.install', '安装 Mihomo 并导入节点', '校验官方 Windows 内核，转换当前 Xray 节点与分流规则，并保留回退配置。使用独立的本机端口 10819。安装不修改当前系统代理；点击启用代理后生效。'));
   $('proxy-restore-xray').addEventListener('click', () => confirm('proxy.restore-xray', '恢复 Xray 配置', '恢复导入前的 Xray 路径、节点与端口配置。当前系统代理保持原状。'));
@@ -156,6 +159,7 @@
   });
   $('proxy-confirm-cancel').addEventListener('click', () => { pending = null; $('proxy-confirm').close(); });
   $('proxy-confirm').addEventListener('cancel', () => { pending = null; });
+  $('proxy-config').addEventListener('change',markDirty);
   $('proxy-config').addEventListener('input', () => { dirty = true; $('proxy-config-note').textContent = '有未保存的更改'; });
   $('proxy-config').addEventListener('submit', event => { event.preventDefault(); if (busy) return; awaitingSave = true; setBusy(true); feedback('正在保存…'); send('proxy.save', {config: read()}); });
   $('proxy-validate').addEventListener('click', () => { if (dirty) { feedback('请先保存配置再检查连接。', true); return; } setBusy(true); feedback('正在检查…'); send('proxy.validate'); });

@@ -5,22 +5,22 @@
     "id": "fax.classic",
     "name": "暖白",
     "author": "Fax Toolbox",
-    "description": "柔和的暖白工作空间",
+    "description": "明亮、清晰的日常工作空间",
     "appearance": "light",
     "targets": [
       "*"
     ],
     "tokens": {
-      "background": "#f5f5f3",
+      "background": "#f6f7fb",
       "panel": "#ffffff",
-      "surface": "#edede9",
-      "text": "#242522",
-      "muted": "#666962",
-      "accent": "#bd593d",
-      "border": "#dedfd8",
-      "navigation": "#f6f5f1",
-      "radius": 18,
-      "fontFamily": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif"
+      "surface": "#eef1f7",
+      "text": "#202b3c",
+      "muted": "#59677a",
+      "accent": "#2859d6",
+      "border": "#d7deea",
+      "navigation": "#edf1f9",
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
     }
   },
   {
@@ -43,8 +43,8 @@
       "accent": "#b5a0ff",
       "border": "#3d4658",
       "navigation": "#191e28",
-      "radius": 18,
-      "fontFamily": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif"
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
     }
   },
   {
@@ -67,8 +67,8 @@
       "accent": "#087b86",
       "border": "#bfdde2",
       "navigation": "#e2f0f3",
-      "radius": 12,
-      "fontFamily": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif"
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
     },
     "layout": {
       "density": "compact",

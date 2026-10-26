@@ -51,15 +51,25 @@ public partial class MainWindow
         var tokens = skin["tokens"]!;
         SolidColorBrush Brush(string name) => new((Color)ColorConverter.ConvertFromString(tokens[name]!.GetValue<string>()));
         ApplyHostTheme(skin["appearance"]!.GetValue<string>() == "dark");
-        if (tokens["fontFamily"] is not null) FontFamily = new FontFamily(tokens["fontFamily"]!.GetValue<string>().Replace("\"", "").Replace("'", ""));
+        NativeUi.Apply(this, tokens);
         Background = Brush("background"); TitleBar.Background = Brush("navigation"); BrowserToolbar.Background = Brush("surface");
         TitleName.Foreground = Brush("text"); TitleStatus.Foreground = ToolbarTitle.Foreground = Brush("muted");
         WorkspaceSplitter.Background = Brush("border"); ToggleControlsButton.Background = Brush("panel"); ToggleControlsButton.Foreground = Brush("text");
-        CourseRetryButton.Background = Brush("accent"); CourseRetryButton.Foreground = Brush("panel"); CourseOverlay.Background = TaskLoadingSurface.Background = Brush("background");
+        CourseRetryButton.Background = Brush("accent"); CourseRetryButton.Foreground = NativeUi.Brush(this, "OnAccent"); CourseOverlay.Background = TaskLoadingSurface.Background = Brush("background");
         CourseOverlayTitle.Foreground = TaskLoadingTitle.Foreground = Brush("text");
         CourseOverlayDetail.Foreground = TaskLoadingDetail.Foreground = Brush("muted");
         Resources["ContextTextBrush"] = Brush("text"); Resources["ContextHoverBrush"] = Brush("surface"); Resources["ContextHoverTextBrush"] = Brush("accent");
+        UpdateTaskTabs();
+        ApplyDemoSkin();
         if (androidMirrorWindow is not null) ApplyAndroidSkin();
+    }
+
+    private void ApplyDemoSkin()
+    {
+        if (skinState is null || ModuleView.CoreWebView2 is null || ModuleView.Source?.AbsoluteUri != ModuleUrl) return;
+        var skin = SkinStore.Resolve(skinState, "demo");
+        var palette = JsonSerializer.Serialize(skin["tokens"]);
+        _ = ModuleView.CoreWebView2.ExecuteScriptAsync("(()=>{const t=" + palette + ";const r=document.documentElement;for(const [key,value] of Object.entries(t)){const name={background:'bg',muted:'subtle',fontFamily:'skin-font-family',radius:'skin-radius'}[key]||key;r.style.setProperty('--'+name,key==='radius'?value+'px':value);}r.style.colorScheme=" + JsonSerializer.Serialize(skin["appearance"]!.GetValue<string>()) + ";})();");
     }
 
     private void ApplyAndroidSkin()
@@ -67,11 +77,11 @@ public partial class MainWindow
         if (androidMirrorWindow is null || skinState is null) return;
         var skin = SkinStore.Resolve(skinState, "android");
         var tokens = skin["tokens"]!;
-        if (tokens["fontFamily"] is not null) androidMirrorWindow.FontFamily = new FontFamily(tokens["fontFamily"]!.GetValue<string>().Replace("\"", "").Replace("'", ""));
-        androidMirrorWindow.Resources["Skin.radius"] = new CornerRadius(tokens["radius"]!.GetValue<int>());
+        NativeUi.Apply(androidMirrorWindow, tokens);
+        androidMirrorWindow.Resources["Skin.radius"] = new CornerRadius(Math.Min(16, tokens["radius"]!.GetValue<int>()));
         foreach (var name in new[] { "background", "panel", "surface", "text", "muted", "accent", "border", "navigation" })
             androidMirrorWindow.Resources["Skin." + name] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(tokens[name]!.GetValue<string>()));
-        androidMirrorWindow.Resources["Skin.onAccent"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(skin["appearance"]!.GetValue<string>() == "dark" ? tokens["panel"]!.GetValue<string>() : "#ffffff"));
+        androidMirrorWindow.Resources["Skin.onAccent"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(NativeUi.OnAccent(NativeUi.Brush(androidMirrorWindow, "Accent")).Color.ToString()));
     }
 
     private void SkinRecoveryKeyDown(object sender, KeyEventArgs args)

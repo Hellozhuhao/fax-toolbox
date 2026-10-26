@@ -19,6 +19,7 @@ jobs:
       - run: npm run validate:skins
       - run: npx playwright install --with-deps chromium
       - run: npm run test:skins:ui
+      - run: npm run test:ui
   windows:
     runs-on: windows-latest
     steps:
@@ -28,3 +29,18 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet run --project tests/skins/SkinStore.Tests.csproj -- .
       - run: dotnet build apps/windows-shell/Toolbox.Windows.csproj --nologo
+      - run: dotnet run --project tests/ui-native/UiSystem.Tests.csproj
+        env:
+          FAX_NATIVE_SCREENSHOTS: .cache/ui-native
+      - name: Render installer states
+        shell: pwsh
+        run: |
+          foreach ($state in @('welcome', 'progress', 'complete', 'error')) {
+            dotnet run --project apps/windows-installer/Toolbox.Installer.csproj -- --preview ".cache/ui-native/installer-$state.png" $state
+            if ($LASTEXITCODE -ne 0) { throw "Installer preview failed: $state" }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ui-review
+          path: .cache/ui-native

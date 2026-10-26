@@ -3,39 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="安卓投屏 · Fax Toolbox" Width="1180" Height="780" MinWidth="860" MinHeight="620"
-        Background="{DynamicResource Skin.background}" FontFamily="Microsoft YaHei UI" FontSize="13"
+        Background="{DynamicResource Skin.background}" FontFamily="{DynamicResource Ui.Font}" FontSize="13"
         WindowStyle="None" ResizeMode="CanResize">
   <shell:WindowChrome.WindowChrome>
     <shell:WindowChrome CaptionHeight="64" ResizeBorderThickness="6" GlassFrameThickness="0" UseAeroCaptionButtons="False"/>
   </shell:WindowChrome.WindowChrome>
   <Window.Resources>
-    <CornerRadius x:Key="Skin.radius">18</CornerRadius>
-    <SolidColorBrush x:Key="Skin.background" Color="#f5f5f3"/>
+    <CornerRadius x:Key="Skin.radius">14</CornerRadius>
+    <SolidColorBrush x:Key="Skin.background" Color="#f6f7fb"/>
     <SolidColorBrush x:Key="Skin.panel" Color="#ffffff"/>
-    <SolidColorBrush x:Key="Skin.surface" Color="#edede9"/>
-    <SolidColorBrush x:Key="Skin.text" Color="#242522"/>
-    <SolidColorBrush x:Key="Skin.muted" Color="#666962"/>
-    <SolidColorBrush x:Key="Skin.accent" Color="#bd593d"/>
-    <SolidColorBrush x:Key="Skin.border" Color="#dedfd8"/>
+    <SolidColorBrush x:Key="Skin.surface" Color="#eef1f7"/>
+    <SolidColorBrush x:Key="Skin.text" Color="#202b3c"/>
+    <SolidColorBrush x:Key="Skin.muted" Color="#59677a"/>
+    <SolidColorBrush x:Key="Skin.accent" Color="#2859d6"/>
+    <SolidColorBrush x:Key="Skin.border" Color="#d7deea"/>
     <SolidColorBrush x:Key="Skin.onAccent" Color="#ffffff"/>
-    <SolidColorBrush x:Key="Skin.navigation" Color="#f6f5f1"/>
+    <SolidColorBrush x:Key="Skin.navigation" Color="#edf1f9"/>
 
-    <Style TargetType="Button">
-      <Setter Property="Background" Value="{DynamicResource Skin.surface}"/><Setter Property="Foreground" Value="{DynamicResource Skin.text}"/>
-      <Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="16,11"/>
-      <Setter Property="Cursor" Value="Hand"/><Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
-        <Border x:Name="Surface" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Skin.radius}" Padding="{TemplateBinding Padding}">
-          <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
-        <ControlTemplate.Triggers>
-          <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.8"/></Trigger>
-          <Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Opacity" Value="0.65"/></Trigger>
-          <Trigger Property="IsEnabled" Value="False"><Setter TargetName="Surface" Property="Opacity" Value="0.4"/></Trigger>
-        </ControlTemplate.Triggers>
-      </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+<Style x:Key="Primary" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Background" Value="{DynamicResource Skin.accent}"/><Setter Property="Foreground" Value="{DynamicResource Skin.onAccent}"/>
       <Setter Property="FontSize" Value="14"/><Setter Property="Padding" Value="16,14"/>
     </Style>
@@ -43,32 +28,8 @@
       <Setter Property="Background" Value="Transparent"/><Setter Property="Width" Value="40"/>
       <Setter Property="Height" Value="38"/><Setter Property="FontSize" Value="19"/><Setter Property="Padding" Value="0"/>
     </Style>
-    <Style TargetType="TextBox">
-      <Setter Property="Background" Value="{DynamicResource Skin.panel}"/><Setter Property="Foreground" Value="{DynamicResource Skin.text}"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource Skin.border}"/><Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Padding" Value="12,10"/><Setter Property="MinHeight" Value="40"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox">
-        <Border x:Name="InputBorder" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Skin.radius}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-          <Grid><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
-            <TextBlock x:Name="Hint" Text="{TemplateBinding Tag}" Margin="{TemplateBinding Padding}" Foreground="{DynamicResource Skin.muted}" IsHitTestVisible="False" Visibility="Collapsed"/>
-          </Grid>
-        </Border>
-        <ControlTemplate.Triggers>
-          <Trigger Property="Text" Value=""><Setter TargetName="Hint" Property="Visibility" Value="Visible"/></Trigger>
-          <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="InputBorder" Property="BorderBrush" Value="{DynamicResource Skin.accent}"/></Trigger>
-        </ControlTemplate.Triggers>
-      </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <Style TargetType="PasswordBox">
-      <Setter Property="Background" Value="{DynamicResource Skin.panel}"/><Setter Property="BorderBrush" Value="{DynamicResource Skin.border}"/>
-      <Setter Property="Padding" Value="12,10"/><Setter Property="MinHeight" Value="40"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="PasswordBox">
-        <Border Background="{TemplateBinding Background}" CornerRadius="{DynamicResource Skin.radius}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1">
-          <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
-        </Border>
-      </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <Style x:Key="Mode" TargetType="RadioButton">
+<Style x:Key="Mode" TargetType="RadioButton">
+      <Setter Property="FocusVisualStyle" Value="{StaticResource Ui.Focus}"/>
       <Setter Property="Cursor" Value="Hand"/><Setter Property="HorizontalContentAlignment" Value="Center"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton">
         <Border x:Name="Pill" Background="Transparent" CornerRadius="{DynamicResource Skin.radius}" Padding="12,10">
@@ -80,42 +41,7 @@
         </ControlTemplate.Triggers>
       </ControlTemplate></Setter.Value></Setter>
     </Style>
-    <Style TargetType="CheckBox"><Setter Property="Margin" Value="0,9,0,9"/><Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="Foreground" Value="{DynamicResource Skin.muted}"/></Style>
-    <Style TargetType="ComboBox">
-      <Setter Property="Background" Value="{DynamicResource Skin.panel}"/><Setter Property="BorderBrush" Value="{DynamicResource Skin.border}"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
-        <Grid>
-          <ToggleButton Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
-            <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
-              <Border x:Name="DeviceSurface" Background="{DynamicResource Skin.panel}" BorderBrush="{DynamicResource Skin.border}" BorderThickness="1" CornerRadius="{DynamicResource Skin.radius}">
-                <TextBlock Text="⌄" Foreground="{DynamicResource Skin.muted}" Margin="0,0,12,0" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-              </Border>
-            </ControlTemplate></ToggleButton.Template>
-          </ToggleButton>
-          <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="12,8,28,8" VerticalAlignment="Center" IsHitTestVisible="False"/>
-          <TextBlock x:Name="NoDevice" Text="等待手机连接…" Foreground="{DynamicResource Skin.muted}" Margin="12,0,28,0" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False"/>
-          <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
-            <Border Background="{DynamicResource Skin.panel}" CornerRadius="{DynamicResource Skin.radius}" BorderBrush="{DynamicResource Skin.border}" BorderThickness="1" Padding="4" Margin="0,4,0,0" MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
-              <ScrollViewer MaxHeight="240" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
-            </Border>
-          </Popup>
-        </Grid>
-        <ControlTemplate.Triggers>
-          <Trigger Property="HasItems" Value="False"><Setter TargetName="NoDevice" Property="Visibility" Value="Visible"/></Trigger>
-        </ControlTemplate.Triggers>
-      </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <Style TargetType="ComboBoxItem">
-      <Setter Property="Padding" Value="10,8"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem">
-        <Border x:Name="DeviceItem" Background="Transparent" CornerRadius="{DynamicResource Skin.radius}" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border>
-        <ControlTemplate.Triggers>
-          <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="DeviceItem" Property="Background" Value="{DynamicResource Skin.surface}"/></Trigger>
-          <Trigger Property="IsSelected" Value="True"><Setter TargetName="DeviceItem" Property="Background" Value="{DynamicResource Skin.surface}"/></Trigger>
-        </ControlTemplate.Triggers>
-      </ControlTemplate></Setter.Value></Setter>
-    </Style>
-    <Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Skin.muted}"/><Setter Property="FontSize" Value="12"/><Setter Property="Margin" Value="0,15,0,8"/></Style>
+<Style x:Key="FieldLabel" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Skin.muted}"/><Setter Property="FontSize" Value="12"/><Setter Property="Margin" Value="0,15,0,8"/></Style>
     <Style x:Key="Help" TargetType="TextBlock"><Setter Property="Foreground" Value="{DynamicResource Skin.muted}"/><Setter Property="FontSize" Value="12"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="LineHeight" Value="20"/></Style>
   </Window.Resources>
   <Grid>
@@ -124,10 +50,10 @@
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
         <Border Width="40" Height="40" Background="{DynamicResource Skin.surface}" CornerRadius="{DynamicResource Skin.radius}" Margin="0,0,14,0">
-          <TextBlock Text="▣" Foreground="{DynamicResource Skin.accent}" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          <Viewbox Width="22" Height="26" HorizontalAlignment="Center" VerticalAlignment="Center"><Path Data="M 6,1 L 18,1 L 18,23 L 6,23 Z M 10,4 L 14,4 M 11,20 L 13,20" Stroke="{DynamicResource Skin.accent}" StrokeThickness="1.7"/></Viewbox>
         </Border>
         <StackPanel><TextBlock Text="安卓投屏" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource Skin.text}"/>
-          <TextBlock Text="FAX TOOLBOX  /  DEVICE" FontSize="10" Foreground="{DynamicResource Skin.muted}" Margin="0,4,0,0"/></StackPanel>
+          <TextBlock Text="设备与投屏工作台" FontSize="10" Foreground="{DynamicResource Skin.muted}" Margin="0,4,0,0"/></StackPanel>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
         <Button Style="{StaticResource Caption}" Content="−" Click="Minimize_Click" ToolTip="最小化"/>
@@ -169,7 +95,7 @@
               </StackPanel>
               <Grid Margin="0,24,0,8"><TextBlock Text="当前设备" Foreground="{DynamicResource Skin.muted}" FontSize="12" VerticalAlignment="Center"/>
                 <Button x:Name="refresh" Content="↻  刷新" HorizontalAlignment="Right" Background="Transparent" Foreground="{DynamicResource Skin.accent}" Padding="0,3" FontSize="12"/></Grid>
-              <ComboBox x:Name="devices" MinHeight="54" Padding="8" Background="{DynamicResource Skin.panel}" BorderBrush="{DynamicResource Skin.border}" HorizontalContentAlignment="Stretch">
+              <ComboBox Tag="等待手机连接…" x:Name="devices" MinHeight="54" Padding="8" Background="{DynamicResource Skin.panel}" BorderBrush="{DynamicResource Skin.border}" HorizontalContentAlignment="Stretch">
                 <ComboBox.ItemTemplate><DataTemplate>
                   <StackPanel><TextBlock Text="{Binding Model}" FontWeight="SemiBold" Foreground="{DynamicResource Skin.text}" TextTrimming="CharacterEllipsis"/>
                     <TextBlock Text="{Binding Description}" FontSize="10" Foreground="{DynamicResource Skin.muted}" Margin="0,4,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Serial}"/></StackPanel>
@@ -202,7 +128,7 @@
             <StackPanel x:Name="emptyState" HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="360">
               <Border Width="98" Height="172" Background="{DynamicResource Skin.panel}" BorderBrush="{DynamicResource Skin.border}" BorderThickness="2" CornerRadius="{DynamicResource Skin.radius}" HorizontalAlignment="Center" Margin="0,0,0,28">
                 <Grid><Border Width="30" Height="4" Background="{DynamicResource Skin.border}" CornerRadius="{DynamicResource Skin.radius}" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,12,0,0"/>
-                  <TextBlock Text="↗" FontSize="40" Foreground="{DynamicResource Skin.accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  <Path Data="M 0,24 L 24,0 M 8,0 L 24,0 L 24,16" Stroke="{DynamicResource Skin.accent}" StrokeThickness="2" Width="24" Height="24" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   <Border Width="30" Height="3" Background="{DynamicResource Skin.border}" CornerRadius="{DynamicResource Skin.radius}" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,12"/></Grid>
               </Border>
               <TextBlock x:Name="stageTitle" Text="把手机，放到大屏上" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource Skin.text}" HorizontalAlignment="Center"/>

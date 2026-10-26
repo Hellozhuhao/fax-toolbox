@@ -1,0 +1,275 @@
+/* Module structure only. Presentation is defined by design-system.css. */
+.network-icon svg {
+  width: 28px;
+  height: 28px;
+}
+#view-proxy {
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.network-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.network-heading h2,
+.network-heading h3 {
+  margin: 0;
+}
+.network-heading p {
+  margin: 8px 0 0;
+}
+.network-dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(230px, 1fr);
+  gap: 18px;
+  margin: 20px 0;
+}
+.network-dashboard .card {
+  margin: 0;
+  padding: 24px;
+}
+.network-status-title {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.network-status-title .pill {
+  margin-left: auto;
+}
+.network-status-title .pill {
+  position: static;
+}
+.network-dot {
+  width: 9px;
+  height: 9px;
+}
+.network-status h3 {
+  margin: 24px 0 8px;
+}
+.network-facts {
+  display: grid;
+  gap: 12px;
+  padding: 18px 0;
+  margin: 14px 0;
+}
+.network-facts div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+.network-facts span {
+  flex-shrink: 0;
+}
+.network-facts strong,
+.network-facts code {
+  overflow-wrap: anywhere;
+}
+.network-quick h3 {
+  margin: 0 0 9px;
+}
+.network-quick .action-row {
+  margin-bottom: 28px;
+}
+.network-feedback {
+  min-height: 20px;
+  margin: 14px 0 0;
+}
+.network-config {
+  padding: 24px;
+}
+.network-config fieldset {
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.network-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+.network-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.network-fields input,
+.network-fields select,
+.network-fields textarea {
+  width: 100%;
+  margin: 0;
+  box-sizing: border-box;
+}
+.network-path {
+  display: flex;
+  gap: 8px;
+}
+.network-path input {
+  min-width: 0;
+  flex: 1;
+}
+.network-path button {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  min-height: 38px;
+}
+.network-config .network-path button,
+.network-dashboard .action-row button,
+.network-config .action-row button {
+  width: auto;
+  margin: 0;
+}
+.network-wide {
+  grid-column: 1 / -1;
+}
+.network-checks {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin: 22px 0 10px;
+}
+.network-checks label,
+.network-confirm label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.network-checks input,
+.network-confirm input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+.network-config fieldset:disabled {
+  opacity: 0.65;
+}
+.network-log {
+  margin-top: 18px;
+}
+.network-log pre {
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.network-confirm {
+  max-width: 480px;
+  width: calc(100% - 48px);
+  padding: 26px;
+}
+.network-confirm .action-row {
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+.network-confirm [hidden] {
+  display: none;
+}
+@media (max-width: 760px) {
+  .network-dashboard,
+  .network-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .network-heading {
+    align-items: flex-start;
+  }
+}
+.network-core-choice {
+  padding: 20px;
+}
+.network-core-choice h3 {
+  margin: 7px 0;
+}
+.network-core-choice .action-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.network-simple {
+  margin: 24px 0;
+}
+.network-setup-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 22px 0 10px;
+}
+.network-setup-heading h3 {
+  margin: 0;
+}
+.network-setup-heading p {
+  margin: 6px 0;
+}
+.network-setup-heading button {
+  width: auto;
+  white-space: nowrap;
+  margin: 0;
+}
+.network-connections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 9px;
+}
+.network-config .network-connection-choice {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 14px;
+  min-height: 76px;
+  margin: 0;
+}
+.network-apps {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0 14px;
+}
+.network-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 0;
+}
+.network-app-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.network-app-row strong {
+  overflow-wrap: anywhere;
+}
+.network-app-row select {
+  width: 145px;
+  flex: none;
+  margin: 0;
+  min-height: 35px;
+}
+.network-advanced {
+  padding: 15px 0;
+}
+.network-advanced > summary span {
+  margin-left: 10px;
+}
+.network-advanced[open] > summary {
+  margin-bottom: 20px;
+}
+.network-priority {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 18px 0 0;
+}
+.network-priority select {
+  width: 210px;
+  max-width: 55%;
+  margin: 0;
+}

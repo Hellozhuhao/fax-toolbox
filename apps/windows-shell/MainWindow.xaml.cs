@@ -121,11 +121,6 @@ public partial class MainWindow : Window
         }
         PreviewKeyDown += SkinRecoveryKeyDown;
         ApplyHostTheme(ReadStoredHostTheme());
-        NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
-        NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(BrowserBackButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(BrowserReloadButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(CourseRetryButton, () => darkTaskTabs, primary: true);
         Trace("constructor");
         InitializeCatalog();
         RegisterTaskWindow();
@@ -213,7 +208,7 @@ public partial class MainWindow : Window
             taskWindowReady.TrySetResult(false);
             Publish("ERROR", error.Message);
             if (smokeMode) FailSmoke(error.ToString());
-            else MessageBox.Show(this, error.Message, "Toolbox 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            else NativeNotice.Show(this, "工具箱启动失败", error.Message);
         }
     }
 
@@ -258,6 +253,10 @@ public partial class MainWindow : Window
     {
         ModuleView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             ModuleHost, Path.Combine(root, "modules", "smoke"), CoreWebView2HostResourceAccessKind.DenyCors);
+        // The trusted demonstration page consumes the same public UI assets as the shell.
+        ModuleView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            UiHost, Path.Combine(root, "apps", "windows-shell", "ui"), CoreWebView2HostResourceAccessKind.Allow);
+        ModuleView.CoreWebView2.NavigationCompleted += (_, _) => ApplyDemoSkin();
         if (courseSmokeMode)
             CourseView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "mooc1.chaoxing.com", Path.Combine(root, "modules", "chaoxing", "fixture"),
@@ -1290,29 +1289,21 @@ public partial class MainWindow : Window
     private void ApplyHostTheme(bool dark)
     {
         darkTaskTabs = dark;
-        Resources["ContextHoverBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#403554" : "#E8EFFF"));
-        Resources["ContextHoverTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#D8C9FF" : "#2A67D2"));
-        Resources["ContextTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#F5F5F8" : "#171716"));
-        UpdateTaskTabs();
-        static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        Background = Brush(dark ? "#202126" : "#F7F7FC");
-        BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
-        TitleBar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
-        TitleName.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
-        TitleStatus.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
-        var accent = Brush(dark ? "#4F8CF5" : "#387DF3");
-        ToggleControlsButton.Background = Brush(dark ? "#24252C" : "#FFFFFF");
-        ToggleControlsButton.Foreground = Brush(dark ? "#F5F5F8" : "#74716E");
-        CourseRetryButton.Background = accent;
-        CourseOverlay.Background = Brush(dark ? "#202126" : "#F7F7FC");
-        CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
-        CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F7F7FC");
-        TaskLoadingTitle.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
-        TaskLoadingDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        UpdateDeveloperChrome();
+        if (skinState is null) NativeUi.ApplyDefault(this, dark);
+        Background = NativeUi.Brush(this, "Background");
+        BrowserToolbar.Background = NativeUi.Brush(this, "Surface");
+        TitleBar.Background = NativeUi.Brush(this, "Background");
+        TitleName.Foreground = NativeUi.Brush(this, "Text");
+        TitleStatus.Foreground = ToolbarTitle.Foreground = NativeUi.Brush(this, "Muted");
+        WorkspaceSplitter.Background = NativeUi.Brush(this, "Border");
+        ToggleControlsButton.Background = NativeUi.Brush(this, "Panel");
+        ToggleControlsButton.Foreground = NativeUi.Brush(this, "Text");
+        CourseRetryButton.Background = NativeUi.Brush(this, "Accent");
+        CourseRetryButton.Foreground = NativeUi.Brush(this, "OnAccent");
+        CourseOverlay.Background = TaskLoadingSurface.Background = NativeUi.Brush(this, "Background");
+        CourseOverlayTitle.Foreground = TaskLoadingTitle.Foreground = NativeUi.Brush(this, "Text");
+        CourseOverlayDetail.Foreground = TaskLoadingDetail.Foreground = NativeUi.Brush(this, "Muted");
+        UpdateTaskTabs(); UpdateDeveloperChrome();
     }
 
     private async Task StartSessionAsync()

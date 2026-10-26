@@ -136,3 +136,12 @@ const unregisterAction = FaxToolboxSkins.registerAction('my-tool.refresh', {
 注册必须发生在应用皮肤前，或在模块注册后重新导入涉及新动作的皮肤。ID 不重复；模块卸载时调用返回的解除注册函数。新动作保留原有校验、任务生命周期和确认流程，不注册跳过文件写入审批、自动同意操作或暴露账号配置的接口。
 
 原生模块通过 `SkinStore.Resolve(state, moduleId)` 获得自己的设计变量，并以动态资源映射到控件。原生模块不执行 HTML/CSS/JavaScript 扩展；需要完整可编程布局时，模块应暴露自己的 WebView 界面与操作契约。
+
+
+## 共享控件规范
+
+默认控件由 `design-system.css` 与 `UiResources.xaml` 统一绘制。模块结构放在各自的布局文件；模块不要重复定义全局按钮、字体或浮层颜色。皮肤只通过语义变量覆盖这些角色，原始表单 ID、值、宿主命令、任务状态和确认边界保持稳定。
+
+网页下拉框的真实 `<select>` 保留为业务数据源；可见层提供统一的 combobox/listbox、键盘选择和焦点返回。动态更新选项后调用 `FaxUi.refresh()`。浮层打开前使用 `FaxUi.inherit(source, popup)` 继承来源模块的独立皮肤，不能从外壳浅色/深色状态猜测模块颜色。强调色文字 `--on-accent` 按对比度推导。
+
+原生窗口共用 `Ui.*` 动态资源，使用 `NativeUi.Inherit` 继承所属窗口，使用 `NativeUi.Apply` 应用模块变量。可编辑 ComboBox 必须保留 `PART_EditableTextBox` 与 `PART_Popup`，密码输入必须保留 PasswordBox，不能因视觉模板丢失输入能力。系统文件选择器、第三方网页和手机图像保留平台与内容本身的显示。

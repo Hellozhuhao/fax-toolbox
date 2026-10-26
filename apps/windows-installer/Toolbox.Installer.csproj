@@ -12,6 +12,8 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <Page Include="../windows-shell/UiResources.xaml" Link="UiResources.xaml" />
+    <Resource Include="../windows-shell/assets/fonts/*.ttf" Link="assets/fonts/%(Filename)%(Extension)" />
     <Resource Include="../windows-shell/assets/fax-toolbox.png" Link="assets/fax-toolbox.png" />
     <EmbeddedResource Include="$(PayloadPath)" LogicalName="FaxToolbox.Setup.Payload.exe" Condition="'$(PayloadPath)' != ''" />
     <EmbeddedResource Include="$(SmokePayloadPath)" LogicalName="FaxToolbox.Setup.Smoke.exe" Condition="'$(SmokePayloadPath)' != ''" />

@@ -144,9 +144,9 @@ public partial class MainWindow
         contents.Children.Add(new TextBlock { Text = HomeworkExplanationQuestion.Text, FontSize = 20,
             FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
         contents.Children.Add(new TextBlock { Text = HomeworkExplanationAnswer.Text, FontSize = 16,
-            Foreground = Brushes.IndianRed, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
+            Foreground = NativeUi.Brush(this, "Accent"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 18) });
         var detail = new TextBlock { Text = HomeworkExplanationText.Text, FontSize = 16, LineHeight = 29,
-            FontFamily = new FontFamily("Cambria Math,Microsoft YaHei UI"), TextWrapping = TextWrapping.Wrap };
+            FontFamily = FontFamily, TextWrapping = TextWrapping.Wrap };
         homeworkDetachedText = detail;
         contents.Children.Add(detail);
         homeworkExplanationWindow?.Close();
@@ -159,11 +159,12 @@ public partial class MainWindow
             MinWidth = 540, MinHeight = 400,
             ResizeMode = ResizeMode.CanResizeWithGrip,
             WindowStartupLocation = WindowStartupLocation.CenterScreen,
-            Background = new SolidColorBrush(Color.FromRgb(250, 250, 248)),
+            Background = NativeUi.Brush(this, "Panel"), Foreground = NativeUi.Brush(this, "Text"), FontFamily = FontFamily,
             Content = new ScrollViewer { Content = contents,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }
         };
+        NativeUi.Inherit(homeworkExplanationWindow, this);
         homeworkExplanationWindow.Show();
         CloseHomeworkExplanation(false);
     }
