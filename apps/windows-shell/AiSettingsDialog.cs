@@ -212,18 +212,21 @@ internal sealed class AiSettingsDialog : Window
             endpoint.LostFocus += (_, _) => RefreshPromptFields();
         }
         privacyHint.Text = "密钥由 Windows 当前用户加密保存在本机。输入内容会发送给所选服务商。";
-        privacyHint.Foreground = subtle; privacyHint.FontSize = 11; privacyHint.TextWrapping = TextWrapping.Wrap;
-        privacyHint.Margin = new Thickness(0, 17, 0, 4); body.Children.Add(privacyHint); body.Children.Add(validation);
+        privacyHint.Foreground = subtle; privacyHint.FontSize = 12; privacyHint.TextWrapping = TextWrapping.Wrap;
+        privacyHint.Margin = new Thickness(0, 17, 0, 4); body.Children.Add(privacyHint);
 
         var actions = new Grid { Margin = new Thickness(28, 16, 28, 22) };
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         actions.ColumnDefinitions.Add(new ColumnDefinition());
         actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var cancel = PlainButton("取消"); cancel.Width = 92; cancel.Click += (_, _) => Close();
-        Grid.SetColumn(cancel, 1); actions.Children.Add(cancel);
+        validation.Margin = new Thickness(0, 0, 0, 12); Grid.SetColumnSpan(validation, 3); actions.Children.Add(validation);
+        Grid.SetRow(cancel, 1); Grid.SetColumn(cancel, 1); actions.Children.Add(cancel);
         var save = PlainButton("保存设置"); save.Width = 116; save.Margin = new Thickness(10, 0, 0, 0);
         save.Background = accent; save.Foreground = NativeUi.Brush(this, "OnAccent"); save.BorderBrush = accent; save.IsDefault = true;
-        save.Click += Save; Grid.SetColumn(save, 2); actions.Children.Add(save);
+        save.Click += Save; Grid.SetRow(save, 1); Grid.SetColumn(save, 2); actions.Children.Add(save);
         Grid.SetRow(actions, 2); layout.Children.Add(actions);
         SelectCategory(CategoryFor(selected.Id), false);
         SelectProvider(selected);

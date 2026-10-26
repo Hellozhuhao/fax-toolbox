@@ -1170,9 +1170,9 @@
   const contextSubmenu = $('toolbox-context-submenu');
   let contextTarget = null;
   let contextPasteTarget = null;
-  let contextFocus, submenuTrigger;
+  let contextFocus, submenuTrigger, contextAnchor;
   function hideContextSubmenu() { submenuTrigger?.setAttribute('aria-expanded','false');contextSubmenu.hidden = true; contextSubmenu.replaceChildren(); }
-  function closeContextMenu(restore=false) { contextMenu.hidden = true; contextMenu.replaceChildren(); hideContextSubmenu(); contextTarget = null; if(restore&&contextFocus?.isConnected)contextFocus.focus(); }
+  function closeContextMenu(restore=false) { contextMenu.hidden = true; contextMenu.replaceChildren(); hideContextSubmenu(); contextTarget = null; if(restore&&contextFocus?.isConnected)contextFocus.focus({preventScroll:true}); }
   function contextAction(label, run, enabled = true) { return {label, run, enabled}; }
   function buildSessionContextActions(row) {
     const session = agentSessionMeta.get(row.dataset.sessionId);
@@ -1265,6 +1265,7 @@
     const width = contextMenu.offsetWidth, height = contextMenu.offsetHeight;
     contextMenu.style.left = Math.max(8, Math.min(event.clientX, innerWidth - width - 8)) + 'px';
     contextMenu.style.top = Math.max(8, Math.min(event.clientY, innerHeight - height - 8)) + 'px';
+    contextAnchor=contextTarget.getBoundingClientRect();
   }
   function contextIcon(name) {
     const paths = {
@@ -1327,10 +1328,10 @@
   });
   document.addEventListener('contextmenu', showContextMenu);
   document.addEventListener('pointerdown', event => { if (!event.target.closest('.toolbox-context-menu')) closeContextMenu(); }, true);
-  document.addEventListener('scroll', event => { if (!event.target.closest?.('.toolbox-context-menu')) closeContextMenu(); }, true);
+  document.addEventListener('scroll', event => { if (contextTarget&&!event.target.closest?.('.toolbox-context-menu')) { const rect=contextTarget.getBoundingClientRect();if(Math.abs(rect.top-contextAnchor.top)>.5||Math.abs(rect.left-contextAnchor.left)>.5)closeContextMenu(); } }, true);
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); if (!contextSubmenu.hidden) hideContextSubmenu(); else closeContextMenu(true); }
-    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus(); }
+    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus({preventScroll:true}); }
     if (currentView !== 'ai' || agentBusy || confirmation.open || !$('command-palette').hidden || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
     const row = document.activeElement?.closest('.agent-session-row') || [...document.querySelectorAll('.agent-session-row')].find(item => item.dataset.sessionId === activeAgentSessionId);
     if (!row) return;

@@ -32,3 +32,4 @@ modules/proxy-autoswitch/mihomo-official.zip
 
 # JavaScript development/test dependencies
 node_modules/
+.impeccable/review/

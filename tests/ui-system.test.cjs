@@ -452,6 +452,7 @@ test(
         await page.screenshot({
           path: path.join(out, name + ".png"),
           fullPage: !overlay,
+          animations: "disabled",
         });
       }
     };

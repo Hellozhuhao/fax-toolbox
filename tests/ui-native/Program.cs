@@ -59,7 +59,8 @@ internal static class Program
         var save = Descendants(ai).OfType<Button>().Single(button => Equals(button.Content, "保存设置"));
         save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Paint();
         Check(ai.IsVisible, "Invalid AI configuration closed the dialog");
-        Check(Descendants(ai).OfType<TextBlock>().Any(text => text.IsVisible && text.Text.Contains("请填写")), "AI field validation is not visible in the existing dialog");
+        var validation=(TextBlock)aiType.GetField("validation",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(ai)!;
+        Check(validation.IsVisible && !string.IsNullOrWhiteSpace(validation.Text), "AI field validation is not visible in the existing dialog");
         Capture(ai,"native-ai-validation-dark");
         ai.Close();
 
