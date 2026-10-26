@@ -41,6 +41,12 @@ if ($LASTEXITCODE -ne 0) { throw '.NET build failed' }
 
 if ($Test) {
     $aiTests = Join-Path $root 'tests\ai-answers\AiAnswers.csproj'
+    & (Join-Path $PSScriptRoot 'setup-scrcpy.ps1')
+    $mirrorTests = Join-Path $root 'tests\android-mirror\AndroidMirror.Tests.csproj'
+    & dotnet restore $mirrorTests --configfile $nugetConfig --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'Android mirror test restore failed' }
+    & dotnet run --project $mirrorTests --no-restore -- $root
+    if ($LASTEXITCODE -ne 0) { throw 'Android mirror tests failed' }
     & dotnet restore $aiTests --configfile $nugetConfig --nologo
     if ($LASTEXITCODE -ne 0) { throw 'AI test restore failed' }
     & dotnet run --project $aiTests --no-restore

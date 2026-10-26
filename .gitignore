@@ -9,6 +9,7 @@
 *.iml
 *.log
 dist/
+runtime/scrcpy/
 **/WebView2/
 **/User Data/
 **/user-data/

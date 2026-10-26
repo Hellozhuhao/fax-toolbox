@@ -22,6 +22,12 @@
 
 ## Windows 主线：C# + Rust
 
+新增“安卓投屏”内置工作台，支持 USB 设备选择、Android 无线配对与连接、
+键鼠控制、声音及应用虚拟显示。首次开发运行前执行
+`powershell -ExecutionPolicy Bypass -File scripts/setup-scrcpy.ps1`；
+发布脚本自动携带投屏组件。使用步骤和验证边界见
+[安卓投屏](modules/android-mirror/README.md)。
+
 在 PowerShell 中进入项目根目录，运行：
 
 ```powershell

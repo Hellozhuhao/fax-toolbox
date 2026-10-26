@@ -8,6 +8,7 @@ $env:DOTNET_CLI_HOME = Join-Path $root '.cache\dotnet-home'
 $env:NUGET_PACKAGES = Join-Path $root '.cache\nuget-packages'
 
 # Ensure the pinned WebView2 SDK and the development build are available.
+& (Join-Path $PSScriptRoot 'setup-scrcpy.ps1')
 & (Join-Path $PSScriptRoot 'build-windows.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Windows development build failed' }
 
@@ -36,7 +37,11 @@ $runningDistProcess = Get-CimInstance Win32_Process | Where-Object {
         [System.StringComparison]::OrdinalIgnoreCase)
 }
 if ($runningDistProcess) { throw 'Close FaxToolbox.Windows.exe before publishing to dist/windows' }
-if (Test-Path -LiteralPath $resolvedDist) { Remove-Item -LiteralPath $resolvedDist -Recurse -Force }
+if (Test-Path -LiteralPath $resolvedDist) {
+    # Keep the output folder itself: Explorer or a terminal may hold it open
+    # even after the application has exited. The absolute target was checked above.
+    Get-ChildItem -LiteralPath $resolvedDist -Force | Remove-Item -Recurse -Force
+}
 New-Item -ItemType Directory -Path $dist -Force | Out-Null
 & dotnet publish $project -c Release -r win-x64 --self-contained true --no-restore -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $dist --nologo
 if ($LASTEXITCODE -ne 0) { throw '.NET self-contained publish failed' }
@@ -44,7 +49,7 @@ if ($LASTEXITCODE -ne 0) { throw '.NET self-contained publish failed' }
 Get-ChildItem -LiteralPath $dist -File | Where-Object { $_.Extension -in @('.pdb', '.xml') } |
     Remove-Item -Force
 
-foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'packages\page-agent')) {
+foreach ($relative in @('apps\windows-shell\ui', 'modules\smoke', 'packages\page-agent', 'runtime\scrcpy')) {
     $source = Join-Path $root $relative
     $destination = Join-Path $dist $relative
     New-Item -ItemType Directory -Path (Split-Path $destination) -Force | Out-Null

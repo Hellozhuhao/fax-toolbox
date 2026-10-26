@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     private string state = "STARTING";
     private string detail = "正在启动…";
     private string root = "";
+    private AndroidMirrorWindow? androidMirrorWindow;
     private readonly string? smokeDataDirectory;
     private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
@@ -860,6 +861,20 @@ public partial class MainWindow : Window
                 await moduleWebViewsReady;
             switch (command)
             {
+                case "android.open":
+                    if (androidMirrorWindow is null)
+                    {
+                        androidMirrorWindow = new AndroidMirrorWindow(root) { Owner = this };
+                        androidMirrorWindow.Closed += (_, _) => androidMirrorWindow = null;
+                        androidMirrorWindow.Show();
+                    }
+                    else
+                    {
+                        if (androidMirrorWindow.WindowState == WindowState.Minimized)
+                            androidMirrorWindow.WindowState = WindowState.Normal;
+                        androidMirrorWindow.Activate();
+                    }
+                    break;
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
                     currentShellView = message.GetProperty("view").GetString() ?? "home";
@@ -1197,6 +1212,7 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        androidMirrorWindow?.Close();
         CancelAgent();
         homeworkClosed = true;
         CancelHomeworkReview();

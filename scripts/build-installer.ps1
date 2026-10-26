@@ -22,7 +22,9 @@ if (-not (Test-Path -LiteralPath $published -PathType Container)) {
 }
 foreach ($relative in @('FaxToolbox.Windows.exe', 'backend\toolbox-backend.exe',
     'apps\windows-shell\ui\index.html', 'modules\chaoxing\page-adapter.js',
-    'packages\page-agent\page-agent.js', 'scripts\read-live-diagnostics.ps1')) {
+    'packages\page-agent\page-agent.js', 'scripts\read-live-diagnostics.ps1',
+    'runtime\scrcpy\scrcpy.exe', 'runtime\scrcpy\adb.exe',
+    'runtime\scrcpy\scrcpy-server', 'runtime\scrcpy\LICENSE-scrcpy.txt')) {
     if (-not (Test-Path -LiteralPath (Join-Path $published $relative) -PathType Leaf)) {
         throw "Published Windows files are incomplete: $relative"
     }

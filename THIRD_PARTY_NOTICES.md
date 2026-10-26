@@ -1,5 +1,15 @@
 # Third-party notices
 
+## scrcpy and its Windows runtime
+
+Source: https://github.com/Genymobile/scrcpy (version 5.0)
+License: Apache License 2.0. The bundled runtime contains LICENSE-scrcpy.txt;
+upstream license files shipped with the official archive are retained.
+Official Windows binaries (including ADB, SDL and FFmpeg dependencies) are
+downloaded from the upstream release and verified against its published SHA-256.
+Source and build instructions: https://github.com/Genymobile/scrcpy/tree/v5.0
+No Android DEX binaries or proprietary source are incorporated.
+
 ## Microsoft Agent Framework
 
 Source: https://github.com/microsoft/agent-framework

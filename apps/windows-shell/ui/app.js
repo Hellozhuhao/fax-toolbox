@@ -917,7 +917,8 @@
     else show(item.dataset.view);
   });
   $('open-tools-card').addEventListener('click', () => show('modules'));
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : openDemo());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'android' ? send('android.open') : item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : openDemo());
+  $('module-android').addEventListener('click', () => send('android.open'));
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
