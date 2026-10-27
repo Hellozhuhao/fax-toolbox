@@ -56,9 +56,9 @@
           <TextBlock Text="设备与投屏工作台" FontSize="10" Foreground="{DynamicResource Skin.muted}" Margin="0,4,0,0"/></StackPanel>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-        <Button Style="{StaticResource Caption}" Content="−" Click="Minimize_Click" ToolTip="最小化"/>
-        <Button Style="{StaticResource Caption}" Content="□" Click="Maximize_Click" ToolTip="最大化或还原"/>
-        <Button Style="{StaticResource Caption}" Content="×" Click="Close_Click" ToolTip="关闭投屏工作台"/>
+        <Button Style="{StaticResource Caption}" Click="Minimize_Click" ToolTip="最小化" AutomationProperties.Name="最小化"><Path Data="M 2,8 L 14,8" Width="16" Height="16" Stroke="{DynamicResource Skin.text}" StrokeThickness="1.7"/></Button>
+        <Button Style="{StaticResource Caption}" Click="Maximize_Click" ToolTip="最大化或还原" AutomationProperties.Name="最大化或还原"><Path Data="M 3,3 L 13,3 L 13,13 L 3,13 Z" Width="16" Height="16" Stroke="{DynamicResource Skin.text}" StrokeThickness="1.7"/></Button>
+        <Button Style="{StaticResource Caption}" Click="Close_Click" ToolTip="关闭投屏工作台" AutomationProperties.Name="关闭投屏工作台"><Path Data="M 3,3 L 13,13 M 13,3 L 3,13" Width="16" Height="16" Stroke="{DynamicResource Skin.text}" StrokeThickness="1.7"/></Button>
       </StackPanel>
     </Grid>
     <Grid Grid.Row="1" Margin="24,0,24,0">
@@ -66,7 +66,7 @@
       <Border Grid.Column="0" Background="{DynamicResource Skin.panel}" CornerRadius="{DynamicResource Skin.radius}" BorderBrush="{DynamicResource Skin.border}" BorderThickness="1">
         <DockPanel Margin="22">
           <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
-            <Button x:Name="start" Content="开始投屏  →" Style="{StaticResource Primary}" IsEnabled="False"/>
+            <Button x:Name="start" Style="{StaticResource Primary}" IsEnabled="False"><StackPanel Orientation="Horizontal"><TextBlock x:Name="startLabel" Text="开始投屏"/><Path Data="M 1,8 L 15,8 M 9,2 L 15,8 L 9,14" Width="16" Height="16" Stroke="{DynamicResource Skin.onAccent}" StrokeThickness="1.7" Margin="10,0,0,0" VerticalAlignment="Center"/></StackPanel></Button>
             <Button x:Name="stop" Content="停止投屏" Margin="0,8,0,0" IsEnabled="False" Visibility="Collapsed"/>
           </StackPanel>
           <ScrollViewer x:Name="connectionScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
@@ -94,7 +94,7 @@
                 </Expander>
               </StackPanel>
               <Grid Margin="0,24,0,8"><TextBlock Text="当前设备" Foreground="{DynamicResource Skin.muted}" FontSize="12" VerticalAlignment="Center"/>
-                <Button x:Name="refresh" Content="↻  刷新" HorizontalAlignment="Right" Background="Transparent" Foreground="{DynamicResource Skin.accent}" Padding="0,3" FontSize="12"/></Grid>
+                <Button x:Name="refresh" HorizontalAlignment="Right" Background="Transparent" Foreground="{DynamicResource Skin.accent}" Padding="8,3" FontSize="12" AutomationProperties.Name="刷新设备列表"><StackPanel Orientation="Horizontal"><Path Data="M 13,5 A 6,6 0 1 0 14,9 M 9,5 L 14,5 L 14,0" Width="16" Height="16" Stroke="{DynamicResource Skin.accent}" StrokeThickness="1.7" VerticalAlignment="Center"/><TextBlock Text="刷新" Margin="5,0,0,0"/></StackPanel></Button></Grid>
               <ComboBox Tag="等待手机连接…" x:Name="devices" MinHeight="54" Padding="8" Background="{DynamicResource Skin.panel}" BorderBrush="{DynamicResource Skin.border}" HorizontalContentAlignment="Stretch">
                 <ComboBox.ItemTemplate><DataTemplate>
                   <StackPanel><TextBlock Text="{Binding Model}" FontWeight="SemiBold" Foreground="{DynamicResource Skin.text}" TextTrimming="CharacterEllipsis"/>

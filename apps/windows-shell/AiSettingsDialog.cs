@@ -38,7 +38,7 @@ internal sealed class AiSettingsDialog : Window
     private readonly TextBlock summary = new();
     private readonly TextBlock keyHint = new();
     private readonly TextBlock privacyHint = new();
-    private readonly TextBlock validation = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(179, 41, 57)) };
+    private readonly TextBlock validation = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
     private readonly Dictionary<string, Button> providerButtons = [];
     private readonly Dictionary<string, Button> categoryButtons = [];
     private readonly UniformGrid providers = new() { Columns = 2, Margin = new Thickness(0, 8, 0, 10) };
@@ -66,6 +66,7 @@ internal sealed class AiSettingsDialog : Window
             .Any(option => option.Id == initialModelId)) selectedPresetModels[selected.Id] = initialModelId;
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
         NativeUi.Inherit(this, owner);
+        validation.SetResourceReference(TextBlock.ForegroundProperty,"Ui.Error");
         background = NativeUi.Brush(owner, "Background"); surface = NativeUi.Brush(owner, "Panel");
         text = NativeUi.Brush(owner, "Text"); subtle = NativeUi.Brush(owner, "Muted");
         border = NativeUi.Brush(owner, "Border"); accent = NativeUi.Brush(owner, "Accent");

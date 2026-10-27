@@ -81,7 +81,7 @@ internal sealed partial class AndroidMirrorWindow : Window
     private void SetProjectionMode(bool app)
     {
         appPanel.Visibility = app ? Visibility.Visible : Visibility.Collapsed;
-        start.Content = app ? "打开应用窗口  →" : "开始投屏  →";
+        startLabel.Text = app ? "打开应用窗口" : "开始投屏";
     }
     private void Minimize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void Maximize_Click(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;

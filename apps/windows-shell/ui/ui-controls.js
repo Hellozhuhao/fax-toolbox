@@ -17,6 +17,7 @@
     "--subtle",
     "--accent",
     "--on-accent",
+    "--error",
     "--skin-radius",
     "--skin-font-family",
   ];

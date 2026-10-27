@@ -31,7 +31,7 @@ internal sealed class VaultEntryDialog : Window
         panel.Children.Add(new TextBlock { Text = "学习通账号", FontWeight = FontWeights.Medium }); panel.Children.Add(username);
         panel.Children.Add(new TextBlock { Text = "密码", FontWeight = FontWeights.Medium }); panel.Children.Add(password);
         AutomationProperties.SetName(username, "学习通账号"); AutomationProperties.SetName(password, "密码");
-        var validation = new TextBlock { Foreground = new SolidColorBrush(Color.FromRgb(179, 41, 57)), TextWrapping = TextWrapping.Wrap, FontSize = 12, MinHeight = 20 };
+        var validation = new TextBlock { Foreground = NativeUi.Brush(this,"Error"), TextWrapping = TextWrapping.Wrap, FontSize = 12, MinHeight = 20 };
         panel.Children.Add(validation);
         var actions = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
         var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 76, HorizontalContentAlignment = HorizontalAlignment.Center };
