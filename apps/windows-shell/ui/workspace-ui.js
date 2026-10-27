@@ -36,6 +36,13 @@
       $("recent-items").append(link);
     }
   }
+  function syncNavigation() {
+    for (const item of document.querySelectorAll(".sidebar .nav-item")) {
+      const active = item.classList.contains("active");
+      if (active) item.setAttribute("aria-current", "page");
+      else item.removeAttribute("aria-current");
+    }
+  }
   addEventListener("fax:view-changed", (event) => {
     const view = event.detail.view;
     if (view in names) {
@@ -45,12 +52,9 @@
       } catch (_) {}
       renderRecent();
     }
-    for (const item of document.querySelectorAll(".sidebar .nav-item")) {
-      const active = item.classList.contains("active");
-      if (active) item.setAttribute("aria-current", "page");
-      else item.removeAttribute("aria-current");
-    }
+    syncNavigation();
   });
+  syncNavigation();
   renderRecent();
   $("home-prompt-form").addEventListener("submit", async (event) => {
     event.preventDefault();

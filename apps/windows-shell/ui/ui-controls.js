@@ -2,6 +2,8 @@
 (() => {
   "use strict";
   const descriptors = new Map();
+  const pendingSelects = new Set(), pendingIconRoots = new Set();
+  let disconnectedControls = false;
   let active,
     floating,
     sequence = 0,
@@ -65,15 +67,15 @@
       maxHeight: Math.max(80, height) + "px",
     });
   }
-  function highlight(entry, index) {
-    const enabled = entry.items.filter((item) => !item.disabled);
+  function highlight(entry, index, scroll = true) {
     const chosen = entry.items[index];
-    if (!chosen || chosen.disabled || !enabled.length) return;
+    if (!chosen || chosen.disabled) return;
+    if (entry.index === index && entry.combo.getAttribute("aria-activedescendant") === chosen.node.id) return;
+    entry.items[entry.index]?.node.classList.remove("highlighted");
     entry.index = index;
-    for (let i = 0; i < entry.items.length; i++)
-      entry.items[i].node.classList.toggle("highlighted", i === index);
+    chosen.node.classList.add("highlighted");
     entry.combo.setAttribute("aria-activedescendant", chosen.node.id);
-    chosen.node.scrollIntoView({ block: "nearest" });
+    if (scroll) chosen.node.scrollIntoView({ block: "nearest" });
   }
   function choose(entry, index) {
     const item = entry.items[index];
@@ -126,7 +128,7 @@
       node.append(label);
       node.insertAdjacentHTML("beforeend", icon("check"));
       node.addEventListener("pointerdown", (event) => event.preventDefault());
-      node.addEventListener("pointermove", () => highlight(entry, index));
+      node.addEventListener("pointermove", () => highlight(entry, index, false));
       node.addEventListener("click", () => choose(entry, index));
       entry.items.push({ node, value: option.value, disabled });
       popup.append(node);
@@ -281,11 +283,35 @@
     select.addEventListener("change", () => refresh(entry));
     refresh(entry);
   }
-  function refreshAll() {
+  function refreshAll(scope = document) {
+    const selects = scope.matches?.("select") ? [scope] : scope.querySelectorAll("select");
+    for (const select of selects) {
+      enhance(select);
+      const entry = descriptors.get(select);
+      if (entry) refresh(entry);
+    }
+    for (const entry of descriptors.values())
+      if (!entry.select.isConnected) refresh(entry);
+    window.FaxIcons.hydrate(scope);
+    if (active && !active.combo.checkVisibility()) closeSelect();
+  }
+  function flushControlUpdates() {
     scheduled = 0;
-    for (const select of document.querySelectorAll("select")) enhance(select);
-    for (const entry of descriptors.values()) refresh(entry);
-    window.FaxIcons.hydrate();
+    const selects = [...pendingSelects], roots = [...pendingIconRoots];
+    pendingSelects.clear(); pendingIconRoots.clear();
+    for (const select of selects) {
+      if (!select.isConnected) continue;
+      enhance(select);
+      const entry = descriptors.get(select);
+      if (entry) refresh(entry);
+    }
+    for (const root of roots)
+      if (root.isConnected) window.FaxIcons.hydrate(root);
+    if (disconnectedControls) {
+      disconnectedControls = false;
+      for (const entry of descriptors.values())
+        if (!entry.select.isConnected) refresh(entry);
+    }
     if (active && !active.combo.checkVisibility()) closeSelect();
   }
 
@@ -439,17 +465,34 @@
     return { open, close, isOpen: () => dialog.open };
   }
   const observer = new MutationObserver((records) => {
-    if (
-      !records.some(
-        (record) =>
-          record.type === "childList" ||
-          ["disabled", "hidden", "aria-label", "label", "selected"].includes(
-            record.attributeName,
-          ),
-      )
-    )
-      return;
-    if (!scheduled) scheduled = requestAnimationFrame(refreshAll);
+    // Streaming text, logs and button labels must not rescan every form in the
+    // application. Only enhance added controls and refresh affected selects.
+    for (const record of records) {
+      const target = record.target;
+      const select = target.closest?.("select");
+      if (select) pendingSelects.add(select);
+      if (record.type === "attributes") {
+        if (record.attributeName === "hidden" && target.hidden && active && target.contains(active.combo))
+          closeSelect();
+        if (target.matches("fieldset") && record.attributeName === "disabled")
+          target.querySelectorAll("select").forEach(node => pendingSelects.add(node));
+        continue;
+      }
+      const label = target.closest?.("label");
+      if (label) label.querySelectorAll("select").forEach(node => pendingSelects.add(node));
+      for (const node of record.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches("select")) pendingSelects.add(node);
+        node.querySelectorAll("select").forEach(item => pendingSelects.add(item));
+        if (node.matches("[data-icon]") && node.parentElement) pendingIconRoots.add(node.parentElement);
+        else if (node.querySelector("[data-icon]")) pendingIconRoots.add(node);
+      }
+      if ([...record.removedNodes].some(node => node instanceof Element &&
+          (node.matches("select,.ui-select-field") || node.querySelector("select"))))
+        disconnectedControls = true;
+    }
+    if ((pendingSelects.size || pendingIconRoots.size || disconnectedControls) && !scheduled)
+      scheduled = requestAnimationFrame(flushControlUpdates);
   });
   observer.observe(document.body, {
     childList: true,
@@ -582,7 +625,7 @@
 
   // Tabs use one focus model even when their panels belong to different modules.
   document.addEventListener("keydown", (event) => {
-    const tab = event.target.closest('[role="tab"]'),
+    const tab = event.target.closest?.('[role="tab"]'),
       list = tab?.closest('[role="tablist"]');
     if (
       !list ||

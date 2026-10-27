@@ -50,25 +50,31 @@
                 <Button Width="48" Height="44" Content="×" FontSize="20" ToolTip="关闭工具箱" Style="{StaticResource TitleCloseStyle}" Click="TitleClose_Click"/>
             </StackPanel>
         </Grid>
-        <DockPanel x:Name="BrowserToolbar" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"
-                   Background="{DynamicResource Ui.Background}" LastChildFill="True">
-            <Button x:Name="ToggleControlsButton" DockPanel.Dock="Right" Width="35" Height="35" Margin="4,3,9,3" Padding="0"
-                    Style="{StaticResource TaskTabButtonStyle}" Click="ToggleControls_Click" Content="⇤" ToolTip="收起控制面板" />
-            <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,3,0,3">
-                <Button x:Name="BrowserBackButton" Width="35" Height="35" Margin="0,0,7,0" Padding="0"
+        <Grid x:Name="BrowserToolbar" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"
+              Background="{DynamicResource Ui.Background}">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,4,0,4">
+                <Button x:Name="BrowserBackButton" Width="40" Height="40" Margin="0,0,6,0" Padding="0"
                         Style="{StaticResource TaskTabButtonStyle}" Click="BrowserBack_Click"
-                        ToolTip="返回当前网页上一步；按住 Shift 点击返回工具箱上一页" Content="←" IsEnabled="False" />
-                <Button x:Name="BrowserReloadButton" Width="35" Height="35" Margin="0,0,7,0" Padding="0"
+                        AutomationProperties.Name="返回上一页" ToolTip="返回上一页，优先返回当前网页；Shift+点击返回工具箱上一页" Content="←" IsEnabled="False" />
+                <Button x:Name="BrowserReloadButton" Width="40" Height="40" Margin="0,0,8,0" Padding="0"
                         Style="{StaticResource TaskTabButtonStyle}" Click="BrowserReload_Click"
-                        ToolTip="刷新当前页面" Content="↻" />
-                <StackPanel x:Name="TaskTabsPanel" Orientation="Horizontal" />
-                <Button x:Name="NewTaskTabButton" Width="35" Height="35" Padding="0" Style="{StaticResource TaskTabButtonStyle}"
-                        Click="NewTaskTab_Click" ToolTip="新建首页标签" Content="＋" />
+                        AutomationProperties.Name="刷新当前页面" ToolTip="刷新当前页面" Content="↻" />
             </StackPanel>
-            <TextBlock x:Name="ToolbarTitle" Margin="14,0" VerticalAlignment="Center" Foreground="{DynamicResource Ui.Muted}"
-                       Text="?" FontWeight="SemiBold" FontSize="14" Cursor="Help"
+            <ScrollViewer x:Name="TaskTabsScroller" Grid.Column="1" VerticalAlignment="Center" HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Disabled" CanContentScroll="False" PanningMode="HorizontalOnly"
+                          PreviewMouseWheel="TaskTabs_MouseWheel" AutomationProperties.Name="工作标签">
+                <StackPanel x:Name="TaskTabsPanel" Orientation="Horizontal" KeyboardNavigation.TabNavigation="Continue"/>
+            </ScrollViewer>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="4,4,8,4">
+                <Button x:Name="NewTaskTabButton" Width="40" Height="40" Padding="0" Style="{StaticResource TaskTabButtonStyle}"
+                        Click="NewTaskTab_Click" AutomationProperties.Name="新建首页标签" ToolTip="新建首页标签" Content="＋" />
+                <Button x:Name="ToggleControlsButton" Width="40" Height="40" Margin="6,0,0,0" Padding="0"
+                        Style="{StaticResource TaskTabButtonStyle}" Click="ToggleControls_Click" Content="⇤" AutomationProperties.Name="切换控制面板" ToolTip="收起控制面板" />
+            </StackPanel>
+            <TextBlock x:Name="ToolbarTitle" Visibility="Collapsed" Foreground="{DynamicResource Ui.Muted}"
                        ToolTip="关闭标签将结束该标签的任务" />
-        </DockPanel>
+        </Grid>
         <wv2:WebView2 x:Name="ShellView" Grid.Row="2" Grid.Column="0" Visibility="Collapsed" />
         <GridSplitter x:Name="WorkspaceSplitter" Grid.Row="2" Grid.Column="1" Width="6" Cursor="SizeWE"
                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#DEDAD5"

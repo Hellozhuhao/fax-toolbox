@@ -10,6 +10,8 @@ namespace FaxToolbox.Windows;
 public partial class MainWindow
 {
     private JsonObject? skinState;
+    private JsonObject? appliedNativeSkinState;
+    private string? appliedNativeSkinScope;
     private SkinStore CreateSkinStore() => new(Path.Combine(root, "apps", "windows-shell", "ui", "skins", "builtin.json"),
         Path.Combine(smokeDataDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox"), "skins.json"));
 
@@ -45,8 +47,12 @@ public partial class MainWindow
 
     private void ApplyNativeSkin()
     {
-        if (skinState is null) return;
+        if (skinState is null) { UpdateTaskTabs(); return; }
         var scope = currentShellView is "home" or "modules" or "workspace" or "activity" or "settings" or "vault" ? "shell" : currentShellView;
+        // Keep task captions/history current without repeating palette changes
+        // and demo script injection when a route retains its current skin.
+        if (ReferenceEquals(appliedNativeSkinState, skinState) && appliedNativeSkinScope == scope)
+        { UpdateTaskTabs(); return; }
         var skin = SkinStore.Resolve(skinState, scope);
         var tokens = skin["tokens"]!;
         SolidColorBrush Brush(string name) => new((Color)ColorConverter.ConvertFromString(tokens[name]!.GetValue<string>()));
@@ -62,6 +68,8 @@ public partial class MainWindow
         UpdateTaskTabs();
         ApplyDemoSkin();
         if (androidMirrorWindow is not null) ApplyAndroidSkin();
+        appliedNativeSkinState = skinState;
+        appliedNativeSkinScope = scope;
     }
 
     private void ApplyDemoSkin()

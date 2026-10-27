@@ -922,3 +922,187 @@ test(
     }
   },
 );
+
+test('streaming and slider gestures retain controls without redundant navigation work', {timeout: 60000}, async () => {
+  const f = await fixture(), {page} = f;
+  try {
+    await page.locator('.sidebar [data-view="ai"]').click();
+    await emit(page, {kind: 'agent.options', extra: {provider: 'ollama', model: 'model-0'}});
+    await emit(page, {kind: 'agent.models', extra: {models: Array.from({length: 100}, (_, i) => ({name: 'model-' + i, size: 1024 ** 3}))}});
+    await page.locator('#agent-run-toggle').click();
+    const before = (await command(page, 'agent.options')).length;
+    const result = await page.evaluate(async () => {
+      const list = document.getElementById('agent-model-list'), first = list.firstElementChild;
+      const options = document.getElementById('agent-effort');
+      const start = performance.now();
+      for (let i = 0; i < 120; i++) {
+        options.value = String(i % 3);
+        options.dispatchEvent(new Event('input', {bubbles: true}));
+      }
+      const elapsed = performance.now() - start;
+      return {retained: first === list.firstElementChild, value: options.getAttribute('aria-valuetext'), elapsed};
+    });
+    assert.equal(result.retained, true, 'Dragging effort must not replace the model list or lose scroll/focus');
+    assert.equal(result.value, '深入');
+    assert.equal((await command(page, 'agent.options')).length, before, 'Dragging previews locally until release');
+    await page.locator('#agent-effort').dispatchEvent('change');
+    assert.equal((await command(page, 'agent.options')).at(-1).effort, 'deep');
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const streaming = await page.evaluate(async () => {
+      let changes = 0;
+      const observer = new MutationObserver(records => changes += records.length);
+      document.querySelectorAll('.ui-select').forEach(node => observer.observe(node, {subtree: true, childList: true, characterData: true}));
+      const start = performance.now();
+      for (let i = 1; i <= 12; i++) {
+        window.emitUi({kind: 'agent.stream', detail: '正在整理工具箱设置。'.repeat(i)});
+        await new Promise(requestAnimationFrame);
+      }
+      await new Promise(requestAnimationFrame);
+      observer.disconnect();
+      return {changes, elapsed: performance.now() - start};
+    });
+    assert.equal(streaming.changes, 0, 'Streaming a reply must not rebuild unrelated dropdowns');
+    const layouts = (await command(page, 'ui.layout')).length;
+    for (let i = 0; i < 5; i++) await page.locator('.sidebar [data-view="ai"]').click();
+    assert.equal((await command(page, 'ui.layout')).length, layouts, 'Reselecting the current destination must not rebuild host layout');
+    await page.locator('.sidebar [data-view="modules"]').click();
+    await page.locator('.sidebar [data-view="settings"]').click();
+    await page.locator('#shell-back').click();
+    assert.equal(await page.locator('body').getAttribute('data-view'), 'modules');
+    console.log('UI responsiveness sample:', JSON.stringify({sliderInputs: 120, sliderMs: result.elapsed, streamFrames: 12, streamMs: streaming.elapsed, unrelatedControlMutations: streaming.changes}));
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
+
+test('toolbox visual inventory reaches every owned web page and panel', {timeout: 120000}, async () => {
+  const f = await fixture(), {page} = f;
+  const manifest = [];
+  const output = path.join(root, '.cache/ui-audit/after');
+  if (process.env.FAX_UI_SCREENSHOTS) fs.mkdirSync(output, {recursive: true});
+  async function review(name) {
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, name + ' has horizontal overflow');
+    const file = name + '.png';
+    const overlay = await page.evaluate(() => !!document.querySelector('dialog[open],:popover-open') ||
+      ['agent-run-panel', 'toolbox-context-menu'].some(id => !document.getElementById(id).hidden) ||
+      document.querySelector('.agent-add-menu')?.classList.contains('open'));
+    if (!overlay) await page.evaluate(() => scrollTo(0, 0));
+    if (process.env.FAX_UI_SCREENSHOTS) await page.screenshot({path: path.join(output, file), fullPage: !overlay, animations: 'disabled'});
+    manifest.push({name, file, view: await page.locator('body').getAttribute('data-view')});
+  }
+  async function open(view) {
+    if (view === 'vault') {
+      await open('settings');
+      await page.locator('[data-settings-panel="data"]').click();
+      await page.locator('#settings-vault').click();
+    } else {
+      await page.evaluate(view => FaxToolboxUi.skinActions[
+        ['home', 'modules', 'activity', 'settings'].includes(view) ? 'navigation.' + view : 'module.' + view + '.open'
+      ].run({}), view);
+    }
+  }
+  try {
+    await emit(page, {kind: 'agent.sessions', extra: {activeId: 'review', sessions: [{id: 'review', title: '工具箱界面检查', section: '工作'}]}});
+    await emit(page, {kind: 'agent.usage', extra: {inputTokens: 1200, outputTokens: 380, totalTokens: 1580}});
+    for (const skin of ['fax.classic', 'fax.midnight', 'fax.ocean']) {
+      await theme(page, skin);
+      for (const view of ['home', 'modules', 'ai', 'course', 'homework', 'proxy', 'activity', 'settings', 'vault']) {
+        await open(view);
+        await review(skin + '-' + view);
+      }
+    }
+    await theme(page, 'fax.classic');
+    await open('ai');
+    for (const key of ['sessions', 'model', 'prompts', 'memory', 'modules', 'usage', 'tools', 'responses']) {
+      await page.locator('[data-agent-section="' + key + '"]').click();
+      await review('agent-panel-' + key);
+    }
+    for (const view of ['course', 'homework']) {
+      await open(view);
+      const keys = await page.locator('#view-' + view + ' [data-focus-key]').evaluateAll(nodes => nodes.map(node => node.dataset.focusKey));
+      for (const key of keys) {
+        await page.locator('#view-' + view + ' [data-focus-key="' + key + '"]').click();
+        await review(view + '-panel-' + key);
+      }
+    }
+    await open('settings');
+    for (const key of ['appearance', 'services', 'network', 'data', 'developer']) {
+      await page.locator('[data-settings-panel="' + key + '"]').click();
+      await review('settings-panel-' + key);
+    }
+    await page.locator('#developer-mode').check();
+    await open('demo'); await review('demo-idle');
+    await open('vault');
+    await emit(page, {kind: 'vault.list', entries: [{id: 'review-account', kind: 'account', username: '演示账号'}, {id: 'review-session', kind: 'session', username: '学习通 · 演示登录状态'}]});
+    await review('vault-populated');
+    await page.locator('#vault-list button').click();
+    await review('vault-delete-confirmation');
+    await page.locator('#toolbox-confirm-cancel').click();
+    assert.equal((await command(page, 'vault.delete')).length, 0);
+    await open('proxy');
+    await page.locator('#view-proxy .network-advanced').evaluate(node => node.open = true);
+    await review('network-advanced');
+    await skins(page); await review('skins-classic');
+    await page.locator('#skin-reset').click();
+    await review('skins-reset-confirmation');
+    await page.locator('#toolbox-confirm-cancel').click();
+    await open('ai');
+    await emit(page, {kind: 'agent.approval', detail: '确认修改项目文件', extra: {id: 'visual-only', preview: '将在演示项目中更新 README.md。'}});
+    await review('agent-pending-approval');
+    await page.locator('#agent-run-toggle').click(); await review('agent-model-popover');
+    await page.keyboard.press('Escape');
+    await page.locator('.agent-plus').click(); await review('agent-add-menu');
+    await page.keyboard.press('Escape');
+    await page.locator('.agent-plus').click();
+    await page.getByRole('menuitem', {name: '绘图 手绘后作为图片发送'}).click();
+    await review('agent-sketch');
+    const canvas = await page.locator('.agent-sketch canvas').boundingBox();
+    await page.mouse.move(canvas.x + 30, canvas.y + 30); await page.mouse.down();
+    await page.mouse.move(canvas.x + 150, canvas.y + 90, {steps: 5}); await page.mouse.up();
+    await page.locator('.agent-sketch').getByRole('button', {name: '加入对话'}).click();
+    assert.equal(await page.locator('#agent-attachments').isVisible(), true);
+    await review('agent-image-attachment');
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({width, height: 600});
+      const send = await page.locator('#agent-send').boundingBox();
+      assert.ok(send.y >= 0 && send.y + send.height <= 601, 'Image attachment must not push Send below the workspace at ' + width + 'px');
+      await review('agent-image-attachment-' + width);
+    }
+    await page.setViewportSize({width: 1280, height: 900});
+    await open('proxy');
+    await emit(page, {kind: 'proxy.status', data: {ok: true, config: {coreType: 'xray', proxyUrl: 'http://127.0.0.1:10809'},
+      status: {running: false, coreRunning: false, portReady: true, logs: []}}});
+    await page.locator('#proxy-on').click(); await review('network-start-confirmation');
+    await page.locator('#proxy-confirm-cancel').click();
+    assert.equal((await command(page, 'proxy.on')).length, 0);
+    await page.setViewportSize({width: 390, height: 600});
+    for (const view of ['home', 'modules', 'ai', 'course', 'homework', 'proxy', 'settings', 'activity', 'vault']) {
+      await open(view); await review('narrow-' + view);
+    }
+    assert.equal((await command(page, 'agent.approve')).length, 0);
+    assert.deepEqual(f.errors, []);
+    if (process.env.FAX_UI_SCREENSHOTS) fs.writeFileSync(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  } finally { await f.close(); }
+});
+
+test('Windows Agent smoke browser contract uses the current toolbox navigation and menus', {timeout: 60000}, async () => {
+  const f = await fixture(), {page} = f;
+  try {
+    await page.setViewportSize({width: 1280, height: 708});
+    await page.locator('.sidebar [data-view="ai"]').click();
+    await emit(page, {kind: 'agent.sessions', extra: {activeId: 'smoke', sessions: [{id: 'smoke', title: '本机回归检查'}]}});
+    // Execute the same browser half of --agent-smoke on Linux too, so changes to
+    // shared navigation cannot leave the Windows runner using obsolete selectors.
+    const source = fs.readFileSync(path.join(root, 'apps/windows-shell/MainWindow.xaml.cs'), 'utf8');
+    const marker = 'var conversationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""';
+    const offset = source.indexOf(marker);
+    assert.ok(offset >= 0, 'Windows Agent smoke browser contract is present');
+    const start = offset + marker.length, end = source.indexOf('""");', start);
+    assert.ok(end > start);
+    const result = await page.evaluate(source.slice(start, end));
+    assert.equal(result, true, 'Windows Agent smoke failed: ' + JSON.stringify(await page.evaluate(() => window.__agentLayoutFailure)));
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});

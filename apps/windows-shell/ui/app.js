@@ -19,6 +19,7 @@
   const viewHistory = [];
   const viewScrollPositions = new Map();
   let currentView = '';
+  let lastLayout = '';
   let restoringAgentSnapshot = false;
   let agentMode = 'chat', agentEffort = 'normal', agentProvider = '', agentModel = '';
   let agentDrawer, agentRunPopover;
@@ -153,6 +154,8 @@
     composerActions.classList.add('agent-composer-actions');
     const runSettings = document.createElement('div'); runSettings.className = 'agent-run-settings';
     runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes" role="radiogroup" aria-label="Agent 模式"><label><input type="radio" name="agent-mode" value="chat" checked><span>Chat</span></label><label><input type="radio" name="agent-mode" value="code"><span>Code</span></label></div><div class="agent-run-label">模型</div><div id="agent-model-list" class="agent-model-list" aria-label="模型选择"></div><label for="agent-effort">思考深度 <strong id="agent-effort-label">标准</strong></label><div class="agent-effort-slider"><input id="agent-effort" type="range" min="0" max="2" step="1" value="1" aria-label="思考深度"></div><span id="agent-model-error" class="muted"></span></div>';
+    runSettings.querySelector('#agent-effort').style.setProperty('--range-progress', '50%');
+    runSettings.querySelector('#agent-effort').setAttribute('aria-valuetext', '标准');
     composerActions.insertBefore(runSettings, $('agent-send'));
     const selectAgentCategory = key => {
       selectAgentPanel(key);
@@ -208,10 +211,11 @@
     element.classList.add('motion-new');
     element.addEventListener('animationend', () => element.classList.remove('motion-new'), {once: true});
   }
-  function show(view, record = true) {
+  function show(view, record = true, forceLayout = false) {
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
     const previousView = currentView;
     currentView = view;
+    if (['course', 'homework', 'demo', 'ai', 'proxy'].includes(view)) activeModule = view;
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
@@ -237,12 +241,14 @@
     $('shell-back').hidden = viewHistory.length === 0;
     window.FaxUi?.closeOverlays();
     document.body.dataset.view = view;
-    window.dispatchEvent(new CustomEvent('fax:view-changed', {detail: {view}}));
-    send('ui.layout', {mode: view === 'homework' ?
+    if (previousView !== view) window.dispatchEvent(new CustomEvent('fax:view-changed', {detail: {view}}));
+    const layout = {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
-      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
+      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0};
+    const signature = JSON.stringify(layout);
+    if (forceLayout || signature !== lastLayout) { lastLayout = signature; send('ui.layout', layout); }
     if (view === 'vault') send('vault.list');
-    if (view === 'activity') renderActivity();
+    if (view === 'activity' && previousView !== view) renderActivity();
   }
   function showWorkspace() {
     if (activeModule === 'course') openCourse();
@@ -304,24 +310,28 @@
     list.replaceChildren(fragment);
   }
   function openCourse() {
+    const changed = currentView !== 'course';
     activeModule = 'course'; $('workspace-module').textContent = '学习通刷课';
     $('workspace-detail').textContent = '点击左侧工作台可随时回到课程控制页。';
     show('course');
-    send('course.activate');
+    if (changed) send('course.activate');
   }
   function openHomework() {
+    const changed = currentView !== 'homework';
     activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
     $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
-    show('homework'); send('homework.activate');
+    show('homework'); if (changed) send('homework.activate');
   }
   function openAi() {
+    const changed = currentView !== 'ai';
     activeModule = 'ai'; $('workspace-module').textContent = 'Agent';
     $('workspace-detail').textContent = '处理项目任务，并管理各模块的模型连接。';
-    show('ai'); send('ai.activate'); send('ai.get-config');
+    show('ai'); if (changed) { send('ai.activate'); send('ai.get-config'); }
   }
   function openProxy() {
+    const changed = currentView !== 'proxy';
     activeModule = 'proxy'; $('workspace-module').textContent = '网络管家';
-    show('proxy'); send('proxy.activate'); send('proxy.get');
+    show('proxy'); if (changed) { send('proxy.activate'); send('proxy.get'); }
   }
   function goBack() {
     if (!viewHistory.length) return false;
@@ -340,10 +350,11 @@
     $('homework-open').textContent = browsing ? '正在浏览学习通' : '浏览学习通作业';
   }
   function openDemo() {
+    const changed = currentView !== 'demo';
     activeModule = 'demo'; $('workspace-module').textContent = '页面事件演示';
     $('workspace-detail').textContent = '点击左侧工作台可随时回到演示控制页。';
     show('demo');
-    send('demo.activate');
+    if (changed) send('demo.activate');
   }
   function setTheme(theme, notifyHost = true) {
     const value = theme === 'light' ? 'light' : 'dark';
@@ -375,8 +386,10 @@
     const field = $('answers-chapter');
     if (!field.value.trim() || field.value === suggestedChapterId) field.value = currentChapterId;
     suggestedChapterId = currentChapterId;
-    if (currentChapterId && catalogEntries.some(entry => entry.id === currentChapterId))
+    if (currentChapterId && catalogEntries.some(entry => entry.id === currentChapterId)) {
       $('course-chapters').value = currentChapterId;
+      window.FaxUi?.refresh($('course-chapters'));
+    }
   }
   function renderCatalog(message) {
     catalogEntries = Array.isArray(message.entries) ? message.entries : [];
@@ -463,6 +476,7 @@
     $('ai-test').disabled = message.state === 'testing';
   }
   let agentInstalledModels = [];
+  let agentModelListSignature = '';
   function agentModelNames(name) {
     if (name === 'fax-toolbox-qwen3:8k') return ['Qwen3 8B · 长上下文', '本地模型 · 8K 上下文'];
     if (name === 'qwen3:8b') return ['Qwen3 8B', '本地模型'];
@@ -474,6 +488,9 @@
     return [title || '未配置模型', name];
   }
   function renderAgentModelList() {
+    const signature = JSON.stringify([agentProvider, agentModel, agentInstalledModels]);
+    if (signature === agentModelListSignature) return;
+    agentModelListSignature = signature;
     const list = $('agent-model-list');
     list.replaceChildren();
     const heading = label => {
@@ -520,19 +537,20 @@
     configure.className = 'agent-model-configure'; configure.textContent = '管理模型连接';
     list.append(configure);
   }
-  function updateAgentRunOptions() {
+  function updateAgentRunOptions(renderModels = true) {
     const effortNames = {quick: '快速', normal: '标准', deep: '深入'};
     const shortModel = agentModel ? agentModelNames(agentModel)[0] : '选择模型';
     $('agent-run-toggle').textContent = `${agentMode === 'code' ? 'Code' : 'Chat'} · ${shortModel} · ${effortNames[agentEffort] || '标准'}`;
     $('agent-effort').value = String({quick: 0, normal: 1, deep: 2}[agentEffort] ?? 1);
     $('agent-effort-label').textContent = effortNames[agentEffort] || '标准';
     $('agent-effort').setAttribute('aria-valuetext', effortNames[agentEffort] || '标准');
+    $('agent-effort').style.setProperty('--range-progress', `${Number($('agent-effort').value) * 50}%`);
     for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.checked = radio.value === agentMode;
     $('agent-prompt-scope').textContent = `${agentModel || '当前模型'} · ${agentMode === 'code' ? 'Code' : 'Chat'}`;
     $('agent-prompt').placeholder = agentMode === 'code' ? '描述要处理的任务…' : '输入消息…';
     const empty = $('agent-timeline').querySelector('.agent-empty strong');
     if (empty) empty.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话';
-    renderAgentModelList();
+    if (renderModels) renderAgentModelList();
   }
   let agentBusy = false;
   let agentApprovalId = '';
@@ -631,6 +649,7 @@
       if (index >= animateFrom) animateNew(item);
       const preview = document.createElement('img'); preview.src = dataUrl; preview.alt = '待发送图片 ' + (index + 1);
       const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除图片';
+      remove.setAttribute('aria-label', '移除图片 ' + (index + 1));
       remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
       item.append(preview, remove); tray.append(item);
     });
@@ -639,6 +658,7 @@
       const icon = document.createElement('span'); icon.textContent = file.name.includes('/') ? '▧' : '▤';
       const name = document.createElement('span'); name.textContent = file.name;
       const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除附件';
+      remove.setAttribute('aria-label', '移除附件 ' + file.name);
       remove.addEventListener('click', () => { agentFiles.splice(index, 1); renderAgentImages(); });
       item.append(icon, name, remove); tray.append(item);
     });
@@ -765,9 +785,9 @@
     canvas.addEventListener('pointermove', event => { if (!drawing) return; const [x, y] = point(event); context.lineTo(x, y); context.stroke(); });
     canvas.addEventListener('pointerup', () => { drawing = false; });
     const actions = document.createElement('div');
-    const clear = document.createElement('button'); clear.type = 'button'; clear.textContent = '清空';
+    const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'secondary'; clear.textContent = '清空';
     clear.addEventListener('click', () => { context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); });
-    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '取消'; cancel.addEventListener('click', () => dialog.close());
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'secondary'; cancel.textContent = '取消'; cancel.addEventListener('click', () => dialog.close());
     const attach = document.createElement('button'); attach.type = 'button'; attach.textContent = '加入对话';
     attach.addEventListener('click', () => { if (agentImages.length >= 4) { $('agent-state').textContent = '最多添加 4 张图片'; return; } agentImages.push(canvas.toDataURL('image/jpeg', .85)); renderAgentImages(); dialog.close(); });
     actions.append(clear, cancel, attach); dialog.append(title, canvas, actions); document.body.append(dialog);
@@ -833,7 +853,7 @@
     pendingAgentStream = null;
     if (detail === null) return;
     const timeline = $('agent-timeline');
-    const follow = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    const follow = currentView === 'ai' && timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
     let draft = timeline.querySelector('.agent-stream');
     if (!detail) { draft?.remove(); return; }
     timeline.querySelector('.agent-empty')?.remove();
@@ -844,14 +864,23 @@
       const body = document.createElement('p'); draft.append(label, body); timeline.append(draft);
     }
     const body = draft.querySelector('p');
-    if (body.textContent !== detail) body.textContent = detail;
+    const previous = draft._streamText || '';
+    if (previous !== detail) {
+      // Most provider updates extend the same text. Keep its text node instead
+      // of replacing a growing reply and notifying every DOM observer per paint.
+      if (body.firstChild?.nodeType === Node.TEXT_NODE && detail.startsWith(previous))
+        body.firstChild.appendData(detail.slice(previous.length));
+      else body.textContent = detail;
+      draft._streamText = detail;
+    }
     if (follow) timeline.scrollTop = timeline.scrollHeight;
   }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
     // New tools/status messages must not pull someone away from earlier text.
     // Snapshot replay scrolls once, after all entries have been restored.
-    const follow = type === 'user' || timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    const follow = !restoringAgentSnapshot && currentView === 'ai' &&
+      (type === 'user' || timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80);
     const followLatest = () => { if (!restoringAgentSnapshot && follow) timeline.scrollTop = timeline.scrollHeight; };
     if (type === 'assistant' || type === 'error' || type === 'step') {
       clearPendingAgentStream();
@@ -1004,6 +1033,10 @@
       $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
       $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
       $('agent-form').setAttribute('aria-busy',String(agentBusy));
+      $('agent-run-toggle').disabled = agentBusy;
+      $('agent-effort').disabled = agentBusy;
+      for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.disabled = agentBusy;
+      if (agentBusy) agentRunPopover?.close();
       $('agent-continue').disabled = agentBusy;
       if (!agentBusy) $('agent-token-rate').hidden = true;
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
@@ -1164,7 +1197,7 @@
     }),
     applyThemeFromHost: theme => window.FaxToolboxSkins ? window.FaxToolboxSkins.applyThemeFromHost(theme) : setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
-    refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
+    refresh: () => { show(currentView || 'home', false, true); send('ai.get-config'); }});
   const contextMenu = $('toolbox-context-menu');
   const contextSubmenu = $('toolbox-context-submenu');
   let contextTarget = null;
@@ -1413,10 +1446,10 @@
   }});
   for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.addEventListener('change', () => {
     if (!radio.checked || agentBusy) return;
-    agentMode = radio.value; updateAgentRunOptions(); send('agent.options', {mode: agentMode, effort: agentEffort});
+    agentMode = radio.value; updateAgentRunOptions(false); send('agent.options', {mode: agentMode, effort: agentEffort});
   });
   $('agent-effort').addEventListener('input', event => {
-    agentEffort = ['quick', 'normal', 'deep'][Number(event.target.value)] || 'normal'; updateAgentRunOptions();
+    agentEffort = ['quick', 'normal', 'deep'][Number(event.target.value)] || 'normal'; updateAgentRunOptions(false);
   });
   $('agent-effort').addEventListener('change', () => {
     if (!agentBusy) send('agent.options', {mode: agentMode, effort: agentEffort});

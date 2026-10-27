@@ -168,6 +168,7 @@
       button.title = connection.xrayConfig; button.classList.toggle('selected', connection.xrayConfig === $('proxy-core-config').value);
       button.addEventListener('click', () => {
         $('proxy-core-type').value = connection.coreType; $('proxy-core').value = connection.xrayPath || ''; $('proxy-core-config').value = connection.xrayConfig || ''; $('proxy-url').value = connection.proxyUrl;
+        window.FaxUi?.refresh($('proxy-core-type'));
         markDirty();
       }); holder.append(button);
     }
@@ -197,6 +198,7 @@
     $('proxy-core-config').value = value.xrayConfig || '';
     for (const [id, key] of [['proxy-work','workProcesses'], ['proxy-games','gameProcesses'], ['proxy-game-paths','gamePathHints'], ['proxy-excludes','gamePathExcludes']]) $(id).value = (value[key] || []).join('\n');
     $('proxy-priority').value = value.priority || 'game'; $('proxy-idle').value = value.idleBehavior || 'keep';
+    for (const id of ['proxy-core-type', 'proxy-priority', 'proxy-idle']) window.FaxUi?.refresh($(id));
     $('proxy-poll').value = value.pollSeconds || 3; $('proxy-stable').value = value.stableSeconds ?? 6;
     $('proxy-system-check').checked = value.setSystemProxy !== false;
     $('proxy-env-check').checked = value.setEnvironmentProxy !== false;

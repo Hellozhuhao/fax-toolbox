@@ -54,7 +54,9 @@ internal static class NativeUi
     {
         var key = "Ui." + role;
         if (window.Resources.Contains(key) && window.Resources[key] is SolidColorBrush existing && !existing.IsFrozen)
-            existing.Color = value;
+        {
+            if (existing.Color != value) existing.Color = value;
+        }
         else window.Resources[key] = new SolidColorBrush(value);
     }
 

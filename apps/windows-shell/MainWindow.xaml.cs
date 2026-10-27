@@ -197,7 +197,7 @@ public partial class MainWindow : Window
             ConfigureShellView();
             Trace("UI WebView ready");
             Publish("READY", "后端已连接。点击“开始演示”创建会话。");
-            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" ?
+            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" or "proxy" ?
                 UiUrl + "?module=" + initialModule : UiUrl);
             Trace("UI navigation started");
             if (initialModule is "course" or "homework" or "demo") await EnsureModuleWebViewsAsync();
@@ -355,12 +355,14 @@ public partial class MainWindow : Window
                 await VerifyAgentContinuationUiAsync();
                 var conversationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (() => {
+                      const fail = reason => { window.__agentLayoutFailure = reason; return false; };
+                      window.__agentLayoutFailure = null;
                       const workspace = document.querySelector('.agent-workspace').getBoundingClientRect();
-                      if (workspace.height < innerHeight * .68) return false;
+                      if (workspace.height < innerHeight * .68) return fail('workspace height');
                       const sidebar = document.querySelector('.agent-side').getBoundingClientRect();
                       const session = document.querySelector('.agent-session-row').getBoundingClientRect();
                       const composer = document.getElementById('agent-form').getBoundingClientRect();
-                      if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
+                      if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return fail('conversation geometry');
                       const rail = document.querySelector('.agent-section-rail');
                       if (rail.querySelectorAll('button').length !== 8 ||
                           !document.getElementById('agent-background') ||
@@ -368,31 +370,36 @@ public partial class MainWindow : Window
                           !document.getElementById('agent-system-prompt') ||
                           !document.getElementById('agent-run-toggle') ||
                           document.querySelector('.agent-side').dataset.activePanel !== 'sessions' ||
-                          document.getElementById('agent-inspector-toggle')) return false;
+                          document.getElementById('agent-inspector-toggle')) return fail('Agent categories and controls');
                       rail.querySelector('[data-agent-section="usage"]').click();
                       if (document.querySelector('.agent-side').dataset.activePanel !== 'usage' ||
-                          !document.getElementById('agent-usage').closest('.focus-panel')) return false;
+                          !document.getElementById('agent-usage').closest('.focus-panel')) return fail('usage category');
                       rail.querySelector('[data-agent-section="modules"]').click();
-                      if (document.querySelector('.agent-side').dataset.activePanel !== 'modules') return false;
+                      if (document.querySelector('.agent-side').dataset.activePanel !== 'modules') return fail('module category');
                       rail.querySelector('[data-agent-section="sessions"]').click();
-                      if (!document.querySelector('#view-activity > .overview-grid') ||
+                      const statusTab = document.getElementById('status-tab-overview');
+                      const statusPanel = document.getElementById(statusTab?.getAttribute('aria-controls'));
+                      if (!statusPanel?.querySelector('.overview-grid') || statusPanel.closest('.view')?.id !== 'view-activity' ||
                           !document.querySelector('#view-course .study-side #course-chapters') ||
-                          !document.querySelector('#view-homework .study-side #homework-page')) return false;
-                      if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return false;
+                          !document.querySelector('#view-homework .study-side #homework-page')) return fail('status and study surfaces');
+                      if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return fail('context menu opening');
                       const labels = [...document.querySelectorAll('#toolbox-context-menu button')].map(item => item.textContent);
-                      if (!labels.includes('粘贴') || !labels.includes('新建会话')) return false;
-                      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                      if (!document.getElementById('toolbox-context-menu').hidden) return false;
+                      if (!labels.includes('粘贴') || !labels.includes('新建会话')) return fail('context menu actions');
+                      const contextAction = document.querySelector('#toolbox-context-menu button:not(:disabled)');
+                      contextAction.focus();
+                      contextAction.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                      if (!document.getElementById('toolbox-context-menu').hidden) return fail('context menu Escape');
                       const toolGroup = document.querySelector('.nav-group');
-                      toolGroup.classList.add('flyout-open');
-                      toolGroup.querySelector('.nav-item').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                      return !toolGroup.classList.contains('flyout-open');
+                      toolGroup.querySelector('.nav-item').click();
+                      const toolsOpened = !document.getElementById('view-modules').hidden && toolGroup.querySelector('.nav-flyout').hidden;
+                      window.FaxToolboxUi.openAi();
+                      return toolsOpened && !document.getElementById('view-ai').hidden || fail('direct tools navigation');
                     })()
                     """);
                 if (conversationLayout != "true")
                 {
                     var layoutDetail = await ShellView.CoreWebView2.ExecuteScriptAsync("""
-                        JSON.stringify({workspace:document.querySelector('.agent-workspace').getBoundingClientRect().height,
+                        JSON.stringify({stage:window.__agentLayoutFailure, workspace:document.querySelector('.agent-workspace').getBoundingClientRect().height,
                           sidebar:document.querySelector('.agent-side').getBoundingClientRect().width,
                           session:document.querySelector('.agent-session-row').getBoundingClientRect().height,
                           composer:document.getElementById('agent-form').getBoundingClientRect().width,
@@ -1092,7 +1099,6 @@ public partial class MainWindow : Window
                     currentShellView = message.GetProperty("view").GetString() ?? "home";
                     shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
                     UpdateBrowserBackButton();
-                    UpdateTaskTabs();
                     ApplyNativeSkin();
                     break;
                 case "ui.clipboard.copy":

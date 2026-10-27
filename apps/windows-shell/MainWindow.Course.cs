@@ -599,10 +599,19 @@ public partial class MainWindow
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        var browserHadHistory = second.CourseView.CoreWebView2?.CanGoBack == true;
         second.NavigateBack(false);
-        await Task.Delay(100);
-        if (second.currentShellView != "course")
-        { FailSmoke("ordinary back left the current module"); return; }
+        var expectedBackView = browserHadHistory ? "course" : "home";
+        for (var attempt = 0; attempt < 30 && second.currentShellView != expectedBackView; attempt++) await Task.Delay(50);
+        if (second.currentShellView != expectedBackView || second.assignedModule != "course")
+        { FailSmoke("Back did not prefer browser history then fall back to toolbox history"); return; }
+        if (!browserHadHistory)
+        {
+            second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+            if (second.currentShellView != "course")
+            { FailSmoke("restoring the task after Back lost the course module"); return; }
+        }
         second.NavigateBack(true);
         for (var attempt = 0; attempt < 30 && second.currentShellView != "home"; attempt++) await Task.Delay(50);
         if (second.currentShellView != "home" || second.assignedModule != "course")
