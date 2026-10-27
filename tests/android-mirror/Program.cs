@@ -59,13 +59,15 @@ internal static class Program
             ((Expander)module.FindName("pairingDetails")).IsExpanded = true;
             module.Width = 860; module.Height = 620; module.UpdateLayout(); Pump();
             var primary = (Button)module.FindName("start");
+            var primaryLabel = (TextBlock)module.FindName("startLabel");
+            Check(primaryLabel.Text == "开始投屏", "Primary action should match screen mode initially");
             var location = primary.TransformToAncestor(module).Transform(new Point(0, 0));
             Check(primary.ActualWidth > 200 && location.Y + primary.ActualHeight < module.ActualHeight, "Primary action must remain visible with expanded wireless form");
             Capture(module, Path.Combine(root, ".cache", "android-mirror-wireless-preview.png"));
             module.Width = 1180; module.Height = 780;
             ((RadioButton)module.FindName("appMode")).IsChecked = true;
             Check(((StackPanel)module.FindName("appPanel")).Visibility == Visibility.Visible, "App settings must open on selection");
-            Check(((Button)module.FindName("start")).Content.ToString()!.Contains("应用"), "Primary action should match app mode");
+            Check(primaryLabel.Text == "打开应用窗口", "Primary action should match app mode");
             var selector = (ComboBox)module.FindName("devices");
             selector.ItemsSource = new[] { new AndroidDevice("test-unauthorized", "unauthorized", "Pixel"), new AndroidDevice("test-ready", "device", "Pixel") };
             selector.SelectedIndex = 0;
@@ -74,6 +76,7 @@ internal static class Program
             Check(((Button)module.FindName("start")).IsEnabled, "Authorized devices should enable primary action");
             ((RadioButton)module.FindName("usbMode")).IsChecked = true;
             ((RadioButton)module.FindName("screenMode")).IsChecked = true;
+            Check(primaryLabel.Text == "开始投屏", "Primary action should return to screen mode");
             selector.ItemsSource = Array.Empty<AndroidDevice>();
             module.UpdateLayout(); Pump();
             Capture(module, Path.Combine(root, ".cache", "android-mirror-preview.png"));
