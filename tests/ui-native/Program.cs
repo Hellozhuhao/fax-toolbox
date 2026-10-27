@@ -11,6 +11,15 @@ internal static class Program
 {
     private static int checks;
     private static void Check(bool condition, string detail) { if (!condition) throw new InvalidOperationException(detail); checks++; }
+    private static double Contrast(Color a, Color b)
+    {
+        static double Light(Color color)
+        {
+            var values=new[] {color.R,color.G,color.B}.Select(value=>value/255d).Select(value=>value<=.04045?value/12.92:Math.Pow((value+.055)/1.055,2.4)).ToArray();
+            return values[0]*.2126+values[1]*.7152+values[2]*.0722;
+        }
+        var x=Light(a);var y=Light(b);return (Math.Max(x,y)+.05)/(Math.Min(x,y)+.05);
+    }
     private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
     {
         yield return root;
@@ -61,6 +70,7 @@ internal static class Program
         Check(ai.IsVisible, "Invalid AI configuration closed the dialog");
         var validation=(TextBlock)aiType.GetField("validation",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(ai)!;
         Check(validation.IsVisible && !string.IsNullOrWhiteSpace(validation.Text), "AI field validation is not visible in the existing dialog");
+        Check(Contrast(((SolidColorBrush)validation.Foreground).Color,((SolidColorBrush)owner.FindResource("Ui.Background")).Color)>=4.5,"Dark AI validation contrast is below WCAG AA");
         Capture(ai,"native-ai-validation-dark");
         ai.Close();
 
@@ -71,6 +81,8 @@ internal static class Program
         Paint();
         Check(vault.IsVisible, "Empty account input closed the dialog");
         Check(Descendants(vault).OfType<TextBlock>().Any(text => text.Text == "请填写学习通账号。"), "Account error did not identify the missing field");
+        var accountError=Descendants(vault).OfType<TextBlock>().Single(text=>text.Text=="请填写学习通账号。");
+        Check(Contrast(((SolidColorBrush)accountError.Foreground).Color,((SolidColorBrush)owner.FindResource("Ui.Panel")).Color)>=4.5,"Dark account validation contrast is below WCAG AA");
         Check(Descendants(vault).OfType<PasswordBox>().Count() == 1, "Password input lost its native protected control");
         Capture(vault,"native-vault-validation-dark");
         vault.Close();

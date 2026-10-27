@@ -23,6 +23,7 @@
   --accent: #2859d6;
   --nav: #edf1f9;
   --on-accent: #fff;
+  --error: #b32939;
   --skin-radius: 14px;
   --duration-fast: 120ms;
   --duration-panel: 200ms;
@@ -687,10 +688,11 @@ fieldset {
   font-size: 12px;
   margin-top: 5px;
 }
+.error,
 .field-error,
 .skin-error,
 .network-feedback.error {
-  color: #b32939;
+  color: var(--error);
 }
 .developer-switch,
 .network-checks label {
@@ -2446,7 +2448,7 @@ dialog input {
   background: var(--border);
 }
 .toolbox-context-menu .destructive {
-  color: #b32939;
+  color: var(--error);
 }
 .developer-toast {
   position: fixed;
@@ -3068,7 +3070,7 @@ input[type="range"] {
   color: #8352b5;
 }
 #view-ai .agent-diff-removed {
-  color: #b32939;
+  color: var(--error);
 }
 [data-skin-appearance="dark"] .agent-code-string,
 [data-skin-appearance="dark"] .agent-diff-added {
@@ -3083,5 +3085,5 @@ input[type="range"] {
 }
 [data-skin-appearance="dark"] .agent-diff-removed,
 [data-skin-appearance="dark"] .skin-error {
-  color: #ffa0ad;
+  color: var(--error);
 }

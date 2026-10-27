@@ -424,6 +424,13 @@ test(
       await page.locator("#proxy-on").click();
       await page.locator("#proxy-confirm-ok").click();
       assert.equal((await command(page, "proxy.on")).length, 1);
+    await emit(page,{kind:"proxy.status",data:{ok:false,error:"连接失败，请检查本机代理后重试。"}});
+    const contrast=await page.locator("#proxy-feedback").evaluate(node=>{
+      const channels=value=>value.startsWith("#")?value.slice(1).match(/../g).map(n=>parseInt(n,16)):value.match(/[\d.]+/g).slice(0,3).map(Number);
+      const light=value=>channels(value).map(n=>n/255).map(n=>n<=.04045?n/12.92:((n+.055)/1.055)**2.4).reduce((sum,n,index)=>sum+n*[.2126,.7152,.0722][index],0);
+      const style=getComputedStyle(node),a=light(style.color),b=light(style.getPropertyValue("--panel").trim());return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+    });
+    assert.ok(contrast>=4.5,"Dark error feedback must meet WCAG AA");
       assert.equal(
         (await command(page, "course.stop")).length,
         0,
@@ -490,7 +497,7 @@ test(
       await emit(page, {
         kind: "agent.event",
         extra: { type: "user" },
-        detail: "帮我整理项目的迭代计划。",
+        detail: "帮我整理项目的迭代计划，按李磊、林馨两位成员分工。",
       });
       await emit(page, {
         kind: "agent.event",

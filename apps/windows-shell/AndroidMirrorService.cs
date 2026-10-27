@@ -16,7 +16,7 @@ internal sealed class AndroidMirrorService(string directory)
 
     private ProcessStartInfo Command(string file, IEnumerable<string> args)
     {
-        if (!Available) throw new InvalidOperationException("投屏组件未安装，请运行 scripts/setup-scrcpy.ps1 后重新打开模块。");
+        if (!Available) throw new InvalidOperationException("投屏组件缺失或不完整。请使用发布者提供的完整安装器重新安装工具箱，然后重新打开安卓投屏。");
         var info = new ProcessStartInfo(Path.Combine(directory, file))
         {
             WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,

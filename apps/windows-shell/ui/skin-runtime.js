@@ -25,6 +25,9 @@
     const rgb=skin.tokens.accent.slice(1).match(/../g).map(value=>{const n=parseInt(value,16)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;});
     const light=rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
     element.style.setProperty('--on-accent', (light+.05)/.05 > 1.05/(light+.05) ? '#101820' : '#ffffff');
+    const brightness=color=>{const channels=color.slice(1).match(/../g).map(value=>{const n=parseInt(value,16)/255;return n<=.04045?n/12.92:((n+.055)/1.055)**2.4;});return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722;};
+    const contrast=(a,b)=>{const x=brightness(a),y=brightness(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);};
+    element.style.setProperty('--error',['#b32939','#ffa0ad',skin.tokens.text].find(color=>[skin.tokens.panel,skin.tokens.background].every(background=>contrast(color,background)>=4.5))||skin.tokens.text);
     element.style.setProperty('--skin-card-padding', skin.layout?.density === 'compact' ? '14px' : '20px');
     element.dataset.skinDensity = skin.layout?.density || 'comfortable';
     element.dataset.skinMotion = skin.layout?.motion || 'system';

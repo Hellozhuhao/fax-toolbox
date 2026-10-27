@@ -24,7 +24,7 @@ internal static class NativeUi
             if (sender is ToolTip tip) CopyPopup(tip, tip.PlacementTarget as FrameworkElement);
         }));
     }
-    internal static readonly string[] Roles = ["Background", "Panel", "Surface", "Text", "Muted", "Accent", "Border", "OnAccent"];
+    internal static readonly string[] Roles = ["Background", "Panel", "Surface", "Text", "Muted", "Accent", "Border", "OnAccent", "Error"];
     internal static SolidColorBrush Brush(FrameworkElement owner, string role) =>
         owner.TryFindResource("Ui." + role) as SolidColorBrush ?? new SolidColorBrush(Colors.Transparent);
 
@@ -45,6 +45,7 @@ internal static class NativeUi
         foreach (var (key, name) in new[] { ("background", "Background"), ("panel", "Panel"), ("surface", "Surface"), ("text", "Text"), ("muted", "Muted"), ("accent", "Accent"), ("border", "Border") })
             SetBrush(window, name, (Color)ColorConverter.ConvertFromString(tokens[key]!.GetValue<string>()));
         SetBrush(window, "OnAccent", OnAccent(Brush(window, "Accent")).Color);
+        ApplyError(window);
         window.FontFamily = Font(tokens["fontFamily"]?.GetValue<string>());
         window.Resources["Ui.Font"] = window.FontFamily;
     }
@@ -57,6 +58,20 @@ internal static class NativeUi
         else window.Resources[key] = new SolidColorBrush(value);
     }
 
+    private static void ApplyError(Window window)
+    {
+        static double Light(Color color)
+        {
+            static double Linear(byte value) { var n=value/255d; return n<=.04045?n/12.92:Math.Pow((n+.055)/1.055,2.4); }
+            return .2126*Linear(color.R)+.7152*Linear(color.G)+.0722*Linear(color.B);
+        }
+        var panel=Brush(window,"Panel").Color;
+        var background=Light(panel);
+        var candidates=new[] { Color.FromRgb(179,41,57),Color.FromRgb(255,160,173) };
+        var error=candidates.FirstOrDefault(value=>(Math.Max(Light(value),background)+.05)/(Math.Min(Light(value),background)+.05)>=4.5);
+        SetBrush(window,"Error",error==default?OnAccent(new SolidColorBrush(panel)).Color:error);
+    }
+
     internal static void ApplyDefault(Window window, bool dark)
     {
         foreach (var (role, light, night) in new[] {
@@ -65,6 +80,7 @@ internal static class NativeUi
             ("Muted", "#59677A", "#A6B0C2"), ("Accent", "#2859D6", "#B5A0FF"), ("Border", "#D7DEEA", "#3D4658") })
             SetBrush(window, role, (Color)ColorConverter.ConvertFromString(dark ? night : light));
         SetBrush(window, "OnAccent", OnAccent(Brush(window, "Accent")).Color);
+        ApplyError(window);
         window.FontFamily = Font(null); window.Resources["Ui.Font"] = window.FontFamily;
     }
 
