@@ -228,6 +228,74 @@ test("narrow module drawers contain focus, preserve nested selects and restore d
   } finally { await f.close(); }
 });
 
+test("network settings reveal errors, retain failed saves and explicitly discard drafts", { timeout: 60000 }, async () => {
+  const f = await fixture(), { page } = f;
+  const original = {
+    coreType: 'xray', proxyUrl: 'http://127.0.0.1:10809', xrayPath: '', xrayConfig: '',
+    workProcesses: ['ChatGPT'], gameProcesses: [], gamePathHints: [], gamePathExcludes: [],
+    priority: 'game', idleBehavior: 'keep', pollSeconds: 3, stableSeconds: 6,
+    setSystemProxy: true, setEnvironmentProxy: true,
+  };
+  const status = { running: false, coreRunning: false, portReady: true, logs: [] };
+  try {
+    await page.evaluate(() => FaxToolboxUi.skinActions['module.proxy.open'].run({}));
+    await emit(page, { kind: 'proxy.status', data: { ok: true, config: original, status } });
+    assert.equal(await page.locator('#proxy-url').isVisible(), true);
+    assert.equal(await page.locator('.network-advanced').getAttribute('open'), null);
+    await page.locator('#proxy-url').fill('https://example.com');
+    await page.locator('.network-advanced summary').click();
+    await page.locator('#proxy-poll').fill('1');
+    await page.locator('#proxy-stable').fill('-1');
+    await page.locator('#proxy-system-check').uncheck();
+    await page.locator('#proxy-env-check').uncheck();
+    await page.locator('.network-advanced summary').click();
+    await page.locator('#proxy-save').click();
+    assert.equal((await command(page, 'proxy.save')).length, 0);
+    assert.match(await page.locator('#proxy-validation-summary').innerText(), /4 项/);
+    assert.equal(await page.locator('#proxy-url').evaluate(node => node === document.activeElement), true);
+    assert.match(await page.locator('#proxy-url').getAttribute('aria-describedby'), /proxy-url-hint.*proxy-url-error/);
+    await page.locator('#proxy-validation-summary a').filter({ hasText: '检查间隔' }).click();
+    assert.equal(await page.locator('#proxy-poll').isVisible(), true);
+    assert.equal(await page.locator('#proxy-poll').evaluate(node => node === document.activeElement), true);
+    await capture(page, 'network-validation-light');
+    await page.locator('#proxy-poll').fill('3');
+    await page.locator('#proxy-stable').fill('0');
+    await page.locator('#proxy-system-check').check();
+    await page.locator('#proxy-url').fill('http://localhost:10819');
+    assert.equal(await page.locator('#proxy-validation-summary').isVisible(), false);
+    assert.equal(await page.locator('#proxy-url').getAttribute('aria-describedby'), 'proxy-url-hint');
+    await page.locator('#proxy-config').evaluate(form => { form.requestSubmit(); form.requestSubmit(); });
+    assert.equal((await command(page, 'proxy.save')).length, 1, 'Only one save may be in flight');
+    assert.equal(await page.locator('#proxy-save').isDisabled(), true);
+    const submitted = (await command(page, 'proxy.save'))[0].config;
+    assert.deepEqual(submitted, { ...original, proxyUrl: 'http://localhost:10819', stableSeconds: 0, setEnvironmentProxy: false });
+    await emit(page, { kind: 'proxy.status', data: { ok: false, error: '暂时无法写入配置文件。' } });
+    assert.match(await page.locator('#proxy-save-state').innerText(), /输入已保留/);
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819');
+    assert.equal(await page.locator('#proxy-save').isDisabled(), false);
+    await emit(page, { kind: 'proxy.status', data: { ok: true, config: original, status } });
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819', 'Background status cannot replace a draft');
+
+    await page.locator('#proxy-save').click();
+    await emit(page, { kind: 'proxy.status', data: { ok: true, config: submitted, status, detail: '配置已保存' } });
+    assert.match(await page.locator('#proxy-save-state').innerText(), /配置已保存/);
+    assert.equal(await page.locator('#proxy-discard').isDisabled(), true);
+    await page.locator('#proxy-url').fill('http://127.0.0.1:9999');
+    await page.locator('.sidebar [data-view="home"]').click();
+    await page.evaluate(() => FaxToolboxUi.skinActions['module.proxy.open'].run({}));
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://127.0.0.1:9999');
+    await page.locator('#proxy-discard').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://127.0.0.1:9999');
+    await page.locator('#proxy-discard').click();
+    await page.locator('#toolbox-confirm-accept').click();
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819');
+    assert.equal((await command(page, 'proxy.save')).length, 2, 'Discard does not execute a system operation');
+    assert.equal((await command(page, 'proxy.on')).length, 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
+
 test(
   "public navigation, search, draft safety, keyboard palette and recent tools",
   { timeout: 60000 },

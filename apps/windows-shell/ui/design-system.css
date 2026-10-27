@@ -2141,6 +2141,52 @@ progress::-webkit-progress-value {
   gap: 7px;
   font-size: 12px;
 }
+.network-address {
+  display: grid;
+  gap: 7px;
+  margin-block: 14px 22px;
+  max-width: 520px;
+}
+.network-address small,
+.network-save-state {
+  color: var(--subtle);
+  font-size: 12px;
+  margin: 0;
+}
+.network-savebar {
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.network-save-state {
+  margin-top: 10px;
+}
+.ui-field-error,
+.network-save-state.error {
+  color: var(--error);
+  font-size: 12px;
+}
+.ui-field-error {
+  margin: 0;
+  flex-basis: 100%;
+}
+.network-config [aria-invalid="true"] {
+  border-color: var(--error);
+}
+.validation-summary {
+  padding: 12px 16px;
+  margin: 12px 0 18px;
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--error);
+}
+.validation-summary ul {
+  padding-inline-start: 20px;
+  margin: 6px 0 0;
+}
+.validation-summary a {
+  color: inherit;
+}
 .network-path {
   display: flex;
   gap: 7px;

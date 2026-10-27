@@ -3,6 +3,8 @@
   const $ = id => document.getElementById(id);
   let config = null, state = null, dirty = false, busy = false, pending = null, awaitingSave = false;
   let applications = [], detectedOnce = false, detecting = false;
+  let savedDraft = '', validationAttempted = false, formMessage = '', formError = false;
+  const fieldErrors = new Map();
   const send = (command, extra = {}) => window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra}));
   function setupQuickSettings() {
     const form = $('proxy-config'), fields = $('proxy-fields'), advanced = document.createElement('details');
@@ -17,7 +19,25 @@
     priority.firstChild.textContent = '代理和直连应用同时运行';
     priority.classList.add('network-priority');
     quick.append(priority);
+    const address = $('proxy-url').closest('label');
+    address.classList.add('network-address');
+    const hint = document.createElement('small'); hint.id = 'proxy-url-hint';
+    hint.textContent = '检测后可自动填入，也可以手动输入，例如 http://127.0.0.1:10809。';
+    address.append(hint); $('proxy-url').setAttribute('aria-describedby', hint.id);
+    $('proxy-url').setAttribute('autocomplete', 'off'); $('proxy-url').spellcheck = false;
+    quick.querySelector('#proxy-connections').after(address);
     fields.insertBefore(quick, advanced);
+    form.noValidate = true;
+    const errors = document.createElement('div'); errors.id = 'proxy-validation-summary';
+    errors.className = 'validation-summary'; errors.hidden = true; errors.role = 'alert';
+    form.querySelector('.network-heading').after(errors);
+    const actions = fields.querySelector(':scope > .action-row'); actions.classList.add('network-savebar');
+    actions.querySelector('[type="submit"]').id = 'proxy-save';
+    const discard = document.createElement('button'); discard.id = 'proxy-discard';
+    discard.type = 'button'; discard.className = 'secondary'; discard.textContent = '放弃修改'; discard.disabled = true;
+    actions.insertBefore(discard, $('proxy-validate'));
+    const saved = document.createElement('p'); saved.id = 'proxy-save-state'; saved.role = 'status';
+    saved.className = 'network-save-state'; saved.textContent = '正在读取已保存配置…'; actions.after(saved);
     $('proxy-detect').addEventListener('click', detect);
     $('proxy-add-app').addEventListener('click', () => send('proxy.pick', {field: 'application'}));
   }
@@ -26,7 +46,80 @@
     detecting = true; $('proxy-detect').disabled = true; $('proxy-detect-status').textContent = '正在检测本机连接和运行中的应用…';
     send('proxy.detect');
   }
-  function markDirty() { dirty = true; $('proxy-config-note').textContent = '有未保存的更改'; }
+  function syncFormState() {
+    $('proxy-config').setAttribute('aria-busy', String(busy));
+    $('proxy-save').textContent = awaitingSave ? '保存中…' : '保存配置';
+    $('proxy-discard').disabled = !dirty || busy || !config || !!state?.running || !!state?.coreRunning;
+    $('proxy-config-note').textContent = state?.running || state?.coreRunning ? '停止后可修改配置' : dirty ? '有未保存的更改' : '配置保存在本机';
+    $('proxy-save-state').textContent = awaitingSave ? '正在保存，请稍候…' : formMessage || (dirty ? '更改尚未保存，保存后才能启用新配置。' : config ? '当前显示的是已保存配置。' : '正在读取已保存配置…');
+    $('proxy-save-state').classList.toggle('error', formError && !awaitingSave);
+  }
+  function markDirty() {
+    dirty = JSON.stringify(read()) !== savedDraft;
+    formMessage = ''; formError = false;
+    if (validationAttempted) validateFields(false);
+    syncFormState();
+  }
+  function revealField(field) {
+    for (let parent = field.parentElement; parent; parent = parent.parentElement)
+      if (parent.tagName === 'DETAILS') parent.open = true;
+    field.focus({preventScroll: true});
+    field.scrollIntoView({block: 'center'});
+  }
+  function clearFieldErrors() {
+    for (const field of fieldErrors.keys()) {
+      field.removeAttribute('aria-invalid');
+      const id = field.id + '-error';
+      const descriptions = (field.getAttribute('aria-describedby') || '').split(/\s+/).filter(value => value && value !== id);
+      if (descriptions.length) field.setAttribute('aria-describedby', descriptions.join(' '));
+      else field.removeAttribute('aria-describedby');
+      $(id)?.remove();
+    }
+    fieldErrors.clear(); $('proxy-validation-summary').hidden = true;
+  }
+  function validateFields(focus = true) {
+    validationAttempted = true;
+    clearFieldErrors();
+    const invalid = (id, message) => fieldErrors.set($(id), message);
+    try {
+      const endpoint = new URL($('proxy-url').value.trim());
+      if (endpoint.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname) ||
+          endpoint.port === '0' || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash)
+        throw new Error();
+    } catch (_) { invalid('proxy-url', '请输入本机 HTTP 代理地址，例如 http://127.0.0.1:10809。'); }
+    for (const [id, label, min, max] of [['proxy-poll', '检查间隔', 2, 30], ['proxy-stable', '稳定等待', 0, 60]]) {
+      const field = $(id), value = field.value.trim(), number = Number(value);
+      if (!value || !Number.isInteger(number) || number < min || number > max)
+        invalid(id, `${label}应为 ${min}–${max} 秒的整数。`);
+    }
+    if (!$('proxy-system-check').checked && !$('proxy-env-check').checked)
+      invalid('proxy-system-check', '至少选择管理系统代理或管理用户代理环境变量中的一项。');
+    for (const id of ['proxy-core', 'proxy-core-config'])
+      if ($(id).value.includes('"')) invalid(id, '路径不需要引号，请移除引号或用“选择”重新选取文件。');
+    for (const id of ['proxy-work', 'proxy-games', 'proxy-game-paths', 'proxy-excludes']) {
+      const entries = lines(id);
+      if (entries.length > 100 || entries.some(value => value.length > 260))
+        invalid(id, '每类规则最多 100 条，每条不超过 260 个字符。');
+    }
+    const summary = $('proxy-validation-summary'); summary.replaceChildren();
+    if (!fieldErrors.size) return true;
+    const title = document.createElement('strong'); title.textContent = `有 ${fieldErrors.size} 项设置需要修改`;
+    const list = document.createElement('ul');
+    for (const [field, message] of fieldErrors) {
+      field.setAttribute('aria-invalid', 'true');
+      const error = document.createElement('p'); error.id = field.id + '-error';
+      error.className = 'ui-field-error'; error.textContent = message;
+      (field.closest('.network-checks') || field.closest('label')).append(error);
+      field.setAttribute('aria-describedby', [field.getAttribute('aria-describedby'), error.id].filter(Boolean).join(' '));
+      const item = document.createElement('li'), link = document.createElement('a');
+      link.href = '#' + field.id; link.textContent = message;
+      link.addEventListener('click', event => { event.preventDefault(); revealField(field); });
+      item.append(link); list.append(item);
+    }
+    summary.append(title, list); summary.hidden = false;
+    if (focus) revealField(fieldErrors.keys().next().value);
+    return false;
+  }
   function renderApplications() {
     const holder = $('proxy-apps'); holder.replaceChildren();
     const work = lines('proxy-work').map(value => value.replace(/\.exe$/i, '').toLowerCase());
@@ -79,7 +172,8 @@
       $('proxy-start').disabled = state.running;
       $('proxy-on').disabled = $('proxy-off').disabled = state.running;
     }
-    $('proxy-fields').disabled = value || !!state?.running || !!state?.coreRunning;
+    $('proxy-fields').disabled = value || !config || !!state?.running || !!state?.coreRunning;
+    syncFormState();
   }
   function fill(value) {
     config = value;
@@ -94,6 +188,7 @@
     $('proxy-system-check').checked = value.setSystemProxy !== false;
     $('proxy-env-check').checked = value.setEnvironmentProxy !== false;
     dirty = false;
+    savedDraft = JSON.stringify(read()); validationAttempted = false; clearFieldErrors();
     renderApplications();
     if (!detectedOnce) { detectedOnce = true; detect(); }
   }
@@ -105,13 +200,18 @@
   }
   function render(data) {
     setBusy(false);
-    if (!data.ok) { awaitingSave = false; feedback(data.error || '操作失败，请检查日志。', true); return; }
+    if (!data.ok) {
+      if (awaitingSave) { formMessage = (data.error || '保存失败。') + ' 输入已保留，可以修改后重试。'; formError = true; }
+      awaitingSave = false; feedback(data.error || '操作失败，请检查日志。', true); syncFormState(); return;
+    }
     const saved = awaitingSave;
     if (data.config && (!config || awaitingSave || !dirty)) fill(data.config);
     awaitingSave = false;
+    if (saved) { formMessage = '配置已保存。'; formError = false; }
+    syncFormState();
     if (data.detail) feedback(data.detail);
     else if (saved) feedback('配置已保存。');
-    if (!data.status) return;
+    if (!data.status) { setBusy(false); return; }
     state = data.status;
     $('proxy-running').textContent = state.running ? '自动切换运行中' : '自动切换已停止';
     $('proxy-indicator').classList.toggle('running', state.running);
@@ -125,7 +225,6 @@
     $('proxy-matches').textContent = state.running ? [...(state.state?.work || []), ...(state.state?.games || [])].join('、') || '暂无' : '—';
     $('proxy-legacy').hidden = !state.legacyRunning;
     $('proxy-startup').textContent = state.startup ? '关闭开机启动' : '启用开机启动';
-    $('proxy-config-note').textContent = state.running || state.coreRunning ? '停止后可修改配置' : dirty ? '有未保存的更改' : '配置保存在本机';
     const logText = (state.logs || []).join('\n') || '暂无记录';
     if ($('proxy-log').textContent !== logText) $('proxy-log').textContent = logText;
     if (state.running && state.state?.error) feedback(state.state.error, true);
@@ -160,8 +259,18 @@
   $('proxy-confirm-cancel').addEventListener('click', () => { pending = null; $('proxy-confirm').close(); });
   $('proxy-confirm').addEventListener('cancel', () => { pending = null; });
   $('proxy-config').addEventListener('change',markDirty);
-  $('proxy-config').addEventListener('input', () => { dirty = true; $('proxy-config-note').textContent = '有未保存的更改'; });
-  $('proxy-config').addEventListener('submit', event => { event.preventDefault(); if (busy) return; awaitingSave = true; setBusy(true); feedback('正在保存…'); send('proxy.save', {config: read()}); });
+  $('proxy-config').addEventListener('input', markDirty);
+  $('proxy-config').addEventListener('submit', event => {
+    event.preventDefault(); if (busy || !config || state?.running || state?.coreRunning) return;
+    if (!validateFields()) { formMessage = '请修改标出的设置后再保存。'; formError = true; syncFormState(); return; }
+    awaitingSave = true; setBusy(true); feedback('正在保存…'); send('proxy.save', {config: read()});
+  });
+  $('proxy-discard').addEventListener('click', async () => {
+    if (!dirty || busy || !config) return;
+    if (!await window.FaxToolboxUi.confirm({title: '放弃未保存的修改？', message: '连接地址、应用规则和高级设置将恢复到上次保存的内容。', confirmLabel: '放弃修改'})) return;
+    if (busy) return;
+    fill(config); formMessage = '已恢复上次保存的配置。'; formError = false; syncFormState();
+  });
   $('proxy-validate').addEventListener('click', () => { if (dirty) { feedback('请先保存配置再检查连接。', true); return; } setBusy(true); feedback('正在检查…'); send('proxy.validate'); });
   $('proxy-refresh').addEventListener('click', () => { setBusy(true); send('proxy.get'); });
   for (const button of document.querySelectorAll('[data-proxy-pick]')) button.addEventListener('click', () => send('proxy.pick', {field: button.dataset.proxyPick}));
@@ -174,7 +283,8 @@
       if (!applications.some(app => app.processName.toLowerCase() === name.toLowerCase())) applications.push({name, processName: name, suggested: 'ignore', running: false});
       renderApplications(); return;
     }
-    if (message.kind === 'proxy.picked') { const id = message.field === 'xrayPath' ? 'proxy-core' : 'proxy-core-config'; $(id).value = message.path || ''; dirty = true; $('proxy-config-note').textContent = '有未保存的更改'; }
+    if (message.kind === 'proxy.picked') { const id = message.field === 'xrayPath' ? 'proxy-core' : 'proxy-core-config'; $(id).value = message.path || ''; markDirty(); }
   });
+  setBusy(false);
   setInterval(() => { if (!$('view-proxy').hidden && !busy && !$('proxy-confirm').open) send('proxy.get'); }, 10000);
 })();
