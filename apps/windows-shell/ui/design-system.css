@@ -849,6 +849,8 @@ input[role="switch"]:checked:before {
 }
 #ui-tooltip {
   position: fixed;
+  inset: auto;
+  margin: 0;
   z-index: 2147483646;
   max-width: min(320px, calc(100vw - 16px));
   padding: 7px 10px;
@@ -1860,17 +1862,26 @@ input[role="switch"]:checked:before {
   box-shadow: 0 12px 36px #0e1b3124;
   padding: 14px;
 }
-#view-ai .agent-model-option {
+#view-ai .agent-model-choice,
+#view-ai .agent-model-configure {
   background: transparent;
   color: var(--text);
   border: 0;
   box-shadow: none;
   border-radius: 6px;
 }
-#view-ai .agent-model-option.selected,
-#view-ai .agent-model-option:hover {
+#view-ai .agent-model-choice.selected,
+#view-ai .agent-model-choice:hover,
+#view-ai .agent-model-configure:hover {
   background: var(--surface);
   color: var(--accent);
+}
+#view-ai .agent-model-copy small,
+#view-ai .agent-model-group,
+#view-ai .agent-model-size {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--subtle);
 }
 #view-ai .agent-session-select {
   background: transparent;
@@ -3086,4 +3097,114 @@ input[type="range"] {
 [data-skin-appearance="dark"] .agent-diff-removed,
 [data-skin-appearance="dark"] .skin-error {
   color: var(--error);
+}
+
+/* Shared popovers and narrow-pane drawers retain their module's skin scope. */
+#view-ai .agent-composer .ui-floating-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: min(340px, calc(100vw - 24px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: var(--panel);
+  color: var(--text);
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 12px 36px #0e1b3138;
+  padding: 12px;
+}
+#view-ai .agent-add-menu button {
+  text-align: left;
+  background: transparent;
+  color: var(--text);
+  border: 0;
+  border-radius: 7px;
+  box-shadow: none;
+}
+#view-ai .agent-add-menu button:hover {
+  background: var(--surface);
+}
+#view-ai .agent-add-menu em {
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  color: var(--subtle);
+}
+#view-ai .agent-add-menu small {
+  color: var(--subtle);
+}
+#view-ai .agent-plus {
+  display: inline-grid;
+  place-items: center;
+}
+#view-ai .agent-run-modes label:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+dialog.ui-drawer[open] {
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 12px auto 12px 12px;
+  margin: 0;
+  width: min(360px, calc(100vw - 24px));
+  height: calc(100dvh - 24px);
+  max-height: none;
+  max-width: calc(100vw - 24px);
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+}
+.ui-drawer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: none;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.ui-drawer-heading h2 {
+  font-size: 16px;
+  margin: 0;
+}
+.ui-drawer-heading .ui-drawer-close {
+  display: inline-grid;
+  place-items: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 6px;
+}
+#view-ai .ui-drawer > .agent-side,
+.ui-drawer > .study-side {
+  position: static;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+}
+.ui-drawer > .study-side {
+  display: block;
+  padding: 16px;
+  overflow: auto;
+}
+.ui-drawer input {
+  margin: 0;
+}
+@media (forced-colors: active) {
+  #view-ai .agent-composer .ui-floating-panel,
+  dialog.ui-drawer[open] {
+    border: 1px solid CanvasText;
+  }
 }

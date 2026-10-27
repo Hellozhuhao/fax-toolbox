@@ -106,6 +106,12 @@ const command = (page, name) =>
     (name) => window.uiCommands.filter((item) => item.command === name),
     name,
   );
+async function capture(page, name) {
+  if (!process.env.FAX_UI_SCREENSHOTS) return;
+  const out = path.join(root, ".cache/ui-redesign/review");
+  fs.mkdirSync(out, { recursive: true });
+  await page.screenshot({ path: path.join(out, name + ".png"), animations: "disabled" });
+}
 async function skins(page) {
   await page.locator('.sidebar [data-view="activity"]').click();
   await page.locator("#status-tab-skins").click();
@@ -122,6 +128,105 @@ async function theme(page, id) {
     id,
   );
 }
+
+test("Agent popovers stay reachable and close without losing drafts", { timeout: 60000 }, async () => {
+  const f = await fixture(), { page } = f;
+  try {
+    await page.setViewportSize({ width: 390, height: 480 });
+    await page.locator('.sidebar [data-view="ai"]').click();
+    await page.locator('#agent-prompt').fill('保留这条草稿');
+    await page.locator('#agent-run-toggle').click();
+    const panel = page.locator('#agent-run-panel');
+    assert.equal(await panel.isVisible(), true);
+    const bounds = await panel.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 391 && bounds.y + bounds.height <= 481);
+    await capture(page, 'agent-options-short');
+    await page.keyboard.press('Escape');
+    assert.equal(await panel.isVisible(), false);
+    assert.equal(await page.locator('#agent-run-toggle').evaluate(node => node === document.activeElement), true);
+
+    await page.locator('.agent-plus').focus();
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.getByRole('menuitem', { name: '文件和文件夹 文档、图片或文件夹' }).evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press('End');
+    assert.equal(await page.getByRole('menuitem', { name: '作业校对 打开作业校对模块' }).evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('.agent-add-menu').isVisible(), false);
+    assert.equal(await page.locator('.agent-plus').evaluate(node => node === document.activeElement), true);
+
+    await page.locator('.agent-plus').click();
+    await page.getByRole('menuitem', { name: '目标 设置本次对话的长期背景' }).click();
+    const drawer = page.getByRole('dialog', { name: '项目与会话', exact: true });
+    assert.equal(await drawer.isVisible(), true);
+    await drawer.getByRole('tab', { name: '提示词', exact: true }).focus();
+    await page.waitForFunction(() => !document.getElementById('ui-tooltip').hidden);
+    assert.equal(await drawer.locator('#ui-tooltip').count(), 1, 'Tooltip stays in the modal layer');
+    await page.locator('#agent-background').fill('尚未保存的会话背景');
+    await page.keyboard.press('Shift+F10');
+    assert.equal(await page.locator('#toolbox-context-menu').isVisible(), true);
+    assert.equal(await drawer.locator('#toolbox-context-menu').count(), 1);
+    await page.keyboard.press('Escape');
+    assert.equal(await drawer.isVisible(), true, 'Escape closes the inner menu first');
+    await capture(page, 'agent-drawer-short');
+    await drawer.getByRole('button', { name: '关闭项目与会话' }).click();
+    assert.equal(await drawer.isVisible(), false);
+    assert.equal(await page.locator('#agent-prompt').inputValue(), '保留这条草稿');
+    assert.equal(await page.locator('#agent-background').inputValue(), '尚未保存的会话背景');
+
+    await page.locator('#agent-run-toggle').click();
+    await page.evaluate(() => FaxToolboxUi.skinActions['navigation.home'].run({}));
+    await page.locator('.sidebar [data-view="ai"]').click();
+    assert.equal(await panel.isVisible(), false);
+    assert.equal((await command(page, 'agent.send')).length, 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
+
+test("narrow module drawers contain focus, preserve nested selects and restore desktop layout", { timeout: 60000 }, async () => {
+  const f = await fixture(), { page } = f;
+  try {
+    await page.setViewportSize({ width: 390, height: 600 });
+    await emit(page, { kind: 'course.catalog', live: true, currentId: 'one', entries: [
+      { id: 'one', name: '第一章' }, { id: 'two', name: '第二章' },
+    ] });
+    for (const view of ['course', 'homework', 'ai']) {
+      await page.evaluate(view => FaxToolboxUi.skinActions['module.' + view + '.open'].run({}), view);
+      const trigger = page.locator(view === 'ai' ? '#agent-sidebar-toggle' : '#view-' + view + ' .study-toggle');
+      await trigger.locator('svg').click();
+      const drawer = page.locator('#view-' + view + ' dialog.ui-drawer');
+      assert.equal(await drawer.isVisible(), true);
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await drawer.evaluate(node => node.contains(document.activeElement)), true);
+      await page.evaluate(() => document.querySelector('.sidebar a').focus());
+      assert.equal(await drawer.evaluate(node => node.contains(document.activeElement)), true, 'Modal background cannot take focus');
+      if (view === 'course') {
+        const combo = drawer.getByRole('combobox', { name: '选择章节' });
+        await combo.click();
+        await page.keyboard.press('ArrowDown');
+        await page.keyboard.press('Escape');
+        assert.equal(await drawer.isVisible(), true);
+        assert.equal(await page.locator('#course-chapters').inputValue(), 'one');
+        assert.equal(await combo.evaluate(node => node === document.activeElement), true);
+        await capture(page, 'course-drawer-narrow');
+      }
+      await page.keyboard.press('Escape');
+      assert.equal(await drawer.isVisible(), false);
+      assert.equal(await trigger.evaluate(node => node === document.activeElement), true);
+      await trigger.click();
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.waitForFunction(view => !document.querySelector('#view-' + view + ' dialog.ui-drawer').open, view);
+      assert.equal(await drawer.isVisible(), false);
+      assert.equal(await page.locator('#view-' + view + (view === 'ai' ? ' .agent-side' : ' .study-side')).isVisible(), true);
+      await page.setViewportSize({ width: 390, height: 600 });
+      await trigger.click();
+      await page.mouse.click(389, 599);
+      assert.equal(await drawer.isVisible(), false, 'Backdrop closes the drawer');
+    }
+    assert.equal((await command(page, 'course.start')).length, 0);
+    assert.equal((await command(page, 'course.stop')).length, 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
 
 test(
   "public navigation, search, draft safety, keyboard palette and recent tools",

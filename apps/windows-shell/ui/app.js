@@ -21,6 +21,7 @@
   let currentView = '';
   let restoringAgentSnapshot = false;
   let agentMode = 'chat', agentEffort = 'normal', agentProvider = '', agentModel = '';
+  let agentDrawer, agentRunPopover;
   const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const activity = [];
   let activityFilter = 'all';
@@ -173,13 +174,11 @@
       const main = document.createElement('div'); main.className = 'study-main';
       const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'study-toggle secondary';
       toggle.textContent = '☰  分类'; toggle.setAttribute('aria-label', '打开' + viewNames[id] + '分类'); toggle.setAttribute('aria-expanded', 'false');
-      toggle.addEventListener('click', () => { layout.classList.toggle('side-open'); toggle.setAttribute('aria-expanded', String(layout.classList.contains('side-open'))); });
-      layout.addEventListener('pointerdown', event => { if (layout.classList.contains('side-open') && !side.contains(event.target) && event.target !== toggle) { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); } });
-      layout.addEventListener('keydown', event => { if (event.key === 'Escape') { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); } });
       for (const node of primary) main.append(node);
       main.prepend(toggle);
       focusedMenu(side, secondary, initial);
       layout.append(side, main); view.append(layout);
+      window.FaxUi.createDrawer({trigger: toggle, panel: side, media: '(max-width: 680px)', label: viewNames[id] + '分类'});
     }
     const course = $('view-course');
     const courseActions = course.querySelector('.course-actions');
@@ -197,6 +196,7 @@
       {key: 'progress', label: '校对进度', nodes: [homework.querySelector('.homework-progress-card')]},
       {key: 'ai', label: 'AI 校对', nodes: [homework.querySelector('.ai-card')]}
     ], 'page');
+    agentDrawer = window.FaxUi.createDrawer({trigger: $('agent-sidebar-toggle'), panel: agentSide, media: '(max-width: 900px)', label: '项目与会话'});
   }
   setupFocusedViews();
   for (const id of ['course-ai-open', 'homework-ai-open']) $(id).innerHTML = '<span>模型设置</span>' + uiIcon('arrow');
@@ -212,8 +212,6 @@
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
     const previousView = currentView;
     currentView = view;
-    if (view !== 'ai') { document.querySelector('.agent-side')?.classList.remove('mobile-open'); $('agent-sidebar-toggle')?.setAttribute('aria-expanded', 'false'); }
-    if (previousView !== view) for (const layout of document.querySelectorAll('.study-layout.side-open')) { layout.classList.remove('side-open'); layout.querySelector('.study-toggle')?.setAttribute('aria-expanded', 'false'); }
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
@@ -602,7 +600,7 @@
       const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
       select.textContent = session.title || '新任务'; select.title = select.textContent;
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
-      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); document.querySelector('.agent-side').classList.remove('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'false'); });
+      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); if (agentDrawer.isOpen()) { agentDrawer.close(false); $('agent-prompt').focus(); } });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
       remove.innerHTML = uiIcon('close'); remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
       remove.addEventListener('click', () => { if (!agentBusy) confirmAction('删除会话', `删除「${session.title || '新任务'}」及其记录？此操作无法撤销。`, () => { if (!agentBusy) send('agent.session.delete', {sessionId: session.id}); }); });
@@ -720,34 +718,34 @@
     folders.setAttribute('webkitdirectory', ''); folders.hidden = true;
     form.append(documents, folders);
     const plus = document.createElement('button'); plus.type = 'button'; plus.className = 'agent-plus';
-    plus.textContent = '＋'; plus.title = '添加'; plus.setAttribute('aria-label', '添加'); plus.setAttribute('aria-expanded', 'false');
+    plus.innerHTML = window.FaxIcons.svg('plus'); plus.title = '添加'; plus.setAttribute('aria-label', '添加'); plus.setAttribute('aria-expanded', 'false');
     actions.insertBefore(plus, oldAdd);
     const menu = document.createElement('div'); menu.className = 'agent-add-menu'; menu.hidden = true; form.insertBefore(menu, actions);
+    const popover = window.FaxUi.createPopover({trigger: plus, panel: menu, menu: true});
     const heading = label => { const title = document.createElement('small'); title.textContent = label; menu.append(title); };
     const option = (icon, label, description, action) => {
       const button = document.createElement('button'); button.type = 'button';
-      button.innerHTML = `<span class="agent-add-icon" aria-hidden="true">${icon}</span><span><strong>${label}</strong><em>${description}</em></span>`;
-      button.addEventListener('click', () => { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); action(); });
+      button.innerHTML = `<span class="agent-add-icon" aria-hidden="true">${window.FaxIcons.svg(icon)}</span><span><strong>${label}</strong><em>${description}</em></span>`;
+      button.role = 'menuitem';
+      button.addEventListener('click', () => { popover.close(true); action(); });
       menu.append(button);
     };
     heading('添加');
-    option('▤', '文件和文件夹', '文档、图片或文件夹', () => documents.click());
-    option('▧', '选择文件夹', '添加文件夹中的文档', () => folders.click());
-    option('◎', '目标', '设置本次对话的长期背景', () => {
-      document.querySelector('[data-agent-section="memory"]')?.click(); $('agent-background').focus();
+    option('attach', '文件和文件夹', '文档、图片或文件夹', () => documents.click());
+    option('folder', '选择文件夹', '添加文件夹中的文档', () => folders.click());
+    option('target', '目标', '设置本次对话的长期背景', () => {
+      agentDrawer.open(); document.querySelector('[data-agent-section="memory"]')?.click(); $('agent-background').focus();
     });
-    option('☷', '计划模式', '下一条消息只制定计划', () => {
+    option('plan', '计划模式', '下一条消息只制定计划', () => {
       agentPlanOnly = !agentPlanOnly;
       plus.classList.toggle('plan-active', agentPlanOnly);
       plus.title = agentPlanOnly ? '计划模式已开启' : '添加';
       $('agent-state').textContent = agentPlanOnly ? '计划模式：下一条消息只制定计划' : '';
     });
-    option('✎', '绘图', '手绘后作为图片发送', openAgentSketch);
+    option('draw', '绘图', '手绘后作为图片发送', openAgentSketch);
     heading('工具箱');
-    option('◫', '学习通', '打开学习通模块', openCourse);
-    option('✓', '作业校对', '打开作业校对模块', openHomework);
-    plus.addEventListener('click', () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); });
-    document.addEventListener('click', event => { if (!form.contains(event.target)) { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); } });
+    option('course', '学习通', '打开学习通模块', openCourse);
+    option('homework', '作业校对', '打开作业校对模块', openHomework);
     documents.addEventListener('change', async () => { await addAgentFiles([...documents.files].map(file => ({file, name: file.name}))); documents.value = ''; });
     folders.addEventListener('change', async () => { await addAgentFiles([...folders.files].map(file => ({file, name: file.webkitRelativePath || file.name}))); folders.value = ''; });
     const rate = document.createElement('span'); rate.id = 'agent-token-rate'; rate.hidden = true;
@@ -1259,6 +1257,7 @@
     event.preventDefault();
     closeContextMenu();
     contextTarget = event.target; contextFocus=document.activeElement; window.FaxUi?.closeOverlays();
+    (event.target.closest('dialog[open]') || document.body).append(contextMenu, contextSubmenu);
     window.FaxUi?.inherit(event.target,contextMenu);window.FaxUi?.inherit(event.target,contextSubmenu);
     renderContextItems(contextMenu, buildContextActions(contextTarget));
     contextMenu.hidden = false;
@@ -1303,7 +1302,7 @@
       if (host === contextMenu) button.addEventListener('pointerenter', () => action.items ? showContextSubmenu(action.items, button) : hideContextSubmenu());
       button.addEventListener('click', () => {
         if (action.items) { showContextSubmenu(action.items, button); contextSubmenu.querySelector('button:not(:disabled)')?.focus(); return; }
-        closeContextMenu(); action.run?.();
+        closeContextMenu(true); action.run?.();
       });
       host.append(button);
     }
@@ -1324,13 +1323,13 @@
     } else if(event.key==='ArrowRight'&&document.activeElement?._menuItems) {
       event.preventDefault();showContextSubmenu(document.activeElement._menuItems,document.activeElement);contextSubmenu.querySelector('button:not(:disabled)')?.focus();
     } else if(event.key==='ArrowLeft'&&menu===contextSubmenu) {event.preventDefault();hideContextSubmenu();submenuTrigger?.focus();}
-    else if(event.key==='Tab')closeContextMenu();
+    else if(event.key==='Tab')closeContextMenu(true);
   });
   document.addEventListener('contextmenu', showContextMenu);
   document.addEventListener('pointerdown', event => { if (!event.target.closest('.toolbox-context-menu')) closeContextMenu(); }, true);
   document.addEventListener('scroll', event => { if (contextTarget&&!event.target.closest?.('.toolbox-context-menu')) { const rect=contextTarget.getBoundingClientRect();if(Math.abs(rect.top-contextAnchor.top)>.5||Math.abs(rect.left-contextAnchor.left)>.5)closeContextMenu(); } }, true);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); if (!contextSubmenu.hidden) hideContextSubmenu(); else closeContextMenu(true); }
+    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); event.stopImmediatePropagation(); if (!contextSubmenu.hidden) { const trigger=submenuTrigger; hideContextSubmenu();trigger?.focus(); } else closeContextMenu(true); }
     if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus({preventScroll:true}); }
     if (currentView !== 'ai' || agentBusy || confirmation.open || !$('command-palette').hidden || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
     const row = document.activeElement?.closest('.agent-session-row') || [...document.querySelectorAll('.agent-session-row')].find(item => item.dataset.sessionId === activeAgentSessionId);
@@ -1342,6 +1341,7 @@
     else if (event.ctrlKey && event.shiftKey && key === 'a') { event.preventDefault(); closeContextMenu(); send('agent.session.archive', {sessionId: row.dataset.sessionId}); }
   });
   window.FaxToolboxContextMenu = Object.freeze({openFor: (selector) => { const element = document.querySelector(selector); if (!element) return false; const rect = element.getBoundingClientRect(); showContextMenu({target: element, clientX: rect.left + 8, clientY: rect.bottom - 8, preventDefault() {}}); return !contextMenu.hidden; }});
+  addEventListener('fax:view-changed', () => closeContextMenu());
   const palette = $('command-palette');
   let paletteTrigger;
   function filterPalette() {
@@ -1401,17 +1401,10 @@
     item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
-  $('agent-run-toggle').addEventListener('click', () => {
-    const panel = $('agent-run-panel'); panel.hidden = !panel.hidden;
-    $('agent-run-toggle').setAttribute('aria-expanded', String(!panel.hidden));
-    if (!panel.hidden && agentProvider === 'ollama') send('agent.models');
-    else if (!panel.hidden) renderAgentMessage({kind: 'agent.models', extra: {models: []}});
-  });
-  document.addEventListener('click', event => {
-    if (!event.target.closest('.agent-run-settings')) {
-      $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
-    }
-  });
+  agentRunPopover = window.FaxUi.createPopover({trigger: $('agent-run-toggle'), panel: $('agent-run-panel'), onOpen: () => {
+    if (agentProvider === 'ollama') send('agent.models');
+    else renderAgentMessage({kind: 'agent.models', extra: {models: []}});
+  }});
   for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.addEventListener('change', () => {
     if (!radio.checked || agentBusy) return;
     agentMode = radio.value; updateAgentRunOptions(); send('agent.options', {mode: agentMode, effort: agentEffort});
@@ -1430,12 +1423,11 @@
     else if (button.classList.contains('agent-model-configure')) send('agent.configure');
     else if (button.dataset.agentModel && button.dataset.agentModel !== agentModel)
       send('agent.model', {model: button.dataset.agentModel});
-    $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
+    agentRunPopover.close(true);
   });
   $('agent-background').addEventListener('change', event => send('agent.background', {text: event.target.value}));
   $('agent-memory-pool').addEventListener('change', event => send('agent.memory', {text: event.target.value}));
   $('agent-system-prompt').addEventListener('change', event => send('agent.system', {text: event.target.value}));
-  $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
   $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
   $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
   setupAgentAddMenu();

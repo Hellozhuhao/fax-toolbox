@@ -3,6 +3,7 @@
   "use strict";
   const descriptors = new Map();
   let active,
+    floating,
     sequence = 0,
     scheduled = 0,
     tooltipTimer,
@@ -88,6 +89,7 @@
   }
   function openSelect(entry, start) {
     if (entry.select.matches(":disabled")) return;
+    if (floating && !floating.panel.contains(entry.select)) floating.close();
     closeSelect();
     active = entry;
     const popup = document.createElement("div");
@@ -286,6 +288,153 @@
     window.FaxIcons.hydrate();
     if (active && !active.combo.checkVisibility()) closeSelect();
   }
+
+  const focusable = (host) => [...host.querySelectorAll(
+    'button:not(:disabled),a[href],input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[tabindex="0"]',
+  )].filter((node) => node.tabIndex >= 0 && node.checkVisibility());
+
+  // Keep popovers in their module's DOM/skin scope while drawing above clipped panes.
+  function createPopover({ trigger, panel, menu = false, onOpen }) {
+    panel.id ||= "ui-popover-" + ++sequence;
+    panel.classList.add("ui-floating-panel");
+    panel.role = menu ? "menu" : "region";
+    panel.setAttribute("aria-label", trigger.getAttribute("aria-label") || trigger.textContent.trim());
+    trigger.setAttribute("aria-controls", panel.id);
+    trigger.setAttribute("aria-expanded", "false");
+    if (menu) {
+      trigger.setAttribute("aria-haspopup", "menu");
+      panel.querySelectorAll("button").forEach((node) => node.role = "menuitem");
+    }
+    if (panel.showPopover) panel.setAttribute("popover", "manual");
+    const entry = {
+      panel,
+      close(restore = false) {
+        if (panel.hidden) return;
+        if (active && panel.contains(active.select)) closeSelect();
+        if (panel.matches(":popover-open")) panel.hidePopover();
+        panel.hidden = true;
+        trigger.setAttribute("aria-expanded", "false");
+        if (floating === entry) floating = null;
+        if (restore && trigger.checkVisibility()) trigger.focus({ preventScroll: true });
+      },
+      position() {
+        if (panel.hidden) return;
+        if (!trigger.checkVisibility()) { entry.close(); return; }
+        const rect = trigger.getBoundingClientRect();
+        panel.style.maxHeight = Math.max(80, innerHeight - 24) + "px";
+        panel.style.maxWidth = Math.max(160, innerWidth - 24) + "px";
+        const { width, height } = panel.getBoundingClientRect();
+        const above = rect.top - height - 8;
+        const top = above >= 12 ? above : Math.min(rect.bottom + 8, innerHeight - height - 12);
+        panel.style.left = Math.max(12, Math.min(rect.left, innerWidth - width - 12)) + "px";
+        panel.style.top = Math.max(12, top) + "px";
+      },
+      open(last = false) {
+        if (trigger.matches(":disabled")) return;
+        closeSelect();
+        floating?.close();
+        hideTooltip();
+        inherit(trigger, panel);
+        panel.hidden = false;
+        floating = entry;
+        trigger.setAttribute("aria-expanded", "true");
+        if (panel.showPopover) panel.showPopover();
+        onOpen?.();
+        entry.position();
+        const items = focusable(panel);
+        (last ? items.at(-1) : items[0])?.focus({ preventScroll: true });
+      },
+    };
+    trigger.addEventListener("click", () => panel.hidden ? entry.open() : entry.close(true));
+    trigger.addEventListener("keydown", (event) => {
+      if (["ArrowDown", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        entry.open(event.key === "ArrowUp");
+      }
+    });
+    panel.addEventListener("keydown", (event) => {
+      if (!menu || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+      const items = focusable(panel), index = items.indexOf(document.activeElement);
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 :
+        (index + (event.key === "ArrowUp" ? -1 : 1) + items.length) % items.length;
+      items[next]?.focus();
+    });
+    document.addEventListener("pointerdown", (event) => {
+      if (!panel.contains(event.target) && !trigger.contains(event.target)) entry.close();
+    });
+    document.addEventListener("focusin", (event) => {
+      if (!panel.contains(event.target) && !trigger.contains(event.target) &&
+          !active?.popup.contains(event.target)) entry.close();
+    });
+    new ResizeObserver(() => entry.position()).observe(panel);
+    return entry;
+  }
+
+  // Native dialogs supply focus containment, background inertness and Escape.
+  // The same existing panel returns to its desktop position without losing input.
+  function createDrawer({ trigger, panel, media, label }) {
+    const breakpoint = matchMedia(media), anchor = document.createComment("drawer position");
+    panel.before(anchor);
+    const dialog = document.createElement("dialog");
+    dialog.className = "ui-drawer";
+    dialog.id = "ui-drawer-" + ++sequence;
+    dialog.setAttribute("aria-label", label);
+    dialog.hidden = true;
+    const heading = document.createElement("div");
+    heading.className = "ui-drawer-heading";
+    const title = document.createElement("h2");
+    title.textContent = label;
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.className = "secondary ui-drawer-close";
+    dismiss.setAttribute("aria-label", "关闭" + label);
+    dismiss.innerHTML = icon("close");
+    heading.append(title, dismiss);
+    dialog.append(heading);
+    anchor.parentElement.append(dialog);
+    trigger.setAttribute("aria-controls", dialog.id);
+    trigger.setAttribute("aria-haspopup", "dialog");
+    trigger.setAttribute("aria-expanded", "false");
+    const restorePanel = () => {
+      if (dialog.open) return;
+      if (dialog.contains(panel)) anchor.after(panel);
+      dialog.hidden = true;
+      trigger.setAttribute("aria-expanded", "false");
+    };
+    const close = (restore = true) => {
+      if (!dialog.open) return;
+      if (active && dialog.contains(active.select)) closeSelect();
+      if (floating && dialog.contains(floating.panel)) floating.close();
+      dialog.close();
+      restorePanel();
+      if (restore && trigger.checkVisibility()) trigger.focus({ preventScroll: true });
+    };
+    const open = () => {
+      if (!breakpoint.matches || dialog.open) return;
+      floating?.close();
+      closeSelect();
+      hideTooltip();
+      inherit(panel, dialog);
+      dialog.append(panel);
+      dialog.hidden = false;
+      trigger.setAttribute("aria-expanded", "true");
+      dialog.showModal();
+      (panel.querySelector('[role="tab"][aria-selected="true"]') || focusable(panel)[0] || dismiss).focus();
+    };
+    trigger.addEventListener("click", () => dialog.open ? close() : open());
+    dismiss.addEventListener("click", () => close());
+    dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
+    dialog.addEventListener("close", restorePanel);
+    dialog.addEventListener("click", (event) => {
+      if (event.target !== dialog) return;
+      const rect = dialog.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) close();
+    });
+    breakpoint.addEventListener("change", () => close(false));
+    addEventListener("fax:view-changed", () => close(false));
+    return { open, close, isOpen: () => dialog.open };
+  }
   const observer = new MutationObserver((records) => {
     if (
       !records.some(
@@ -321,19 +470,23 @@
     "scroll",
     (event) => {
       if (active && !active.popup.contains(event.target)) positionSelect();
+      if (floating && !floating.panel.contains(event.target)) floating.position();
     },
     true,
   );
   addEventListener("resize", () => {
     positionSelect();
+    floating?.position();
     hideTooltip();
   });
   addEventListener("fax:view-changed", () => {
     closeSelect();
+    floating?.close();
     hideTooltip();
   });
   addEventListener("fax:skin-state", () => {
     closeSelect();
+    floating?.close();
     refreshAll();
   });
   document.addEventListener("reset", () => setTimeout(refreshAll, 0));
@@ -343,9 +496,11 @@
   tooltip.id = "ui-tooltip";
   tooltip.role = "tooltip";
   tooltip.hidden = true;
+  if (tooltip.showPopover) tooltip.setAttribute("popover", "manual");
   document.body.append(tooltip);
   function hideTooltip() {
     clearTimeout(tooltipTimer);
+    if (tooltip.matches(":popover-open")) tooltip.hidePopover();
     tooltip.hidden = true;
     if (tooltipTarget?.getAttribute("aria-describedby") === tooltip.id)
       tooltipTarget.removeAttribute("aria-describedby");
@@ -362,9 +517,11 @@
     tooltipTarget = target;
     tooltipTimer = setTimeout(() => {
       if (!target.isConnected || !target.checkVisibility()) return;
+      (target.closest("dialog[open]") || document.body).append(tooltip);
       tooltip.textContent = text;
       inherit(target, tooltip);
       tooltip.hidden = false;
+      if (tooltip.showPopover) tooltip.showPopover();
       const rect = target.getBoundingClientRect();
       tooltip.style.left =
         Math.max(
@@ -398,12 +555,20 @@
   document.addEventListener("pointerdown", hideTooltip);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") hideTooltip();
+    if (event.key === "Escape" && floating && !event.isComposing) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      floating.close(true);
+    }
   });
 
   document.addEventListener(
     "beforetoggle",
     (event) => {
       if (event.target.tagName === "DIALOG" && event.newState === "open")
+        floating?.close();
+      if (event.target.tagName === "DIALOG" && event.newState === "open" &&
+          !event.target.classList.contains("ui-drawer"))
         inherit(
           document.activeElement || document.documentElement,
           event.target,
@@ -447,8 +612,11 @@
   });
   window.FaxUi = Object.freeze({
     refresh: refreshAll,
+    createPopover,
+    createDrawer,
     closeOverlays: () => {
       closeSelect();
+      floating?.close();
       hideTooltip();
     },
     inherit,
