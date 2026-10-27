@@ -52,7 +52,6 @@ internal static class Program
     public static void Main()
     {
         var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        Application.ResourceAssembly = typeof(MainWindow).Assembly;
         app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/FaxToolbox.Windows;component/UiResources.xaml", UriKind.Relative) });
         var assembly = typeof(MainWindow).Assembly;
         var native = assembly.GetType("FaxToolbox.Windows.NativeUi", true)!;

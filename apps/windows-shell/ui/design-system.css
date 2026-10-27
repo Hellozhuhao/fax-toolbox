@@ -1825,6 +1825,10 @@ input[role="switch"]:checked:before {
   color: var(--text);
 }
 #view-ai .agent-workspace-heading {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 10px;
   border-bottom: 1px solid var(--border);
   padding: 14px 20px;
 }

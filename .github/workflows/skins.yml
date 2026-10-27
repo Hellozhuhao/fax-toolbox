@@ -29,12 +29,24 @@ jobs:
           dotnet-version: '10.0.x'
       - run: dotnet run --project tests/skins/SkinStore.Tests.csproj -- .
       - run: dotnet build apps/windows-shell/Toolbox.Windows.csproj --nologo
-      - run: dotnet run --project tests/ui-native/UiSystem.Tests.csproj
+      - name: Exercise and capture native UI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.cache/ui-native' -Force | Out-Null
+          $PSNativeCommandUseErrorActionPreference = $false
+          & dotnet run --project tests/ui-native/UiSystem.Tests.csproj 2>&1 | Tee-Object -FilePath '.cache/ui-native-run.log'
+          $result = $LASTEXITCODE
+          $log = Get-Content '.cache/ui-native-run.log' -Raw
+          $body = "Native UI execution · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```'
+          $body >> $env:GITHUB_STEP_SUMMARY
+          exit $result
         env:
           FAX_NATIVE_SCREENSHOTS: .cache/ui-native
       - name: Render installer states
+        if: always()
         shell: pwsh
         run: |
+          New-Item -ItemType Directory -Path '.cache/ui-native' -Force | Out-Null
           foreach ($state in @('welcome', 'progress', 'complete', 'error')) {
             dotnet run --project apps/windows-installer/Toolbox.Installer.csproj -- --preview ".cache/ui-native/installer-$state.png" $state
             if ($LASTEXITCODE -ne 0) { throw "Installer preview failed: $state" }
