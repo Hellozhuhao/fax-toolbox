@@ -1828,6 +1828,24 @@ input[role="switch"]:checked:before {
   border: 0;
   padding-top: 7px;
   gap: 8px;
+  flex-wrap: wrap;
+}
+#view-ai .agent-run-settings {
+  min-width: 0;
+  max-width: calc(100% - 44px);
+}
+#view-ai #agent-run-toggle {
+  max-width: 100%;
+}
+#view-ai #agent-state {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#view-ai #agent-state:empty {
+  display: none;
+}
+#view-ai #agent-send {
+  margin-inline-start: auto;
 }
 #view-ai .agent-attach {
   background: transparent;

@@ -56,7 +56,7 @@
   });
   $('toolbox-confirm-input').addEventListener('input',()=>{$('toolbox-confirm-accept').disabled=!$('toolbox-confirm-input').value.trim();});
   $('toolbox-confirm-input').addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); $('toolbox-confirm-accept').click(); }
+    if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); $('toolbox-confirm-accept').click(); }
   });
   confirmation.addEventListener('close', () => {
     if (confirmation.open) return;
@@ -501,6 +501,7 @@
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'agent-model-choice'; button.dataset.agentModel = model.name;
+      button.title = model.name;
       const selected = model.name === agentModel;
       button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
       const [title, detail] = agentModelNames(model.name);
@@ -568,7 +569,7 @@
     select.hidden = true; row.insertBefore(input, select); input.focus(); input.select();
     let finished = false;
     const finish = save => { if (finished) return; finished = true; const title = input.value.trim(); input.remove(); select.hidden = false; if (save && title && title !== original) send('agent.session.rename', {sessionId: row.dataset.sessionId, title}); };
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
+    input.addEventListener('keydown', event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
     input.addEventListener('blur', () => finish(true));
   }
   let agentSessionListSignature = '';
@@ -1342,6 +1343,10 @@
   });
   window.FaxToolboxContextMenu = Object.freeze({openFor: (selector) => { const element = document.querySelector(selector); if (!element) return false; const rect = element.getBoundingClientRect(); showContextMenu({target: element, clientX: rect.left + 8, clientY: rect.bottom - 8, preventDefault() {}}); return !contextMenu.hidden; }});
   addEventListener('fax:view-changed', () => closeContextMenu());
+  document.addEventListener('beforetoggle', event => {
+    if (event.target.tagName === 'DIALOG' && event.newState === 'open') closeContextMenu();
+  }, true);
+  addEventListener('resize', () => closeContextMenu());
   const palette = $('command-palette');
   let paletteTrigger;
   function filterPalette() {
@@ -1355,7 +1360,7 @@
   function togglePalette(open) {
     if(open) {
       if(palette.open)return;
-      paletteTrigger=document.activeElement;window.FaxUi?.closeOverlays();
+      paletteTrigger=contextMenu.hidden?document.activeElement:contextFocus;closeContextMenu();window.FaxUi?.closeOverlays();
       $('command-search').value='';filterPalette();palette.hidden=false;palette.showModal();$('command-search').focus();
     } else if(palette.open) palette.close();
   }
@@ -1370,6 +1375,7 @@
     else if(action==='skins')window.FaxWorkspace.openSkins();else show(action);
   });
   palette.addEventListener('keydown',event=>{
+    if(event.isComposing || event.keyCode===229)return;
     const items=[...palette.querySelectorAll('[data-action]:not([hidden])')],index=items.indexOf(document.activeElement);
     if(event.key==='ArrowDown'||event.key==='ArrowUp') {event.preventDefault();items[(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
     else if(event.key==='Enter'&&document.activeElement===$('command-search')) {event.preventDefault();items[0]?.click();}

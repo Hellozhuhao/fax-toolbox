@@ -4,6 +4,7 @@
   let config = null, state = null, dirty = false, busy = false, pending = null, awaitingSave = false;
   let applications = [], detectedOnce = false, detecting = false;
   let savedDraft = '', validationAttempted = false, formMessage = '', formError = false;
+  let savingConfig = null;
   const fieldErrors = new Map();
   const send = (command, extra = {}) => window.chrome?.webview?.postMessage(JSON.stringify({v: 1, id: crypto.randomUUID(), command, ...extra}));
   function setupQuickSettings() {
@@ -56,6 +57,7 @@
   }
   function markDirty() {
     dirty = JSON.stringify(read()) !== savedDraft;
+    syncConnectionChoices();
     formMessage = ''; formError = false;
     if (validationAttempted) validateFields(false);
     syncFormState();
@@ -144,6 +146,15 @@
     }
     if (!applications.length) { const empty = document.createElement('p'); empty.className = 'muted'; empty.textContent = '暂无候选应用。打开目标应用后重新检测，或手动添加。'; holder.append(empty); }
   }
+  function syncConnectionChoices() {
+    for (const button of $('proxy-connections').querySelectorAll('button')) {
+      const connection = button._connection;
+      const selected = connection && [['proxy-core-type', 'coreType'], ['proxy-url', 'proxyUrl'], ['proxy-core', 'xrayPath'], ['proxy-core-config', 'xrayConfig']]
+        .every(([id, key]) => $(id).value === (connection[key] || ''));
+      button.classList.toggle('selected', !!selected);
+      button.setAttribute('aria-pressed', String(!!selected));
+    }
+  }
   function renderDetection(data) {
     detecting = false; $('proxy-detect').disabled = false;
     if (data.error) { $('proxy-detect-status').textContent = data.error; return; }
@@ -151,14 +162,16 @@
     const connections = data.connections || [];
     for (const connection of connections) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'network-connection-choice secondary';
+      button._connection = connection;
       const name = document.createElement('strong'), detail = document.createElement('small'); name.textContent = connection.name;
       detail.textContent = connection.proxyUrl + (connection.ready ? ' · 端口就绪' : ' · 启用时启动'); button.append(name, detail);
       button.title = connection.xrayConfig; button.classList.toggle('selected', connection.xrayConfig === $('proxy-core-config').value);
       button.addEventListener('click', () => {
-        $('proxy-core-type').value = connection.coreType; $('proxy-core').value = connection.xrayPath; $('proxy-core-config').value = connection.xrayConfig; $('proxy-url').value = connection.proxyUrl;
-        holder.querySelectorAll('button').forEach(item => item.classList.toggle('selected', item === button)); markDirty();
+        $('proxy-core-type').value = connection.coreType; $('proxy-core').value = connection.xrayPath || ''; $('proxy-core-config').value = connection.xrayConfig || ''; $('proxy-url').value = connection.proxyUrl;
+        markDirty();
       }); holder.append(button);
     }
+    syncConnectionChoices();
     applications = data.applications || []; renderApplications();
     $('proxy-detect-status').textContent = `检测到 ${connections.length} 个连接、${applications.length} 个候选应用。选择后点击保存配置。`;
   }
@@ -189,6 +202,7 @@
     $('proxy-env-check').checked = value.setEnvironmentProxy !== false;
     dirty = false;
     savedDraft = JSON.stringify(read()); validationAttempted = false; clearFieldErrors();
+    syncConnectionChoices();
     renderApplications();
     if (!detectedOnce) { detectedOnce = true; detect(); }
   }
@@ -199,14 +213,19 @@
       setSystemProxy: $('proxy-system-check').checked, setEnvironmentProxy: $('proxy-env-check').checked};
   }
   function render(data) {
+    // A background refresh may finish after Save was clicked. Only the host's
+    // echo of this submitted draft can acknowledge it; keep waiting otherwise.
+    if (awaitingSave && data.ok && (!data.config || !Object.entries(savingConfig || {}).every(
+      ([key, value]) => JSON.stringify(data.config[key]) === JSON.stringify(value)))) return;
     setBusy(false);
     if (!data.ok) {
       if (awaitingSave) { formMessage = (data.error || '保存失败。') + ' 输入已保留，可以修改后重试。'; formError = true; }
-      awaitingSave = false; feedback(data.error || '操作失败，请检查日志。', true); syncFormState(); return;
+      awaitingSave = false; savingConfig = null; feedback(data.error || '操作失败，请检查日志。', true); syncFormState(); return;
     }
     const saved = awaitingSave;
     if (data.config && (!config || awaitingSave || !dirty)) fill(data.config);
     awaitingSave = false;
+    savingConfig = null;
     if (saved) { formMessage = '配置已保存。'; formError = false; }
     syncFormState();
     if (data.detail) feedback(data.detail);
@@ -263,7 +282,7 @@
   $('proxy-config').addEventListener('submit', event => {
     event.preventDefault(); if (busy || !config || state?.running || state?.coreRunning) return;
     if (!validateFields()) { formMessage = '请修改标出的设置后再保存。'; formError = true; syncFormState(); return; }
-    awaitingSave = true; setBusy(true); feedback('正在保存…'); send('proxy.save', {config: read()});
+    savingConfig = read(); awaitingSave = true; setBusy(true); feedback('正在保存…'); send('proxy.save', {config: savingConfig});
   });
   $('proxy-discard').addEventListener('click', async () => {
     if (!dirty || busy || !config) return;

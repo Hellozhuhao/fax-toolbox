@@ -269,6 +269,9 @@ test("network settings reveal errors, retain failed saves and explicitly discard
     assert.equal(await page.locator('#proxy-save').isDisabled(), true);
     const submitted = (await command(page, 'proxy.save'))[0].config;
     assert.deepEqual(submitted, { ...original, proxyUrl: 'http://localhost:10819', stableSeconds: 0, setEnvironmentProxy: false });
+    await emit(page, { kind: 'proxy.status', data: { ok: true, config: original, status } });
+    assert.equal(await page.locator('#proxy-save').isDisabled(), true, 'An earlier status response cannot acknowledge Save');
+    assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819');
     await emit(page, { kind: 'proxy.status', data: { ok: false, error: '暂时无法写入配置文件。' } });
     assert.match(await page.locator('#proxy-save-state').innerText(), /输入已保留/);
     assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819');
@@ -280,7 +283,13 @@ test("network settings reveal errors, retain failed saves and explicitly discard
     await emit(page, { kind: 'proxy.status', data: { ok: true, config: submitted, status, detail: '配置已保存' } });
     assert.match(await page.locator('#proxy-save-state').innerText(), /配置已保存/);
     assert.equal(await page.locator('#proxy-discard').isDisabled(), true);
-    await page.locator('#proxy-url').fill('http://127.0.0.1:9999');
+    await emit(page, { kind: 'proxy.detected', connections: [
+      { name: '已保存连接', proxyUrl: submitted.proxyUrl, coreType: 'xray', xrayPath: '', xrayConfig: '' },
+      { name: '另一个连接', proxyUrl: 'http://127.0.0.1:9999', coreType: 'xray', xrayPath: '', xrayConfig: '' },
+    ], applications: [] });
+    const other = page.getByRole('button', { name: /^另一个连接/ });
+    await other.click();
+    assert.equal(await other.getAttribute('aria-pressed'), 'true');
     await page.locator('.sidebar [data-view="home"]').click();
     await page.evaluate(() => FaxToolboxUi.skinActions['module.proxy.open'].run({}));
     assert.equal(await page.locator('#proxy-url').inputValue(), 'http://127.0.0.1:9999');
@@ -290,8 +299,106 @@ test("network settings reveal errors, retain failed saves and explicitly discard
     await page.locator('#proxy-discard').click();
     await page.locator('#toolbox-confirm-accept').click();
     assert.equal(await page.locator('#proxy-url').inputValue(), 'http://localhost:10819');
+    assert.equal(await other.getAttribute('aria-pressed'), 'false');
+    assert.equal(await page.getByRole('button', { name: /^已保存连接/ }).getAttribute('aria-pressed'), 'true');
     assert.equal((await command(page, 'proxy.save')).length, 2, 'Discard does not execute a system operation');
     assert.equal((await command(page, 'proxy.on')).length, 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
+
+test("short windows, enlarged text and forced colors keep long model lists and controls usable", { timeout: 60000 }, async () => {
+  const f = await fixture(), { page } = f;
+  try {
+    await theme(page, 'fax.midnight');
+    await page.setViewportSize({ width: 640, height: 480 });
+    await page.evaluate(() => FaxToolboxUi.skinActions['module.proxy.open'].run({}));
+    await emit(page, { kind: 'proxy.status', data: { ok: true,
+      config: { proxyUrl: 'http://127.0.0.1:10809' },
+      status: { running: false, coreRunning: false, portReady: true, logs: [] },
+    } });
+    await page.locator('#proxy-url').fill('invalid');
+    await page.locator('#proxy-save').click();
+    assert.equal(await page.locator('#proxy-url').getAttribute('aria-invalid'), 'true');
+    await capture(page, 'network-validation-dark');
+    await page.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' });
+    await page.evaluate(() => document.documentElement.style.fontSize = '32px');
+    for (const view of ['home', 'modules', 'activity', 'settings', 'course', 'homework', 'proxy', 'ai']) {
+      await page.evaluate(view => FaxToolboxUi.skinActions[
+        ['home', 'modules', 'activity', 'settings'].includes(view) ? 'navigation.' + view : 'module.' + view + '.open'
+      ].run({}), view);
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false, 'Text-scale overflow in ' + view);
+    }
+    const longModel = '模型名称很长也需要完整保留-'.repeat(10);
+    await emit(page, { kind: 'agent.options', extra: { provider: 'ollama', model: longModel } });
+    await page.setViewportSize({ width: 320, height: 480 });
+    for (const selector of ['.agent-plus', '#agent-run-toggle', '#agent-send']) {
+      const bounds = await page.locator(selector).boundingBox();
+      assert.ok(bounds.x >= 0 && bounds.x + bounds.width <= 321, selector + ' remains inside a narrow workspace');
+    }
+    await page.setViewportSize({ width: 640, height: 480 });
+    await page.locator('#agent-run-toggle').click();
+    await emit(page, { kind: 'agent.models', extra: { models: Array.from({ length: 80 }, (_, index) => ({ name: longModel + index, size: 5 * 1024 ** 3 })) } });
+    const panel = page.locator('#agent-run-panel'), bounds = await panel.boundingBox();
+    assert.ok(bounds.x >= 0 && bounds.y >= 0 && bounds.x + bounds.width <= 641 && bounds.y + bounds.height <= 481);
+    assert.equal(await page.locator('#agent-model-list').evaluate(node => node.scrollHeight > node.clientHeight), true);
+    assert.equal(await panel.evaluate(node => getComputedStyle(node).borderTopStyle), 'solid');
+    await panel.locator('.agent-model-choice').last().scrollIntoViewIfNeeded();
+    await capture(page, 'agent-options-high-contrast');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#agent-run-toggle').evaluate(node => node === document.activeElement), true);
+    await page.locator('#agent-sidebar-toggle').click();
+    const drawer = page.getByRole('dialog', { name: '项目与会话', exact: true });
+    assert.equal(await drawer.isVisible(), true);
+    assert.equal(await drawer.evaluate(node => getComputedStyle(node).borderTopStyle), 'solid');
+    await page.keyboard.press('Escape');
+    assert.equal(await drawer.isVisible(), false);
+
+    // Opening another overlay must not leave a stale context menu behind it.
+    await page.locator('#agent-prompt').focus();
+    await page.keyboard.press('Shift+F10');
+    assert.equal(await page.locator('#toolbox-context-menu').isVisible(), true);
+    await page.keyboard.press('Control+k');
+    assert.equal(await page.locator('#command-palette').isVisible(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator('#toolbox-context-menu').isVisible(), false);
+    assert.equal(await page.locator('#agent-prompt').evaluate(node => node === document.activeElement), true);
+    assert.equal((await command(page, 'agent.send')).length, 0);
+    assert.deepEqual(f.errors, []);
+  } finally { await f.close(); }
+});
+
+test("Chinese IME confirmation preserves section names, inline renames and submenu focus", { timeout: 60000 }, async () => {
+  const f = await fixture(), { page } = f;
+  try {
+    await page.locator('.sidebar [data-view="ai"]').click();
+    await emit(page, { kind: 'agent.sessions', extra: { activeId: 's1', sessions: [{ id: 's1', title: '原有对话' }] } });
+    await page.locator('.agent-session-select').focus();
+    await page.keyboard.press('Shift+F10');
+    const section = page.locator('#toolbox-context-menu').getByRole('menuitem', { name: /^分区/ });
+    await section.focus();
+    await page.keyboard.press('ArrowRight');
+    assert.equal(await page.locator('#toolbox-context-submenu').isVisible(), true);
+    await page.keyboard.press('Escape');
+    assert.equal(await section.evaluate(node => node === document.activeElement), true);
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    await page.locator('#toolbox-confirm-input').fill('学习安排');
+    await page.locator('#toolbox-confirm-input').dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 });
+    assert.equal(await page.locator('#toolbox-confirm').isVisible(), true);
+    assert.equal((await command(page, 'agent.session.section')).length, 0);
+    await page.keyboard.press('Enter');
+    assert.equal((await command(page, 'agent.session.section')).at(-1).section, '学习安排');
+
+    await page.locator('.agent-session-select').focus();
+    await page.keyboard.press('Shift+F10');
+    await page.locator('#toolbox-context-menu').getByRole('menuitem', { name: /^重命名/ }).click();
+    await page.locator('.agent-session-rename').fill('重命名后的中文标题');
+    await page.locator('.agent-session-rename').dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 });
+    assert.equal(await page.locator('.agent-session-rename').isVisible(), true);
+    assert.equal((await command(page, 'agent.session.rename')).length, 0);
+    await page.keyboard.press('Enter');
+    assert.equal((await command(page, 'agent.session.rename')).at(-1).title, '重命名后的中文标题');
     assert.deepEqual(f.errors, []);
   } finally { await f.close(); }
 });
@@ -351,6 +458,8 @@ test(
       );
       await page.keyboard.press("Control+k");
       await page.locator("#command-search").fill("皮肤");
+      await page.locator("#command-search").dispatchEvent('keydown', { key: 'Enter', isComposing: true, keyCode: 229 });
+      assert.equal(await page.locator('#command-palette').isVisible(), true, 'Chinese candidate confirmation must not navigate');
       await page.keyboard.press("Enter");
       await page.waitForFunction(
         () => !document.getElementById("status-skins").hidden,

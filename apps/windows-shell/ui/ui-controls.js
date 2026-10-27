@@ -321,6 +321,9 @@
         if (panel.hidden) return;
         if (!trigger.checkVisibility()) { entry.close(); return; }
         const rect = trigger.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > innerHeight || rect.right < 0 || rect.left > innerWidth) {
+          entry.close(); return;
+        }
         panel.style.maxHeight = Math.max(80, innerHeight - 24) + "px";
         panel.style.maxWidth = Math.max(160, innerWidth - 24) + "px";
         const { width, height } = panel.getBoundingClientRect();
