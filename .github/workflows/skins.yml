@@ -55,6 +55,7 @@ jobs:
         if: always()
         with:
           name: native-ui-review
+          include-hidden-files: true
           path: |
             .cache/ui-native
             .cache/ui-native-run.log
@@ -115,7 +116,13 @@ jobs:
           $log = (Get-Content '.cache/windows-validation.log' -Tail 100) -join "`n"
           ("Windows full validation · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```') >> $env:GITHUB_STEP_SUMMARY
           if ($result -ne 0) {
-            $detail = $log.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            $failures = @(Get-ChildItem '.cache' -Filter 'windows-*.txt' | ForEach-Object {
+              $content = Get-Content $_.FullName -Raw
+              if ($content.StartsWith('FAIL')) { $_.Name + ': ' + $content }
+            })
+            $failureLog = (@($failures) + @(Get-Content $stdout -Tail 18) + @(Get-Content $stderr -Tail 8)) -join "`n"
+            if ($failureLog.Length -gt 3500) { $failureLog = $failureLog.Substring(0, 3500) }
+            $detail = $failureLog.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::error title=Windows validation failed::$detail"
           }
           exit $result
@@ -123,6 +130,7 @@ jobs:
         if: always()
         with:
           name: windows-validation
+          include-hidden-files: true
           path: |
             .cache/windows-validation*.log
             .cache/windows-*.txt*
