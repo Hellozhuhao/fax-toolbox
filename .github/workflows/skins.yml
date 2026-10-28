@@ -87,9 +87,29 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path '.cache' -Force | Out-Null
-          $PSNativeCommandUseErrorActionPreference = $false
-          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test 2>&1 | Tee-Object -FilePath '.cache/windows-validation.log'
-          $result = $LASTEXITCODE
+          # Keep GUI/browser descendants from holding a shell pipeline open.
+          # Wait for the actual validation process and preserve its exit status.
+          $stdout = Join-Path $PWD '.cache/windows-validation-stdout.log'
+          $stderr = Join-Path $PWD '.cache/windows-validation-stderr.log'
+          $process = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/build-windows.ps1', '-Test' -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $deadline = [DateTime]::UtcNow.AddMinutes(15)
+          $lastProgress = ''
+          while (-not $process.WaitForExit(30000)) {
+            $progress = @((Get-Content $stdout -Tail 1 -ErrorAction SilentlyContinue), (Get-Content $stderr -Tail 1 -ErrorAction SilentlyContinue)) -join ' | '
+            if ($progress -ne $lastProgress) {
+              $detail = $progress.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::notice title=Windows validation progress::$detail"
+              $lastProgress = $progress
+            }
+            if ([DateTime]::UtcNow -gt $deadline) {
+              & taskkill.exe /PID $process.Id /T /F
+              throw 'Windows development validation exceeded 15 minutes; inspect captured stdout/stderr'
+            }
+          }
+          $process.Refresh()
+          $result = $process.ExitCode
+          @('--- stdout ---', (Get-Content $stdout -Raw), '--- stderr ---', (Get-Content $stderr -Raw)) | Set-Content '.cache/windows-validation.log'
+          Get-Content '.cache/windows-validation.log'
           $log = (Get-Content '.cache/windows-validation.log' -Tail 100) -join "`n"
           ("Windows full validation · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```') >> $env:GITHUB_STEP_SUMMARY
           if ($result -ne 0) {
@@ -102,5 +122,5 @@ jobs:
         with:
           name: windows-validation
           path: |
-            .cache/windows-validation.log
+            .cache/windows-validation*.log
             .cache/windows-*.txt*
