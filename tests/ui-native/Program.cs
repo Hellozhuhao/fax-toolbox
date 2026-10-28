@@ -89,6 +89,12 @@ internal static class Program
             native.GetMethod("ApplyDefault", BindingFlags.NonPublic | BindingFlags.Static)!.Invoke(null, [owner, dark]);
             var ai = (Window)Activator.CreateInstance(aiType, [owner, null, "agent", "custom", null])!;
             ai.Show(); ai.UpdateLayout(); Paint(); Capture(ai,"native-ai-custom-"+theme);
+            var modelPicker=Field<ComboBox>(ai,"model");
+            modelPicker.Items.Add("演示模型"); modelPicker.IsDropDownOpen=true;Paint();
+            var modelPopup=(System.Windows.Controls.Primitives.Popup)modelPicker.Template.FindName("PART_Popup",modelPicker);
+            Check(modelPopup.IsOpen && modelPopup.Child is Border modelPanel && ((SolidColorBrush)modelPanel.Background).Color==((SolidColorBrush)owner.FindResource("Ui.Panel")).Color,"AI model dropdown lost the active palette: "+theme);
+            Capture((FrameworkElement)modelPopup.Child,"native-ai-model-dropdown-"+theme);
+            modelPicker.IsDropDownOpen=false;Paint();
             Click(ai,"保存设置"); Paint();
             Check(ai.IsVisible, "Invalid AI configuration closed the dialog");
             var validation=Field<TextBlock>(ai,"validation");
@@ -102,7 +108,13 @@ internal static class Program
             foreach (var provider in new[] {"qwen","notrack","deepseek","siliconflow","openai","ollama"})
             {
                 var preset=(Window)Activator.CreateInstance(aiType,[owner,null,"agent",provider,null])!;
-                preset.Show();preset.UpdateLayout();Paint();Capture(preset,"native-ai-"+provider+"-"+theme);preset.Close();
+                preset.Show();preset.UpdateLayout();Paint();
+                var selectedProvider=Field<Dictionary<string,Button>>(preset,"providerButtons")[provider];
+                var providerTitle=Descendants(selectedProvider).OfType<TextBlock>().First();
+                Check(Contrast(((SolidColorBrush)providerTitle.Foreground).Color,((SolidColorBrush)selectedProvider.Background).Color)>=4.5,"Selected provider contrast is below WCAG AA: "+provider+"/"+theme);
+                var saveButton=Descendants(preset).OfType<Button>().Single(button=>Equals(button.Content,"保存设置"));
+                Check(Contrast(((SolidColorBrush)saveButton.Foreground).Color,((SolidColorBrush)saveButton.Background).Color)>=4.5,"Save action contrast is below WCAG AA: "+theme);
+                Capture(preset,"native-ai-"+provider+"-"+theme);preset.Close();
             }
             var course=(Window)Activator.CreateInstance(aiType,[owner,null,"course","custom",null])!;
             course.Show();course.UpdateLayout();Paint();Field<Expander>(course,"promptFields").IsExpanded=true;

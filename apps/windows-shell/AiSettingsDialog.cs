@@ -43,7 +43,7 @@ internal sealed class AiSettingsDialog : Window
     private readonly Dictionary<string, Button> categoryButtons = [];
     private readonly UniformGrid providers = new() { Columns = 2, Margin = new Thickness(0, 8, 0, 10) };
     private Border summaryCard = null!;
-    private readonly SolidColorBrush background, surface, text, subtle, border, accent;
+    private readonly SolidColorBrush background, surface, selection, text, subtle, border, accent, onAccent;
     private AiProviderPreset selected;
     private string currentCategoryId = "";
     private Border modelInputFrame = null!;
@@ -68,6 +68,7 @@ internal sealed class AiSettingsDialog : Window
         NativeUi.Inherit(this, owner);
         validation.SetResourceReference(TextBlock.ForegroundProperty,"Ui.Error");
         background = NativeUi.Brush(owner, "Background"); surface = NativeUi.Brush(owner, "Panel");
+        selection = NativeUi.Brush(owner, "Surface"); onAccent = NativeUi.Brush(owner, "OnAccent");
         text = NativeUi.Brush(owner, "Text"); subtle = NativeUi.Brush(owner, "Muted");
         border = NativeUi.Brush(owner, "Border"); accent = NativeUi.Brush(owner, "Accent");
         Owner = owner; FontFamily = owner.FontFamily; Title = "配置 " + consumer.Name;
@@ -226,7 +227,7 @@ internal sealed class AiSettingsDialog : Window
         validation.Margin = new Thickness(0, 0, 0, 12); Grid.SetColumnSpan(validation, 3); actions.Children.Add(validation);
         Grid.SetRow(cancel, 1); Grid.SetColumn(cancel, 1); actions.Children.Add(cancel);
         var save = PlainButton("保存设置"); save.Width = 116; save.Margin = new Thickness(10, 0, 0, 0);
-        save.Background = accent; save.Foreground = NativeUi.Brush(this, "OnAccent"); save.BorderBrush = accent; save.IsDefault = true;
+        save.Background = accent; save.Foreground = onAccent; save.BorderBrush = accent; save.IsDefault = true;
         save.Click += Save; Grid.SetRow(save, 1); Grid.SetColumn(save, 2); actions.Children.Add(save);
         Grid.SetRow(actions, 2); layout.Children.Add(actions);
         SelectCategory(CategoryFor(selected.Id), false);
@@ -288,7 +289,7 @@ internal sealed class AiSettingsDialog : Window
             var active = id == preset.Id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? NativeUi.Brush(this, "Surface") : surface;
+            button.Background = active ? selection : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
         modelFields.Visibility = preset.Id is "custom" or "ollama" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
@@ -339,7 +340,7 @@ internal sealed class AiSettingsDialog : Window
         foreach (var (id, button) in categoryButtons)
         {
             var active = id == categoryId;
-            button.Background = active ? NativeUi.Brush(this, "Surface") : surface;
+            button.Background = active ? selection : surface;
             button.BorderBrush = active ? accent : border;
             button.Foreground = active ? accent : text;
         }
@@ -355,7 +356,7 @@ internal sealed class AiSettingsDialog : Window
             var active = optionId == id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? NativeUi.Brush(this, "Surface") : surface;
+            button.Background = active ? selection : surface;
         }
         RefreshPromptFields();
     }
