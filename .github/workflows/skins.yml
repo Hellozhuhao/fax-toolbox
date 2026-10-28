@@ -22,8 +22,6 @@ jobs:
       - run: npm run test:ui
   windows:
     runs-on: windows-latest
-    env:
-      PUBLIC_VISUAL_REVIEW: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, '[visual-review]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -53,78 +51,13 @@ jobs:
             dotnet run --project apps/windows-installer/Toolbox.Installer.csproj -- --preview ".cache/ui-native/installer-$state.png" $state
             if ($LASTEXITCODE -ne 0) { throw "Installer preview failed: $state" }
           }
-      - name: Prepare public native visual review
-        if: always()
-        shell: pwsh
-        run: |
-          # These images contain only test fixtures, with no accounts, credentials or live device content.
-          $capture = Join-Path $PWD '.cache/ui-native'
-          $review = Join-Path $capture 'review'
-          New-Item -ItemType Directory -Path $review -Force | Out-Null
-          Add-Type -AssemblyName System.Drawing
-          foreach ($file in Get-ChildItem $capture -Filter 'installer-*.png') {
-            $image = [System.Drawing.Image]::FromFile($file.FullName)
-            try { $image.Save((Join-Path $review ($file.BaseName + '.jpg')), [System.Drawing.Imaging.ImageFormat]::Jpeg) }
-            finally { $image.Dispose() }
-          }
-          $images = @(Get-ChildItem $review -Filter '*.jpg')
-          if ($images.Count -eq 0) { throw 'No native UI review images were generated' }
-          $manifest = Join-Path $review 'review-manifest.json'
-          @{ commit = $env:GITHUB_SHA; images = @($images.Name); synthetic = $true } | ConvertTo-Json -Depth 4 | Set-Content $manifest
-          $archive = Join-Path $PWD '.cache/native-visual-review.zip'
-          Compress-Archive -Path @($images.FullName + $manifest) -DestinationPath $archive -Force
-          $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes($archive))
-          $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          # Explicit review runs publish only synthetic screenshots as public notices.
-          # Normal runs retain the usual artifact and private job summaries.
-          if ($env:PUBLIC_VISUAL_REVIEW -eq 'true') {
-            $noticeSize = 48000
-            $noticeParts = [int][Math]::Ceiling($data.Length / [double]$noticeSize)
-            if ($noticeParts -gt 40) { throw 'Public visual review exceeds the annotation limit' }
-            for ($part = 0; $part -lt $noticeParts; $part++) {
-              $chunk = $data.Substring($part * $noticeSize, [Math]::Min($noticeSize, $data.Length - $part * $noticeSize))
-              $group = [int][Math]::Floor($part / 10) + 1
-              $notice = "::notice title=Native visual review $($part + 1)/$noticeParts::FAX_NATIVE_ZIP_V1|$($part + 1)|$noticeParts|$hash|$env:GITHUB_SHA|$chunk"
-              Add-Content -Path (Join-Path $PWD ".cache/native-notices-$group.txt") -Value $notice
-            }
-          }
-          $chunkSize = 600000
-          $parts = [int][Math]::Ceiling($data.Length / [double]$chunkSize)
-          if ($parts -gt 4) { throw 'Native review exceeds the public summary limit; use the lossless artifact' }
-          for ($part = 0; $part -lt $parts; $part++) {
-            $chunk = $data.Substring($part * $chunkSize, [Math]::Min($chunkSize, $data.Length - $part * $chunkSize))
-            $body = "Native visual review · commit $env:GITHUB_SHA`n`nSHA256: $hash`n`nFAX_NATIVE_REVIEW_V1_PART_$($part + 1)_OF_$parts`n`n" + '```text' + "`n$chunk`n" + '```' + "`n"
-            Set-Content -Path (Join-Path $PWD ".cache/native-review-$($part + 1).md") -Value $body
-          }
-      - name: Native visual review 1
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path '.cache/native-review-1.md') { Get-Content '.cache/native-review-1.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
-          if (Test-Path '.cache/native-notices-1.txt') { Get-Content '.cache/native-notices-1.txt' | ForEach-Object { Write-Host $_ } }
-      - name: Native visual review 2
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path '.cache/native-review-2.md') { Get-Content '.cache/native-review-2.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
-          if (Test-Path '.cache/native-notices-2.txt') { Get-Content '.cache/native-notices-2.txt' | ForEach-Object { Write-Host $_ } }
-      - name: Native visual review 3
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path '.cache/native-review-3.md') { Get-Content '.cache/native-review-3.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
-          if (Test-Path '.cache/native-notices-3.txt') { Get-Content '.cache/native-notices-3.txt' | ForEach-Object { Write-Host $_ } }
-      - name: Native visual review 4
-        if: always()
-        shell: pwsh
-        run: |
-          if (Test-Path '.cache/native-review-4.md') { Get-Content '.cache/native-review-4.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
-          if (Test-Path '.cache/native-notices-4.txt') { Get-Content '.cache/native-notices-4.txt' | ForEach-Object { Write-Host $_ } }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-ui-review
-          path: .cache/ui-native
+          path: |
+            .cache/ui-native
+            .cache/ui-native-run.log
 
   windows-smoke:
     runs-on: windows-latest

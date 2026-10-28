@@ -37,9 +37,18 @@ internal static class Program
         var directory=Environment.GetEnvironmentVariable("FAX_NATIVE_SCREENSHOTS");
         if(string.IsNullOrEmpty(directory))return;
         element.BeginAnimation(UIElement.OpacityProperty,null);element.Opacity=1;Paint();element.UpdateLayout();
+        Check(element.IsVisible && element.ActualWidth > 0 && element.ActualHeight > 0, "Screenshot surface is not visible: " + name);
         Directory.CreateDirectory(directory);
         var image=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);
-        image.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));
+        // Render in the element's own coordinates. Rendering an arranged child
+        // directly carries its parent offset into the bitmap and crops toolbars.
+        var visual=new DrawingVisual();
+        using (var drawing=visual.RenderOpen())
+            drawing.DrawRectangle(new VisualBrush(element),null,new Rect(0,0,element.ActualWidth,element.ActualHeight));
+        image.Render(visual);
+        var pixels=new byte[image.PixelWidth*image.PixelHeight*4];image.CopyPixels(pixels,image.PixelWidth*4,0);
+        Check(Enumerable.Range(0,image.PixelWidth*image.PixelHeight).Any(index=>pixels[index*4+3]!=0),"Screenshot is fully transparent: "+name);
+        var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(image));
         using (var output=File.Create(Path.Combine(directory,name+".png"))) encoder.Save(output);
         // A compact public review copy contains synthetic fixture UI only, never account data.
         var compactDirectory=Path.Combine(directory,"review"); Directory.CreateDirectory(compactDirectory);
@@ -132,6 +141,9 @@ internal static class Program
         android.Width=860;android.Height=620;android.UpdateLayout();Paint();
         Check(((StackPanel)android.FindName("wirelessPanel")).IsVisible,"Wireless form did not open");
         Capture(android,"native-android-wireless-pairing");
+        ((ScrollViewer)android.FindName("connectionScroll")).ScrollToBottom();Paint();
+        Capture(android,"native-android-pairing-controls");
+        ((ScrollViewer)android.FindName("connectionScroll")).ScrollToTop();Paint();
         var deviceType=assembly.GetType("FaxToolbox.Windows.AndroidDevice",true)!;
         var devices=(ComboBox)android.FindName("devices");
         devices.ItemsSource=new[] { Activator.CreateInstance(deviceType,["demo-device","device","演示手机"])! };
@@ -173,13 +185,21 @@ internal static class Program
         ((TextBlock)chrome.FindName("HomeworkExplanationAnswer")).Text="x = 2";
         ((TextBlock)chrome.FindName("HomeworkExplanationText")).Text="先在等式两边减去 1，得到 2x = 4。再除以 2，得到 x = 2。";
         ((Grid)chrome.FindName("HomeworkExplanationOverlay")).Visibility=Visibility.Visible;
-        chrome.UpdateLayout();Paint();Capture((FrameworkElement)chrome.FindName("HomeworkExplanationBoard"),"native-homework-explanation");
+        chrome.UpdateLayout();Paint();
+        var explanation=(Border)chrome.FindName("HomeworkExplanationBoard");
+        var explanationText=(TextBlock)chrome.FindName("HomeworkExplanationText");
+        Check(Contrast(((SolidColorBrush)explanationText.Foreground).Color,((SolidColorBrush)explanation.Background).Color)>=4.5,"Dark homework explanation contrast is below WCAG AA");
+        Capture(explanation,"native-homework-explanation-dark");
+        typeof(MainWindow).GetMethod("ApplyHostTheme",PrivateInstance)!.Invoke(chrome,[false]);Paint();
+        Check(Contrast(((SolidColorBrush)explanationText.Foreground).Color,((SolidColorBrush)explanation.Background).Color)>=4.5,"Light homework explanation contrast is below WCAG AA");
+        Capture(explanation,"native-homework-explanation-light");
+        typeof(MainWindow).GetMethod("ApplyHostTheme",PrivateInstance)!.Invoke(chrome,[true]);Paint();
         typeof(MainWindow).GetMethod("DetachHomeworkExplanation",PrivateInstance)!.Invoke(chrome,null);
         var detached=Field<Window>(chrome,"homeworkExplanationWindow");detached.UpdateLayout();Paint();Capture(detached,"native-homework-detached");detached.Close();
 
         foreach(var shell in windows) { typeof(MainWindow).GetField("closingAsTab",PrivateInstance)!.SetValue(shell,true);shell.Close(); }
         var captureDirectory=Environment.GetEnvironmentVariable("FAX_NATIVE_SCREENSHOTS");
-        if(!string.IsNullOrEmpty(captureDirectory)) File.WriteAllText(Path.Combine(captureDirectory,"manifest.json"),JsonSerializer.Serialize(new {checks,captures,scope="Synthetic native dialogs and shell chrome; no live websites or device projection"},new JsonSerializerOptions {WriteIndented=true}));
+        if(!string.IsNullOrEmpty(captureDirectory)) File.WriteAllText(Path.Combine(captureDirectory,"manifest.json"),JsonSerializer.Serialize(new {commit=Environment.GetEnvironmentVariable("GITHUB_SHA"),checks,captures,scope="Synthetic native dialogs and shell chrome; no live websites or device projection"},new JsonSerializerOptions {WriteIndented=true}));
         owner.Close(); app.Shutdown();
         Console.WriteLine($"UI_NATIVE_OK {checks} assertions");
     }

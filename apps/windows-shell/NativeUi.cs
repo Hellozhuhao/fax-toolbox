@@ -29,7 +29,7 @@ internal static class NativeUi
         owner.TryFindResource("Ui." + role) as SolidColorBrush ?? new SolidColorBrush(Colors.Transparent);
 
     internal static FontFamily Font(string? family) => string.IsNullOrWhiteSpace(family) || family.Contains("Fax Sans", StringComparison.OrdinalIgnoreCase)
-        ? new FontFamily("pack://application:,,,/assets/fonts/#Fax Sans, Segoe UI, Microsoft YaHei UI")
+        ? new FontFamily("pack://application:,,,/FaxToolbox.Windows;component/assets/fonts/#Fax Sans, Segoe UI, Microsoft YaHei UI")
         : new FontFamily(family.Replace("\"", "").Replace("'", ""));
 
     internal static SolidColorBrush OnAccent(SolidColorBrush accent)

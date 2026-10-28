@@ -33,7 +33,7 @@
               MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0">
-                <Image Source="pack://application:,,,/assets/fax-toolbox.png" Width="26" Height="26"
+                <Image Source="pack://application:,,,/FaxToolbox.Windows;component/assets/fax-toolbox.png" Width="26" Height="26"
                        VerticalAlignment="Center" />
                 <TextBlock x:Name="TitleName" Text="Fax Toolbox" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource Ui.Text}"/>
                 <Border Height="17" Width="1" Background="{DynamicResource Ui.Border}" Margin="11,0,10,0" />
@@ -105,7 +105,7 @@
             <Image x:Name="HomeworkExplanationBackdropImage" Stretch="UniformToFill"/>
             <Border Background="#AB242323"/>
             <Border x:Name="HomeworkExplanationBoard" Margin="18" HorizontalAlignment="Stretch"
-                    VerticalAlignment="Stretch" Background="#FFFAFAF8" CornerRadius="24" Padding="28"
+                    VerticalAlignment="Stretch" Background="{DynamicResource Ui.Panel}" CornerRadius="24" Padding="28"
                     BorderBrush="{DynamicResource Ui.Border}" BorderThickness="1">
                 <Grid Width="Auto">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>

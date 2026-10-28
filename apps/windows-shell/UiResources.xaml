@@ -9,7 +9,7 @@
   <SolidColorBrush x:Key="Ui.Border" Color="#D7DEEA"/>
   <SolidColorBrush x:Key="Ui.OnAccent" Color="#FFFFFF"/>
   <SolidColorBrush x:Key="Ui.Error" Color="#B32939"/>
-  <FontFamily x:Key="Ui.Font">pack://application:,,,/assets/fonts/#Fax Sans, Segoe UI, Microsoft YaHei UI</FontFamily>
+  <FontFamily x:Key="Ui.Font">pack://application:,,,/FaxToolbox.Windows;component/assets/fonts/#Fax Sans, Segoe UI, Microsoft YaHei UI</FontFamily>
   <Style x:Key="Ui.Focus" TargetType="Control">
     <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control"><Rectangle Stroke="{DynamicResource Ui.Accent}" StrokeThickness="2" RadiusX="6" RadiusY="6" Margin="-3"/></ControlTemplate></Setter.Value></Setter>
   </Style>
