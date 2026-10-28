@@ -53,11 +53,13 @@ internal static class NativeUi
     private static void SetBrush(Window window, string role, Color value)
     {
         var key = "Ui." + role;
-        if (window.Resources.Contains(key) && window.Resources[key] is SolidColorBrush existing && !existing.IsFrozen)
-        {
-            if (existing.Color != value) existing.Color = value;
-        }
-        else window.Resources[key] = new SolidColorBrush(value);
+        if (window.Resources.Contains(key) && window.Resources[key] is SolidColorBrush existing && existing.Color == value)
+            return;
+        // Dialogs inherit these roles. Keep each applied palette immutable so a
+        // later theme cannot mutate brushes already shared with another window.
+        var brush = new SolidColorBrush(value);
+        brush.Freeze();
+        window.Resources[key] = brush;
     }
 
     private static void ApplyError(Window window)

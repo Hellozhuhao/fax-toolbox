@@ -453,6 +453,21 @@ public partial class MainWindow : Window
                     })()
                     """);
                 if (approvalStable != "true") { FailSmoke("Agent approval card changed composer layout"); return; }
+                // Local-model layout must use an explicit fixture, independent
+                // of whether this Windows account has ever configured an AI service.
+                ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    v = 1, kind = "agent.options", extra = new { mode = "chat", effort = "normal",
+                        provider = "ollama", model = "qwen3:8b", systemPrompt = "" }
+                }));
+                var localModelReady = false;
+                for (var attempt = 0; attempt < 20 && !localModelReady; attempt++)
+                {
+                    localModelReady = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('agent-run-toggle').textContent.includes('Qwen3 8B')") == "true";
+                    if (!localModelReady) await Task.Delay(50);
+                }
+                if (!localModelReady) { FailSmoke("Local model fixture was not applied"); return; }
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
                 ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
                 {
