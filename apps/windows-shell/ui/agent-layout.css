@@ -383,6 +383,9 @@
   width: 100%;
   height: auto;
   margin: 13px 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: crosshair;
   touch-action: none;
 }
 .agent-sketch > div {

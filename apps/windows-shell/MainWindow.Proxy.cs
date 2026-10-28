@@ -13,6 +13,7 @@ public partial class MainWindow
     private bool proxyOperationBusy;
     private bool proxyWatcherRunning;
     private string proxyWatcherDetail = "打开网络管家查看状态";
+    private ProxySettings? proxySmokeSettings;
     private string ProxyDataRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FaxToolbox", "proxy-autoswitch");
 
     private sealed class ProxySettings
@@ -60,7 +61,23 @@ public partial class MainWindow
         if (command == "proxy.detect") { await DetectProxyCandidatesAsync(); return; }
         if (smokeMode)
         {
-            PublishProxy(new { ok = true, config = new ProxySettings(), status = new { running = false, startup = false, proxyEnabled = false, proxyServer = "", portReady = true, legacyRunning = false, state = new { reason = "界面测试，未修改系统设置" }, logs = new[] { "网络管家界面已加载" } } });
+            try
+            {
+                proxySmokeSettings ??= new ProxySettings();
+                if (command == "proxy.save")
+                {
+                    var submitted = message.GetProperty("config").Deserialize<ProxySettings>(ProxyJson)
+                        ?? throw new InvalidOperationException("配置无效。");
+                    ValidateProxySettings(submitted);
+                    // Match the real save contract: acknowledge this submitted
+                    // configuration, never reset it to unrelated defaults.
+                    proxySmokeSettings = submitted;
+                }
+                PublishProxy(new { ok = true, config = proxySmokeSettings,
+                    detail = command == "proxy.save" ? "配置已保存" : null,
+                    status = new { running = false, startup = false, proxyEnabled = false, proxyServer = "", portReady = true, legacyRunning = false, state = new { reason = "界面测试，未修改系统设置" }, logs = new[] { "网络管家界面已加载" } } });
+            }
+            catch (Exception error) { PublishProxy(new { ok = false, error = error.Message }); }
             return;
         }
         if (command == "proxy.pick")

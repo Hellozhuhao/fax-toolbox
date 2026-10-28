@@ -784,6 +784,7 @@
     canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture(event.pointerId); const [x, y] = point(event); context.beginPath(); context.moveTo(x, y); });
     canvas.addEventListener('pointermove', event => { if (!drawing) return; const [x, y] = point(event); context.lineTo(x, y); context.stroke(); });
     canvas.addEventListener('pointerup', () => { drawing = false; });
+    canvas.addEventListener('pointercancel', () => { drawing = false; });
     const actions = document.createElement('div');
     const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'secondary'; clear.textContent = '清空';
     clear.addEventListener('click', () => { context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); });

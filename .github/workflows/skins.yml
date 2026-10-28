@@ -22,6 +22,8 @@ jobs:
       - run: npm run test:ui
   windows:
     runs-on: windows-latest
+    env:
+      PUBLIC_VISUAL_REVIEW: ${{ github.event_name == 'push' && startsWith(github.event.head_commit.message, '[visual-review]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -73,6 +75,19 @@ jobs:
           Compress-Archive -Path @($images.FullName + $manifest) -DestinationPath $archive -Force
           $data = [Convert]::ToBase64String([IO.File]::ReadAllBytes($archive))
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          # Explicit review runs publish only synthetic screenshots as public notices.
+          # Normal runs retain the usual artifact and private job summaries.
+          if ($env:PUBLIC_VISUAL_REVIEW -eq 'true') {
+            $noticeSize = 48000
+            $noticeParts = [int][Math]::Ceiling($data.Length / [double]$noticeSize)
+            if ($noticeParts -gt 40) { throw 'Public visual review exceeds the annotation limit' }
+            for ($part = 0; $part -lt $noticeParts; $part++) {
+              $chunk = $data.Substring($part * $noticeSize, [Math]::Min($noticeSize, $data.Length - $part * $noticeSize))
+              $group = [int][Math]::Floor($part / 10) + 1
+              $notice = "::notice title=Native visual review $($part + 1)/$noticeParts::FAX_NATIVE_ZIP_V1|$($part + 1)|$noticeParts|$hash|$env:GITHUB_SHA|$chunk"
+              Add-Content -Path (Join-Path $PWD ".cache/native-notices-$group.txt") -Value $notice
+            }
+          }
           $chunkSize = 600000
           $parts = [int][Math]::Ceiling($data.Length / [double]$chunkSize)
           if ($parts -gt 4) { throw 'Native review exceeds the public summary limit; use the lossless artifact' }
@@ -84,21 +99,75 @@ jobs:
       - name: Native visual review 1
         if: always()
         shell: pwsh
-        run: if (Test-Path '.cache/native-review-1.md') { Get-Content '.cache/native-review-1.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+        run: |
+          if (Test-Path '.cache/native-review-1.md') { Get-Content '.cache/native-review-1.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+          if (Test-Path '.cache/native-notices-1.txt') { Get-Content '.cache/native-notices-1.txt' | ForEach-Object { Write-Host $_ } }
       - name: Native visual review 2
         if: always()
         shell: pwsh
-        run: if (Test-Path '.cache/native-review-2.md') { Get-Content '.cache/native-review-2.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+        run: |
+          if (Test-Path '.cache/native-review-2.md') { Get-Content '.cache/native-review-2.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+          if (Test-Path '.cache/native-notices-2.txt') { Get-Content '.cache/native-notices-2.txt' | ForEach-Object { Write-Host $_ } }
       - name: Native visual review 3
         if: always()
         shell: pwsh
-        run: if (Test-Path '.cache/native-review-3.md') { Get-Content '.cache/native-review-3.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+        run: |
+          if (Test-Path '.cache/native-review-3.md') { Get-Content '.cache/native-review-3.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+          if (Test-Path '.cache/native-notices-3.txt') { Get-Content '.cache/native-notices-3.txt' | ForEach-Object { Write-Host $_ } }
       - name: Native visual review 4
         if: always()
         shell: pwsh
-        run: if (Test-Path '.cache/native-review-4.md') { Get-Content '.cache/native-review-4.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+        run: |
+          if (Test-Path '.cache/native-review-4.md') { Get-Content '.cache/native-review-4.md' -Raw >> $env:GITHUB_STEP_SUMMARY }
+          if (Test-Path '.cache/native-notices-4.txt') { Get-Content '.cache/native-notices-4.txt' | ForEach-Object { Write-Host $_ } }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: native-ui-review
           path: .cache/ui-native
+
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Activate Rust toolchain
+        shell: pwsh
+        run: rustup default stable
+      - name: Ensure WebView2 Runtime
+        shell: pwsh
+        run: |
+          $locations = @("${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application", "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application")
+          $runtime = @($locations | ForEach-Object { Get-ChildItem -Path (Join-Path $_ '*\msedgewebview2.exe') -ErrorAction SilentlyContinue })
+          if ($runtime.Count -gt 0) { Write-Host 'WebView2 Runtime is installed'; exit 0 }
+          New-Item -ItemType Directory -Path '.cache' -Force | Out-Null
+          $installer = Join-Path $PWD '.cache/MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'WebView2 installer signature verification failed' }
+          $process = Start-Process -FilePath $installer -ArgumentList '/silent', '/install' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "WebView2 Runtime installation failed: $($process.ExitCode)" }
+      - name: Run full Windows development validation
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.cache' -Force | Out-Null
+          $PSNativeCommandUseErrorActionPreference = $false
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1 -Test 2>&1 | Tee-Object -FilePath '.cache/windows-validation.log'
+          $result = $LASTEXITCODE
+          $log = (Get-Content '.cache/windows-validation.log' -Tail 100) -join "`n"
+          ("Windows full validation · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```') >> $env:GITHUB_STEP_SUMMARY
+          if ($result -ne 0) {
+            $detail = $log.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows validation failed::$detail"
+          }
+          exit $result
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation
+          path: |
+            .cache/windows-validation.log
+            .cache/windows-*.txt*

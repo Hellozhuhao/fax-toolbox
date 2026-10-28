@@ -885,11 +885,19 @@ public partial class MainWindow : Window
                 if (selectOnly != "true") { FailSmoke("Detected app selection did not populate rules"); return; }
                 // Saving in smoke mode is isolated: the host returns a fixture.
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-config').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
-                for (var attempt = 0; attempt < 20; attempt++)
+                var networkSaved = false;
+                for (var attempt = 0; attempt < 20 && !networkSaved; attempt++)
                 {
-                    if (await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-games').value === ''") == "true") break;
-                    await Task.Delay(50);
+                    networkSaved = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                        document.getElementById('proxy-games').value === 'test-game' &&
+                        document.getElementById('proxy-config').getAttribute('aria-busy') === 'false' &&
+                        document.getElementById('proxy-discard').disabled &&
+                        !document.getElementById('proxy-start').disabled &&
+                        document.getElementById('proxy-save-state').textContent.includes('配置已保存')
+                        """) == "true";
+                    if (!networkSaved) await Task.Delay(100);
                 }
+                if (!networkSaved) { FailSmoke("Network manager did not acknowledge and retain its saved configuration"); return; }
                 var networkConfirmation = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{document.getElementById('proxy-start').click();const open=document.getElementById('proxy-confirm').open;document.getElementById('proxy-confirm-cancel').click();return open&&!document.getElementById('proxy-confirm').open})()");
                 if (networkConfirmation != "true") { FailSmoke("Network manager confirmation was not displayed"); return; }
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
