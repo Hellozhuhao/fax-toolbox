@@ -9,6 +9,7 @@
 *.iml
 *.log
 dist/
+runtime/scrcpy/
 **/WebView2/
 **/User Data/
 **/user-data/
@@ -28,3 +29,7 @@ dist/
 *.trace
 # Official proxy binary is downloaded and checksum-verified when publishing.
 modules/proxy-autoswitch/mihomo-official.zip
+
+# JavaScript development/test dependencies
+node_modules/
+.impeccable/review/

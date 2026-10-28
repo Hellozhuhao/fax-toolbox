@@ -1,0 +1,136 @@
+name: Skin contracts and Windows build
+on:
+  pull_request:
+  push:
+    branches: [main, feat/skin-system]
+permissions:
+  contents: read
+jobs:
+  contracts-and-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run validate:skins
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:skins:ui
+      - run: npm run test:ui
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: dotnet run --project tests/skins/SkinStore.Tests.csproj -- .
+      - run: dotnet build apps/windows-shell/Toolbox.Windows.csproj --nologo
+      - name: Exercise and capture native UI
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.cache/ui-native' -Force | Out-Null
+          $PSNativeCommandUseErrorActionPreference = $false
+          & dotnet run --project tests/ui-native/UiSystem.Tests.csproj 2>&1 | Tee-Object -FilePath '.cache/ui-native-run.log'
+          $result = $LASTEXITCODE
+          $log = Get-Content '.cache/ui-native-run.log' -Raw
+          $body = "Native UI execution · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```'
+          $body >> $env:GITHUB_STEP_SUMMARY
+          exit $result
+        env:
+          FAX_NATIVE_SCREENSHOTS: .cache/ui-native
+      - name: Render installer states
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.cache/ui-native' -Force | Out-Null
+          foreach ($state in @('welcome', 'progress', 'complete', 'error')) {
+            dotnet run --project apps/windows-installer/Toolbox.Installer.csproj -- --preview ".cache/ui-native/installer-$state.png" $state
+            if ($LASTEXITCODE -ne 0) { throw "Installer preview failed: $state" }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ui-review
+          include-hidden-files: true
+          path: |
+            .cache/ui-native
+            .cache/ui-native-run.log
+
+  windows-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Activate Rust toolchain
+        shell: pwsh
+        run: rustup default stable
+      - name: Ensure WebView2 Runtime
+        shell: pwsh
+        run: |
+          $locations = @("${env:ProgramFiles(x86)}\Microsoft\EdgeWebView\Application", "$env:LOCALAPPDATA\Microsoft\EdgeWebView\Application")
+          $runtime = @($locations | ForEach-Object { Get-ChildItem -Path (Join-Path $_ '*\msedgewebview2.exe') -ErrorAction SilentlyContinue })
+          if ($runtime.Count -gt 0) { Write-Host 'WebView2 Runtime is installed'; exit 0 }
+          New-Item -ItemType Directory -Path '.cache' -Force | Out-Null
+          $installer = Join-Path $PWD '.cache/MicrosoftEdgeWebview2Setup.exe'
+          Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $installer
+          $signature = Get-AuthenticodeSignature $installer
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'WebView2 installer signature verification failed' }
+          $process = Start-Process -FilePath $installer -ArgumentList '/silent', '/install' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "WebView2 Runtime installation failed: $($process.ExitCode)" }
+      - name: Run full Windows development validation
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.cache' -Force | Out-Null
+          # Keep GUI/browser descendants from holding a shell pipeline open.
+          # Wait for the actual validation process and preserve its exit status.
+          $stdout = Join-Path $PWD '.cache/windows-validation-stdout.log'
+          $stderr = Join-Path $PWD '.cache/windows-validation-stderr.log'
+          $process = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/build-windows.ps1', '-Test' -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $null = $process.Handle
+          $deadline = [DateTime]::UtcNow.AddMinutes(15)
+          $lastProgress = ''
+          while (-not $process.WaitForExit(30000)) {
+            $progress = @((Get-Content $stdout -Tail 1 -ErrorAction SilentlyContinue), (Get-Content $stderr -Tail 1 -ErrorAction SilentlyContinue)) -join ' | '
+            if ($progress -ne $lastProgress) {
+              $detail = $progress.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+              Write-Host "::notice title=Windows validation progress::$detail"
+              $lastProgress = $progress
+            }
+            if ([DateTime]::UtcNow -gt $deadline) {
+              & taskkill.exe /PID $process.Id /T /F
+              throw 'Windows development validation exceeded 15 minutes; inspect captured stdout/stderr'
+            }
+          }
+          $process.Refresh()
+          $result = $process.ExitCode
+          if ($null -eq $result) { throw 'Validation process did not return an exit status' }
+          @('--- stdout ---', (Get-Content $stdout -Raw), '--- stderr ---', (Get-Content $stderr -Raw)) | Set-Content '.cache/windows-validation.log'
+          Get-Content '.cache/windows-validation.log'
+          $log = (Get-Content '.cache/windows-validation.log' -Tail 100) -join "`n"
+          ("Windows full validation · commit $env:GITHUB_SHA · exit $result`n`n" + '```text' + "`n$log`n" + '```') >> $env:GITHUB_STEP_SUMMARY
+          if ($result -ne 0) {
+            $failures = @(Get-ChildItem '.cache' -Filter 'windows-*.txt' | ForEach-Object {
+              $content = Get-Content $_.FullName -Raw
+              if ($content.StartsWith('FAIL')) { $_.Name + ': ' + $content }
+            })
+            $failureLog = (@($failures) + @(Get-Content $stdout -Tail 18) + @(Get-Content $stderr -Tail 8)) -join "`n"
+            if ($failureLog.Length -gt 3500) { $failureLog = $failureLog.Substring(0, 3500) }
+            $detail = $failureLog.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows validation failed::$detail"
+          }
+          exit $result
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-validation
+          include-hidden-files: true
+          path: |
+            .cache/windows-validation*.log
+            .cache/windows-*.txt*

@@ -1,0 +1,79 @@
+[
+  {
+    "format": "fax-toolbox.skin",
+    "version": 1,
+    "id": "fax.classic",
+    "name": "暖白",
+    "author": "Fax Toolbox",
+    "description": "明亮、清晰的日常工作空间",
+    "appearance": "light",
+    "targets": [
+      "*"
+    ],
+    "tokens": {
+      "background": "#f6f7fb",
+      "panel": "#ffffff",
+      "surface": "#eef1f7",
+      "text": "#202b3c",
+      "muted": "#59677a",
+      "accent": "#2859d6",
+      "border": "#d7deea",
+      "navigation": "#edf1f9",
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
+    }
+  },
+  {
+    "format": "fax-toolbox.skin",
+    "version": 1,
+    "id": "fax.midnight",
+    "name": "深夜",
+    "author": "Fax Toolbox",
+    "description": "适合长时间专注的深色界面",
+    "appearance": "dark",
+    "targets": [
+      "*"
+    ],
+    "tokens": {
+      "background": "#14171e",
+      "panel": "#20252f",
+      "surface": "#2b3240",
+      "text": "#f2f4fa",
+      "muted": "#a6b0c2",
+      "accent": "#b5a0ff",
+      "border": "#3d4658",
+      "navigation": "#191e28",
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
+    }
+  },
+  {
+    "format": "fax-toolbox.skin",
+    "version": 1,
+    "id": "fax.ocean",
+    "name": "海风",
+    "author": "Fax Toolbox",
+    "description": "清爽的青色与紧凑布局",
+    "appearance": "light",
+    "targets": [
+      "*"
+    ],
+    "tokens": {
+      "background": "#edf6f8",
+      "panel": "#ffffff",
+      "surface": "#e0f0f3",
+      "text": "#163e48",
+      "muted": "#55747c",
+      "accent": "#087b86",
+      "border": "#bfdde2",
+      "navigation": "#e2f0f3",
+      "radius": 14,
+      "fontFamily": "\"Fax Sans\", \"Segoe UI Variable Text\", \"Microsoft YaHei UI\", sans-serif"
+    },
+    "layout": {
+      "density": "compact",
+      "navigation": "left",
+      "motion": "system"
+    }
+  }
+]

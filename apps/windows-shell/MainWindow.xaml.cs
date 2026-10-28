@@ -21,7 +21,8 @@ public partial class MainWindow : Window
         value is "https://ui.toolbox.invalid/index.html?module=course" or
             "https://ui.toolbox.invalid/index.html?module=homework" or
             "https://ui.toolbox.invalid/index.html?module=demo" or
-            "https://ui.toolbox.invalid/index.html?module=ai";
+            "https://ui.toolbox.invalid/index.html?module=ai" or
+            "https://ui.toolbox.invalid/index.html?module=proxy";
     private const string ModuleUrl = "https://module.toolbox.invalid/smoke.html";
     private const string ModuleId = "toolbox.smoke";
     private const int MaxPageMessage = 16 * 1024;
@@ -76,6 +77,7 @@ public partial class MainWindow : Window
     private string state = "STARTING";
     private string detail = "正在启动…";
     private string root = "";
+    private AndroidMirrorWindow? androidMirrorWindow;
     private readonly string? smokeDataDirectory;
     private static string? tabsSmokeDataDirectory;
     private bool demoActionInProgress;
@@ -117,12 +119,8 @@ public partial class MainWindow : Window
             if (smokeOutput is not null) File.WriteAllText(smokeOutput, "FAIL XAML: " + error);
             throw;
         }
+        PreviewKeyDown += SkinRecoveryKeyDown;
         ApplyHostTheme(ReadStoredHostTheme());
-        NativeButtonGlow.Attach(ToggleControlsButton, () => darkTaskTabs, primary: true);
-        NativeButtonGlow.Attach(NewTaskTabButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(BrowserBackButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(BrowserReloadButton, () => darkTaskTabs);
-        NativeButtonGlow.Attach(CourseRetryButton, () => darkTaskTabs, primary: true);
         Trace("constructor");
         InitializeCatalog();
         RegisterTaskWindow();
@@ -199,7 +197,7 @@ public partial class MainWindow : Window
             ConfigureShellView();
             Trace("UI WebView ready");
             Publish("READY", "后端已连接。点击“开始演示”创建会话。");
-            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" ?
+            ShellView.CoreWebView2.Navigate(initialModule is "course" or "homework" or "demo" or "ai" or "proxy" ?
                 UiUrl + "?module=" + initialModule : UiUrl);
             Trace("UI navigation started");
             if (initialModule is "course" or "homework" or "demo") await EnsureModuleWebViewsAsync();
@@ -210,7 +208,7 @@ public partial class MainWindow : Window
             taskWindowReady.TrySetResult(false);
             Publish("ERROR", error.Message);
             if (smokeMode) FailSmoke(error.ToString());
-            else MessageBox.Show(this, error.Message, "Toolbox 启动失败", MessageBoxButton.OK, MessageBoxImage.Error);
+            else NativeNotice.Show(this, "工具箱启动失败", error.Message);
         }
     }
 
@@ -255,6 +253,10 @@ public partial class MainWindow : Window
     {
         ModuleView.CoreWebView2.SetVirtualHostNameToFolderMapping(
             ModuleHost, Path.Combine(root, "modules", "smoke"), CoreWebView2HostResourceAccessKind.DenyCors);
+        // The trusted demonstration page consumes the same public UI assets as the shell.
+        ModuleView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            UiHost, Path.Combine(root, "apps", "windows-shell", "ui"), CoreWebView2HostResourceAccessKind.Allow);
+        ModuleView.CoreWebView2.NavigationCompleted += (_, _) => ApplyDemoSkin();
         if (courseSmokeMode)
             CourseView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "mooc1.chaoxing.com", Path.Combine(root, "modules", "chaoxing", "fixture"),
@@ -353,12 +355,14 @@ public partial class MainWindow : Window
                 await VerifyAgentContinuationUiAsync();
                 var conversationLayout = await ShellView.CoreWebView2.ExecuteScriptAsync("""
                     (() => {
+                      const fail = reason => { window.__agentLayoutFailure = reason; return false; };
+                      window.__agentLayoutFailure = null;
                       const workspace = document.querySelector('.agent-workspace').getBoundingClientRect();
-                      if (workspace.height < innerHeight * .68) return false;
+                      if (workspace.height < innerHeight * .68) return fail('workspace height');
                       const sidebar = document.querySelector('.agent-side').getBoundingClientRect();
                       const session = document.querySelector('.agent-session-row').getBoundingClientRect();
                       const composer = document.getElementById('agent-form').getBoundingClientRect();
-                      if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return false;
+                      if (sidebar.width < 180 || session.height > 60 || composer.width < 400) return fail('conversation geometry');
                       const rail = document.querySelector('.agent-section-rail');
                       if (rail.querySelectorAll('button').length !== 8 ||
                           !document.getElementById('agent-background') ||
@@ -366,31 +370,36 @@ public partial class MainWindow : Window
                           !document.getElementById('agent-system-prompt') ||
                           !document.getElementById('agent-run-toggle') ||
                           document.querySelector('.agent-side').dataset.activePanel !== 'sessions' ||
-                          document.getElementById('agent-inspector-toggle')) return false;
+                          document.getElementById('agent-inspector-toggle')) return fail('Agent categories and controls');
                       rail.querySelector('[data-agent-section="usage"]').click();
                       if (document.querySelector('.agent-side').dataset.activePanel !== 'usage' ||
-                          !document.getElementById('agent-usage').closest('.focus-panel')) return false;
+                          !document.getElementById('agent-usage').closest('.focus-panel')) return fail('usage category');
                       rail.querySelector('[data-agent-section="modules"]').click();
-                      if (document.querySelector('.agent-side').dataset.activePanel !== 'modules') return false;
+                      if (document.querySelector('.agent-side').dataset.activePanel !== 'modules') return fail('module category');
                       rail.querySelector('[data-agent-section="sessions"]').click();
-                      if (!document.querySelector('#view-activity > .overview-grid') ||
+                      const statusTab = document.getElementById('status-tab-overview');
+                      const statusPanel = document.getElementById(statusTab?.getAttribute('aria-controls'));
+                      if (!statusPanel?.querySelector('.overview-grid') || statusPanel.closest('.view')?.id !== 'view-activity' ||
                           !document.querySelector('#view-course .study-side #course-chapters') ||
-                          !document.querySelector('#view-homework .study-side #homework-page')) return false;
-                      if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return false;
+                          !document.querySelector('#view-homework .study-side #homework-page')) return fail('status and study surfaces');
+                      if (!window.FaxToolboxContextMenu.openFor('#agent-prompt')) return fail('context menu opening');
                       const labels = [...document.querySelectorAll('#toolbox-context-menu button')].map(item => item.textContent);
-                      if (!labels.includes('粘贴') || !labels.includes('新建会话')) return false;
-                      document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
-                      if (!document.getElementById('toolbox-context-menu').hidden) return false;
+                      if (!labels.includes('粘贴') || !labels.includes('新建会话')) return fail('context menu actions');
+                      const contextAction = document.querySelector('#toolbox-context-menu button:not(:disabled)');
+                      contextAction.focus();
+                      contextAction.dispatchEvent(new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}));
+                      if (!document.getElementById('toolbox-context-menu').hidden) return fail('context menu Escape');
                       const toolGroup = document.querySelector('.nav-group');
-                      toolGroup.classList.add('flyout-open');
-                      toolGroup.querySelector('.nav-item').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true}));
-                      return !toolGroup.classList.contains('flyout-open');
+                      toolGroup.querySelector('.nav-item').click();
+                      const toolsOpened = !document.getElementById('view-modules').hidden && toolGroup.querySelector('.nav-flyout').hidden;
+                      window.FaxToolboxUi.openAi();
+                      return toolsOpened && !document.getElementById('view-ai').hidden || fail('direct tools navigation');
                     })()
                     """);
                 if (conversationLayout != "true")
                 {
                     var layoutDetail = await ShellView.CoreWebView2.ExecuteScriptAsync("""
-                        JSON.stringify({workspace:document.querySelector('.agent-workspace').getBoundingClientRect().height,
+                        JSON.stringify({stage:window.__agentLayoutFailure, workspace:document.querySelector('.agent-workspace').getBoundingClientRect().height,
                           sidebar:document.querySelector('.agent-side').getBoundingClientRect().width,
                           session:document.querySelector('.agent-session-row').getBoundingClientRect().height,
                           composer:document.getElementById('agent-form').getBoundingClientRect().width,
@@ -444,6 +453,21 @@ public partial class MainWindow : Window
                     })()
                     """);
                 if (approvalStable != "true") { FailSmoke("Agent approval card changed composer layout"); return; }
+                // Local-model layout must use an explicit fixture, independent
+                // of whether this Windows account has ever configured an AI service.
+                ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
+                {
+                    v = 1, kind = "agent.options", extra = new { mode = "chat", effort = "normal",
+                        provider = "ollama", model = "qwen3:8b", systemPrompt = "" }
+                }));
+                var localModelReady = false;
+                for (var attempt = 0; attempt < 20 && !localModelReady; attempt++)
+                {
+                    localModelReady = await ShellView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('agent-run-toggle').textContent.includes('Qwen3 8B')") == "true";
+                    if (!localModelReady) await Task.Delay(50);
+                }
+                if (!localModelReady) { FailSmoke("Local model fixture was not applied"); return; }
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('agent-run-toggle').click()");
                 ShellView.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(new
                 {
@@ -558,7 +582,9 @@ public partial class MainWindow : Window
                         .find(button => button.querySelector('.toolbox-context-label')?.textContent === '分区')?.click();
                       [...document.querySelectorAll('#toolbox-context-submenu button')]
                         .find(button => button.textContent.includes('新建分区'))?.click();
-                      document.getElementById('toolbox-confirm-input').value = '工作';
+                      const sectionInput = document.getElementById('toolbox-confirm-input');
+                      sectionInput.value = '工作';
+                      sectionInput.dispatchEvent(new Event('input', {bubbles: true}));
                       document.getElementById('toolbox-confirm-accept').click();
                     })()
                     """);
@@ -876,11 +902,19 @@ public partial class MainWindow : Window
                 if (selectOnly != "true") { FailSmoke("Detected app selection did not populate rules"); return; }
                 // Saving in smoke mode is isolated: the host returns a fixture.
                 await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-config').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
-                for (var attempt = 0; attempt < 20; attempt++)
+                var networkSaved = false;
+                for (var attempt = 0; attempt < 20 && !networkSaved; attempt++)
                 {
-                    if (await ShellView.CoreWebView2.ExecuteScriptAsync("document.getElementById('proxy-games').value === ''") == "true") break;
-                    await Task.Delay(50);
+                    networkSaved = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                        document.getElementById('proxy-games').value === 'test-game' &&
+                        document.getElementById('proxy-config').getAttribute('aria-busy') === 'false' &&
+                        document.getElementById('proxy-discard').disabled &&
+                        !document.getElementById('proxy-start').disabled &&
+                        document.getElementById('proxy-save-state').textContent.includes('配置已保存')
+                        """) == "true";
+                    if (!networkSaved) await Task.Delay(100);
                 }
+                if (!networkSaved) { FailSmoke("Network manager did not acknowledge and retain its saved configuration"); return; }
                 var networkConfirmation = await ShellView.CoreWebView2.ExecuteScriptAsync("(()=>{document.getElementById('proxy-start').click();const open=document.getElementById('proxy-confirm').open;document.getElementById('proxy-confirm-cancel').click();return open&&!document.getElementById('proxy-confirm').open})()");
                 if (networkConfirmation != "true") { FailSmoke("Network manager confirmation was not displayed"); return; }
                 if (Environment.GetEnvironmentVariable("FAX_UI_PREVIEW") == "1")
@@ -1033,7 +1067,13 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(id) || id.Length > 128) return;
             var command = message.GetProperty("command").GetString();
             if (messageBytes > MaxPageMessage && command != "agent.send" &&
-                !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024)) return;
+                !(command == "ui.clipboard.copy" && messageBytes <= 128 * 1024) &&
+                !(command == "skins.update" && messageBytes <= SkinStore.MaxStateBytes + 1024)) return;
+            if (command is "skins.get" or "skins.update" or "skins.reset")
+            {
+                HandleSkinMessage(command, message);
+                return;
+            }
             if (command is "proxy.get" or "proxy.save" or "proxy.start" or "proxy.stop" or "proxy.on" or "proxy.off" or "proxy.validate" or "proxy.pick" or "proxy.startup.on" or "proxy.startup.off" or "proxy.install" or "proxy.restore-xray" or "proxy.detect")
             {
                 await HandleProxyMessageAsync(command, message);
@@ -1064,12 +1104,27 @@ public partial class MainWindow : Window
                         CourseOverlay.Visibility = Visibility.Collapsed;
                     }
                     break;
+                case "android.open":
+                    if (androidMirrorWindow is null)
+                    {
+                        androidMirrorWindow = new AndroidMirrorWindow(root) { Owner = this };
+                        androidMirrorWindow.Closed += (_, _) => androidMirrorWindow = null;
+                        ApplyAndroidSkin();
+                        androidMirrorWindow.Show();
+                    }
+                    else
+                    {
+                        if (androidMirrorWindow.WindowState == WindowState.Minimized)
+                            androidMirrorWindow.WindowState = WindowState.Normal;
+                        androidMirrorWindow.Activate();
+                    }
+                    break;
                 case "ui.layout":
                     SetWorkspaceLayout(message.GetProperty("mode").GetString() is "module" or "homework-browser");
                     currentShellView = message.GetProperty("view").GetString() ?? "home";
                     shellCanGoBack = message.TryGetProperty("canGoBack", out var canGoBack) && canGoBack.ValueKind == JsonValueKind.True;
                     UpdateBrowserBackButton();
-                    UpdateTaskTabs();
+                    ApplyNativeSkin();
                     break;
                 case "ui.clipboard.copy":
                     var copyText = message.GetProperty("text").GetString() ?? "";
@@ -1265,29 +1320,21 @@ public partial class MainWindow : Window
     private void ApplyHostTheme(bool dark)
     {
         darkTaskTabs = dark;
-        Resources["ContextHoverBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#403554" : "#E8EFFF"));
-        Resources["ContextHoverTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#D8C9FF" : "#2A67D2"));
-        Resources["ContextTextBrush"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString(dark ? "#F5F5F8" : "#171716"));
-        UpdateTaskTabs();
-        static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
-        Background = Brush(dark ? "#202126" : "#F7F7FC");
-        BrowserToolbar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
-        TitleBar.Background = Brush(dark ? "#17181C" : "#F7F7FC");
-        TitleName.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
-        TitleStatus.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        ToolbarTitle.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        WorkspaceSplitter.Background = Brush(dark ? "#35363E" : "#DEDAD5");
-        var accent = Brush(dark ? "#4F8CF5" : "#387DF3");
-        ToggleControlsButton.Background = Brush(dark ? "#24252C" : "#FFFFFF");
-        ToggleControlsButton.Foreground = Brush(dark ? "#F5F5F8" : "#74716E");
-        CourseRetryButton.Background = accent;
-        CourseOverlay.Background = Brush(dark ? "#202126" : "#F7F7FC");
-        CourseOverlayTitle.Foreground = Brush(dark ? "#F5F5F8" : "#171716");
-        CourseOverlayDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        TaskLoadingSurface.Background = Brush(dark ? "#202126" : "#F7F7FC");
-        TaskLoadingTitle.Foreground = Brush(dark ? "#F5F5F8" : "#292826");
-        TaskLoadingDetail.Foreground = Brush(dark ? "#A3A3AD" : "#74716E");
-        UpdateDeveloperChrome();
+        if (skinState is null) NativeUi.ApplyDefault(this, dark);
+        Background = NativeUi.Brush(this, "Background");
+        BrowserToolbar.Background = NativeUi.Brush(this, "Surface");
+        TitleBar.Background = NativeUi.Brush(this, "Background");
+        TitleName.Foreground = NativeUi.Brush(this, "Text");
+        TitleStatus.Foreground = ToolbarTitle.Foreground = NativeUi.Brush(this, "Muted");
+        WorkspaceSplitter.Background = NativeUi.Brush(this, "Border");
+        ToggleControlsButton.Background = NativeUi.Brush(this, "Panel");
+        ToggleControlsButton.Foreground = NativeUi.Brush(this, "Text");
+        CourseRetryButton.Background = NativeUi.Brush(this, "Accent");
+        CourseRetryButton.Foreground = NativeUi.Brush(this, "OnAccent");
+        CourseOverlay.Background = TaskLoadingSurface.Background = NativeUi.Brush(this, "Background");
+        CourseOverlayTitle.Foreground = TaskLoadingTitle.Foreground = NativeUi.Brush(this, "Text");
+        CourseOverlayDetail.Foreground = TaskLoadingDetail.Foreground = NativeUi.Brush(this, "Muted");
+        UpdateTaskTabs(); UpdateDeveloperChrome();
     }
 
     private async Task StartSessionAsync()
@@ -1405,6 +1452,7 @@ public partial class MainWindow : Window
 
     private void Window_Closed(object? sender, EventArgs e)
     {
+        androidMirrorWindow?.Close();
         CancelAgent();
         // Worker never needs the dispatcher. Finish pending writes before profile cleanup/process exit.
         agentSessionStore?.FlushAsync().GetAwaiter().GetResult();

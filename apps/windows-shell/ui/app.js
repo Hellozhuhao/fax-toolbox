@@ -19,8 +19,10 @@
   const viewHistory = [];
   const viewScrollPositions = new Map();
   let currentView = '';
+  let lastLayout = '';
   let restoringAgentSnapshot = false;
   let agentMode = 'chat', agentEffort = 'normal', agentProvider = '', agentModel = '';
+  let agentDrawer, agentRunPopover;
   const motionReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const activity = [];
   let activityFilter = 'all';
@@ -38,8 +40,9 @@
     $('toolbox-confirm-message').textContent = message;
     const input = $('toolbox-confirm-input'); input.hidden = !options.input; input.value = '';
     input.placeholder = options.placeholder || '';
-    const accept = $('toolbox-confirm-accept'); accept.textContent = options.confirmLabel || '删除';
-    accept.classList.toggle('destructive', !options.input);
+    const accept = $('toolbox-confirm-accept'); accept.textContent = options.confirmLabel || '删除'; accept.disabled=!!options.input;
+    accept.classList.toggle('destructive', options.destructive ?? !options.input);
+    window.FaxUi?.inherit(document.activeElement || document.documentElement, confirmation);
     confirmation.showModal();
     (options.input ? input : $('toolbox-confirm-cancel')).focus();
   }
@@ -52,8 +55,9 @@
     confirmation.close();
     action?.(input.value.trim());
   });
+  $('toolbox-confirm-input').addEventListener('input',()=>{$('toolbox-confirm-accept').disabled=!$('toolbox-confirm-input').value.trim();});
   $('toolbox-confirm-input').addEventListener('keydown', event => {
-    if (event.key === 'Enter') { event.preventDefault(); $('toolbox-confirm-accept').click(); }
+    if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); $('toolbox-confirm-accept').click(); }
   });
   confirmation.addEventListener('close', () => {
     if (confirmation.open) return;
@@ -67,18 +71,19 @@
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) confirmation.close();
   });
   function focusedMenu(side, entries, initial) {
-    const menu = document.createElement('nav'); menu.className = 'focus-menu'; menu.setAttribute('aria-label', '内容分类');
+    const menu = document.createElement('nav'); menu.className = 'focus-menu'; menu.setAttribute('aria-label', '内容分类'); menu.role='tablist';
     const panels = document.createElement('div'); panels.className = 'focus-panels';
     const buttons = new Map();
     function select(key) {
-      for (const [name, button] of buttons) button.classList.toggle('selected', name === key);
+      for (const [name, button] of buttons) { const selected=name===key; button.classList.toggle('selected',selected);button.setAttribute('aria-selected',String(selected));button.tabIndex=selected?0:-1; }
       for (const panel of panels.children) panel.hidden = panel.dataset.focusPanel !== key;
       side.dataset.activePanel = key;
     }
     for (const {key, label, nodes} of entries) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'focus-menu-item'; button.dataset.focusKey = key;
-      button.textContent = label; button.addEventListener('click', () => select(key)); menu.append(button); buttons.set(key, button);
+      button.role='tab'; button.textContent = label; button.addEventListener('click', () => select(key)); menu.append(button); buttons.set(key, button);
       const panel = document.createElement('div'); panel.className = 'focus-panel'; panel.dataset.focusPanel = key;
+      const suffix=side.dataset.focusOwner || side.closest('.view')?.id || 'agent';panel.id=suffix+'-panel-'+key;panel.role='tabpanel';button.id=suffix+'-tab-'+key;button.setAttribute('aria-controls',panel.id);panel.setAttribute('aria-labelledby',button.id);
       for (const node of nodes) if (node) { if (node.tagName === 'DETAILS') node.open = true; panel.append(node); }
       panels.append(panel);
     }
@@ -125,7 +130,7 @@
     const folderPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     folderPath.setAttribute('d', 'M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z');
     projectIcon.append(folderPath); $('agent-folder').insertBefore(projectIcon, $('agent-root'));
-    const rail = document.createElement('nav'); rail.className = 'agent-section-rail'; rail.setAttribute('aria-label', 'Agent 分类');
+    const rail = document.createElement('nav'); rail.className = 'agent-section-rail'; rail.setAttribute('aria-label', 'Agent 分类');rail.role='tablist';rail.setAttribute('aria-orientation','vertical');
     const railItems = [
       ['sessions', '会话', '<path d="M4 5h16v12H8l-4 3z"/>'],
       ['model', '模型', '<path d="m12 2 2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2z"/>'],
@@ -138,7 +143,7 @@
     ];
     for (const [key, label, paths] of railItems) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'agent-rail-item';
-      button.dataset.agentSection = key; button.title = label; button.setAttribute('aria-label', label);
+      button.dataset.agentSection = key;button.role='tab';button.id='view-ai-tab-'+key;button.setAttribute('aria-controls','view-ai-panel-'+key); button.title = label; button.setAttribute('aria-label', label);
       button.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
       rail.append(button);
     }
@@ -149,6 +154,8 @@
     composerActions.classList.add('agent-composer-actions');
     const runSettings = document.createElement('div'); runSettings.className = 'agent-run-settings';
     runSettings.innerHTML = '<button id="agent-run-toggle" type="button" aria-expanded="false">Chat · 标准</button><div id="agent-run-panel" class="agent-run-panel" hidden><div class="agent-run-modes" role="radiogroup" aria-label="Agent 模式"><label><input type="radio" name="agent-mode" value="chat" checked><span>Chat</span></label><label><input type="radio" name="agent-mode" value="code"><span>Code</span></label></div><div class="agent-run-label">模型</div><div id="agent-model-list" class="agent-model-list" aria-label="模型选择"></div><label for="agent-effort">思考深度 <strong id="agent-effort-label">标准</strong></label><div class="agent-effort-slider"><input id="agent-effort" type="range" min="0" max="2" step="1" value="1" aria-label="思考深度"></div><span id="agent-model-error" class="muted"></span></div>';
+    runSettings.querySelector('#agent-effort').style.setProperty('--range-progress', '50%');
+    runSettings.querySelector('#agent-effort').setAttribute('aria-valuetext', '标准');
     composerActions.insertBefore(runSettings, $('agent-send'));
     const selectAgentCategory = key => {
       selectAgentPanel(key);
@@ -156,7 +163,7 @@
       agentTitle.textContent = key === 'sessions' ? 'Agent' : label || 'Agent';
       for (const button of rail.querySelectorAll('button')) {
         const active = button.dataset.agentSection === key;
-        button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
+        button.classList.toggle('active', active); button.setAttribute('aria-selected', String(active));button.tabIndex=active?0:-1;
       }
     };
     rail.querySelectorAll('button').forEach(button => button.addEventListener('click', () => selectAgentCategory(button.dataset.agentSection)));
@@ -166,17 +173,15 @@
     function studyLayout(id, primary, secondary, initial) {
       const view = $('view-' + id);
       const layout = document.createElement('div'); layout.className = 'study-layout';
-      const side = document.createElement('aside'); side.className = 'study-side'; side.setAttribute('aria-label', viewNames[id] + '分类');
+      const side = document.createElement('aside'); side.className = 'study-side'; side.dataset.focusOwner='view-'+id; side.setAttribute('aria-label', viewNames[id] + '分类');
       const main = document.createElement('div'); main.className = 'study-main';
       const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'study-toggle secondary';
       toggle.textContent = '☰  分类'; toggle.setAttribute('aria-label', '打开' + viewNames[id] + '分类'); toggle.setAttribute('aria-expanded', 'false');
-      toggle.addEventListener('click', () => { layout.classList.toggle('side-open'); toggle.setAttribute('aria-expanded', String(layout.classList.contains('side-open'))); });
-      layout.addEventListener('pointerdown', event => { if (layout.classList.contains('side-open') && !side.contains(event.target) && event.target !== toggle) { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); } });
-      layout.addEventListener('keydown', event => { if (event.key === 'Escape') { layout.classList.remove('side-open'); toggle.setAttribute('aria-expanded', 'false'); toggle.focus(); } });
       for (const node of primary) main.append(node);
       main.prepend(toggle);
       focusedMenu(side, secondary, initial);
       layout.append(side, main); view.append(layout);
+      window.FaxUi.createDrawer({trigger: toggle, panel: side, media: '(max-width: 680px)', label: viewNames[id] + '分类'});
     }
     const course = $('view-course');
     const courseActions = course.querySelector('.course-actions');
@@ -194,6 +199,7 @@
       {key: 'progress', label: '校对进度', nodes: [homework.querySelector('.homework-progress-card')]},
       {key: 'ai', label: 'AI 校对', nodes: [homework.querySelector('.ai-card')]}
     ], 'page');
+    agentDrawer = window.FaxUi.createDrawer({trigger: $('agent-sidebar-toggle'), panel: agentSide, media: '(max-width: 900px)', label: '项目与会话'});
   }
   setupFocusedViews();
   for (const id of ['course-ai-open', 'homework-ai-open']) $(id).innerHTML = '<span>模型设置</span>' + uiIcon('arrow');
@@ -205,12 +211,11 @@
     element.classList.add('motion-new');
     element.addEventListener('animationend', () => element.classList.remove('motion-new'), {once: true});
   }
-  function show(view, record = true) {
+  function show(view, record = true, forceLayout = false) {
     if (record && currentView && currentView !== view) viewHistory.push(currentView);
     const previousView = currentView;
     currentView = view;
-    if (view !== 'ai') { document.querySelector('.agent-side')?.classList.remove('mobile-open'); $('agent-sidebar-toggle')?.setAttribute('aria-expanded', 'false'); }
-    if (previousView !== view) for (const layout of document.querySelectorAll('.study-layout.side-open')) { layout.classList.remove('side-open'); layout.querySelector('.study-toggle')?.setAttribute('aria-expanded', 'false'); }
+    if (['course', 'homework', 'demo', 'ai', 'proxy'].includes(view)) activeModule = view;
     // Touch only the outgoing and incoming surfaces so cached views do not
     // repeatedly invalidate layout while WebView2 is painting another tab.
     if (previousView !== view) {
@@ -229,16 +234,21 @@
       if (previousView && !motionReduced.matches) incoming.classList.add('motion-enter');
       document.scrollingElement.scrollTop = viewScrollPositions.get(view) || 0;
     }
-    const navigation = ['course', 'homework', 'demo', 'ai', 'proxy', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
+    const navigation = view === 'ai' ? 'ai' : ['course', 'homework', 'demo', 'proxy', 'workspace'].includes(view) ? 'modules' : view === 'vault' ? 'settings' : view;
     for (const item of document.querySelectorAll('.sidebar .nav-item[data-view]')) item.classList.toggle('active', item.dataset.view === navigation);
     for (const item of document.querySelectorAll('.nav-flyout [data-view]')) item.classList.toggle('active', item.dataset.view === view);
     $('location-name').textContent = viewNames[view];
+    $('shell-back').hidden = viewHistory.length === 0;
+    window.FaxUi?.closeOverlays();
     document.body.dataset.view = view;
-    send('ui.layout', {mode: view === 'homework' ?
+    if (previousView !== view) window.dispatchEvent(new CustomEvent('fax:view-changed', {detail: {view}}));
+    const layout = {mode: view === 'homework' ?
       (homeworkBrowsing ? 'homework-browser' : 'homework-results') :
-      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0});
+      ['course', 'demo'].includes(view) ? 'module' : 'home', view, canGoBack: viewHistory.length > 0};
+    const signature = JSON.stringify(layout);
+    if (forceLayout || signature !== lastLayout) { lastLayout = signature; send('ui.layout', layout); }
     if (view === 'vault') send('vault.list');
-    if (view === 'activity') renderActivity();
+    if (view === 'activity' && previousView !== view) renderActivity();
   }
   function showWorkspace() {
     if (activeModule === 'course') openCourse();
@@ -300,24 +310,28 @@
     list.replaceChildren(fragment);
   }
   function openCourse() {
+    const changed = currentView !== 'course';
     activeModule = 'course'; $('workspace-module').textContent = '学习通刷课';
     $('workspace-detail').textContent = '点击左侧工作台可随时回到课程控制页。';
     show('course');
-    send('course.activate');
+    if (changed) send('course.activate');
   }
   function openHomework() {
+    const changed = currentView !== 'homework';
     activeModule = 'homework'; $('workspace-module').textContent = '作业校对';
     $('workspace-detail').textContent = '点击左侧工作台可随时查看作业校对结果。';
-    show('homework'); send('homework.activate');
+    show('homework'); if (changed) send('homework.activate');
   }
   function openAi() {
+    const changed = currentView !== 'ai';
     activeModule = 'ai'; $('workspace-module').textContent = 'Agent';
     $('workspace-detail').textContent = '处理项目任务，并管理各模块的模型连接。';
-    show('ai'); send('ai.activate'); send('ai.get-config');
+    show('ai'); if (changed) { send('ai.activate'); send('ai.get-config'); }
   }
   function openProxy() {
+    const changed = currentView !== 'proxy';
     activeModule = 'proxy'; $('workspace-module').textContent = '网络管家';
-    show('proxy'); send('proxy.activate'); send('proxy.get');
+    show('proxy'); if (changed) { send('proxy.activate'); send('proxy.get'); }
   }
   function goBack() {
     if (!viewHistory.length) return false;
@@ -336,15 +350,16 @@
     $('homework-open').textContent = browsing ? '正在浏览学习通' : '浏览学习通作业';
   }
   function openDemo() {
+    const changed = currentView !== 'demo';
     activeModule = 'demo'; $('workspace-module').textContent = '页面事件演示';
     $('workspace-detail').textContent = '点击左侧工作台可随时回到演示控制页。';
     show('demo');
-    send('demo.activate');
+    if (changed) send('demo.activate');
   }
   function setTheme(theme, notifyHost = true) {
     const value = theme === 'light' ? 'light' : 'dark';
     document.documentElement.dataset.theme = value;
-    for (const item of document.querySelectorAll('[data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
+    for (const item of document.querySelectorAll('.theme-switch [data-theme]')) item.classList.toggle('selected', item.dataset.theme === value);
     try { localStorage.setItem('fax-toolbox-theme', value); } catch (_) { /* UI remains usable without storage. */ }
     if (notifyHost) send('ui.theme', {theme: value});
   }
@@ -371,8 +386,10 @@
     const field = $('answers-chapter');
     if (!field.value.trim() || field.value === suggestedChapterId) field.value = currentChapterId;
     suggestedChapterId = currentChapterId;
-    if (currentChapterId && catalogEntries.some(entry => entry.id === currentChapterId))
+    if (currentChapterId && catalogEntries.some(entry => entry.id === currentChapterId)) {
       $('course-chapters').value = currentChapterId;
+      window.FaxUi?.refresh($('course-chapters'));
+    }
   }
   function renderCatalog(message) {
     catalogEntries = Array.isArray(message.entries) ? message.entries : [];
@@ -459,6 +476,7 @@
     $('ai-test').disabled = message.state === 'testing';
   }
   let agentInstalledModels = [];
+  let agentModelListSignature = '';
   function agentModelNames(name) {
     if (name === 'fax-toolbox-qwen3:8k') return ['Qwen3 8B · 长上下文', '本地模型 · 8K 上下文'];
     if (name === 'qwen3:8b') return ['Qwen3 8B', '本地模型'];
@@ -470,6 +488,9 @@
     return [title || '未配置模型', name];
   }
   function renderAgentModelList() {
+    const signature = JSON.stringify([agentProvider, agentModel, agentInstalledModels]);
+    if (signature === agentModelListSignature) return;
+    agentModelListSignature = signature;
     const list = $('agent-model-list');
     list.replaceChildren();
     const heading = label => {
@@ -497,6 +518,7 @@
     for (const model of models) {
       const button = document.createElement('button'); button.type = 'button';
       button.className = 'agent-model-choice'; button.dataset.agentModel = model.name;
+      button.title = model.name;
       const selected = model.name === agentModel;
       button.classList.toggle('selected', selected); button.setAttribute('aria-pressed', String(selected));
       const [title, detail] = agentModelNames(model.name);
@@ -515,19 +537,20 @@
     configure.className = 'agent-model-configure'; configure.textContent = '管理模型连接';
     list.append(configure);
   }
-  function updateAgentRunOptions() {
+  function updateAgentRunOptions(renderModels = true) {
     const effortNames = {quick: '快速', normal: '标准', deep: '深入'};
     const shortModel = agentModel ? agentModelNames(agentModel)[0] : '选择模型';
     $('agent-run-toggle').textContent = `${agentMode === 'code' ? 'Code' : 'Chat'} · ${shortModel} · ${effortNames[agentEffort] || '标准'}`;
     $('agent-effort').value = String({quick: 0, normal: 1, deep: 2}[agentEffort] ?? 1);
     $('agent-effort-label').textContent = effortNames[agentEffort] || '标准';
     $('agent-effort').setAttribute('aria-valuetext', effortNames[agentEffort] || '标准');
+    $('agent-effort').style.setProperty('--range-progress', `${Number($('agent-effort').value) * 50}%`);
     for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.checked = radio.value === agentMode;
     $('agent-prompt-scope').textContent = `${agentModel || '当前模型'} · ${agentMode === 'code' ? 'Code' : 'Chat'}`;
     $('agent-prompt').placeholder = agentMode === 'code' ? '描述要处理的任务…' : '输入消息…';
     const empty = $('agent-timeline').querySelector('.agent-empty strong');
     if (empty) empty.textContent = agentMode === 'code' ? '描述任务，Agent 会记录执行过程。' : '开始对话';
-    renderAgentModelList();
+    if (renderModels) renderAgentModelList();
   }
   let agentBusy = false;
   let agentApprovalId = '';
@@ -564,7 +587,7 @@
     select.hidden = true; row.insertBefore(input, select); input.focus(); input.select();
     let finished = false;
     const finish = save => { if (finished) return; finished = true; const title = input.value.trim(); input.remove(); select.hidden = false; if (save && title && title !== original) send('agent.session.rename', {sessionId: row.dataset.sessionId, title}); };
-    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
+    input.addEventListener('keydown', event => { if (event.isComposing || event.keyCode === 229) return; if (event.key === 'Enter') { event.preventDefault(); finish(true); } else if (event.key === 'Escape') { event.preventDefault(); finish(false); } });
     input.addEventListener('blur', () => finish(true));
   }
   let agentSessionListSignature = '';
@@ -596,7 +619,7 @@
       const select = document.createElement('button'); select.type = 'button'; select.className = 'agent-session-select';
       select.textContent = session.title || '新任务'; select.title = select.textContent;
       select.classList.toggle('selected', session.id === data.activeId); select.disabled = agentBusy;
-      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); document.querySelector('.agent-side').classList.remove('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', 'false'); });
+      select.addEventListener('click', () => { if (!agentBusy && session.id !== activeAgentSessionId) send('agent.session.select', {sessionId: session.id}); if (agentDrawer.isOpen()) { agentDrawer.close(false); $('agent-prompt').focus(); } });
       const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'agent-session-delete';
       remove.innerHTML = uiIcon('close'); remove.title = '删除会话'; remove.setAttribute('aria-label', '删除会话 ' + select.textContent); remove.disabled = agentBusy;
       remove.addEventListener('click', () => { if (!agentBusy) confirmAction('删除会话', `删除「${session.title || '新任务'}」及其记录？此操作无法撤销。`, () => { if (!agentBusy) send('agent.session.delete', {sessionId: session.id}); }); });
@@ -626,6 +649,7 @@
       if (index >= animateFrom) animateNew(item);
       const preview = document.createElement('img'); preview.src = dataUrl; preview.alt = '待发送图片 ' + (index + 1);
       const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除图片';
+      remove.setAttribute('aria-label', '移除图片 ' + (index + 1));
       remove.addEventListener('click', () => { agentImages.splice(index, 1); renderAgentImages(); });
       item.append(preview, remove); tray.append(item);
     });
@@ -634,6 +658,7 @@
       const icon = document.createElement('span'); icon.textContent = file.name.includes('/') ? '▧' : '▤';
       const name = document.createElement('span'); name.textContent = file.name;
       const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = uiIcon('close'); remove.title = '移除附件';
+      remove.setAttribute('aria-label', '移除附件 ' + file.name);
       remove.addEventListener('click', () => { agentFiles.splice(index, 1); renderAgentImages(); });
       item.append(icon, name, remove); tray.append(item);
     });
@@ -714,34 +739,34 @@
     folders.setAttribute('webkitdirectory', ''); folders.hidden = true;
     form.append(documents, folders);
     const plus = document.createElement('button'); plus.type = 'button'; plus.className = 'agent-plus';
-    plus.textContent = '＋'; plus.title = '添加'; plus.setAttribute('aria-label', '添加'); plus.setAttribute('aria-expanded', 'false');
+    plus.innerHTML = window.FaxIcons.svg('plus'); plus.title = '添加'; plus.setAttribute('aria-label', '添加'); plus.setAttribute('aria-expanded', 'false');
     actions.insertBefore(plus, oldAdd);
     const menu = document.createElement('div'); menu.className = 'agent-add-menu'; menu.hidden = true; form.insertBefore(menu, actions);
+    const popover = window.FaxUi.createPopover({trigger: plus, panel: menu, menu: true});
     const heading = label => { const title = document.createElement('small'); title.textContent = label; menu.append(title); };
     const option = (icon, label, description, action) => {
       const button = document.createElement('button'); button.type = 'button';
-      button.innerHTML = `<span class="agent-add-icon" aria-hidden="true">${icon}</span><span><strong>${label}</strong><em>${description}</em></span>`;
-      button.addEventListener('click', () => { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); action(); });
+      button.innerHTML = `<span class="agent-add-icon" aria-hidden="true">${window.FaxIcons.svg(icon)}</span><span><strong>${label}</strong><em>${description}</em></span>`;
+      button.role = 'menuitem';
+      button.addEventListener('click', () => { popover.close(true); action(); });
       menu.append(button);
     };
     heading('添加');
-    option('▤', '文件和文件夹', '文档、图片或文件夹', () => documents.click());
-    option('▧', '选择文件夹', '添加文件夹中的文档', () => folders.click());
-    option('◎', '目标', '设置本次对话的长期背景', () => {
-      document.querySelector('[data-agent-section="memory"]')?.click(); $('agent-background').focus();
+    option('attach', '文件和文件夹', '文档、图片或文件夹', () => documents.click());
+    option('folder', '选择文件夹', '添加文件夹中的文档', () => folders.click());
+    option('target', '目标', '设置本次对话的长期背景', () => {
+      agentDrawer.open(); document.querySelector('[data-agent-section="memory"]')?.click(); $('agent-background').focus();
     });
-    option('☷', '计划模式', '下一条消息只制定计划', () => {
+    option('plan', '计划模式', '下一条消息只制定计划', () => {
       agentPlanOnly = !agentPlanOnly;
       plus.classList.toggle('plan-active', agentPlanOnly);
       plus.title = agentPlanOnly ? '计划模式已开启' : '添加';
       $('agent-state').textContent = agentPlanOnly ? '计划模式：下一条消息只制定计划' : '';
     });
-    option('✎', '绘图', '手绘后作为图片发送', openAgentSketch);
+    option('draw', '绘图', '手绘后作为图片发送', openAgentSketch);
     heading('工具箱');
-    option('◫', '学习通', '打开学习通模块', openCourse);
-    option('✓', '作业校对', '打开作业校对模块', openHomework);
-    plus.addEventListener('click', () => { menu.hidden = !menu.hidden; plus.setAttribute('aria-expanded', String(!menu.hidden)); });
-    document.addEventListener('click', event => { if (!form.contains(event.target)) { menu.hidden = true; plus.setAttribute('aria-expanded', 'false'); } });
+    option('course', '学习通', '打开学习通模块', openCourse);
+    option('homework', '作业校对', '打开作业校对模块', openHomework);
     documents.addEventListener('change', async () => { await addAgentFiles([...documents.files].map(file => ({file, name: file.name}))); documents.value = ''; });
     folders.addEventListener('change', async () => { await addAgentFiles([...folders.files].map(file => ({file, name: file.webkitRelativePath || file.name}))); folders.value = ''; });
     const rate = document.createElement('span'); rate.id = 'agent-token-rate'; rate.hidden = true;
@@ -759,10 +784,11 @@
     canvas.addEventListener('pointerdown', event => { drawing = true; canvas.setPointerCapture(event.pointerId); const [x, y] = point(event); context.beginPath(); context.moveTo(x, y); });
     canvas.addEventListener('pointermove', event => { if (!drawing) return; const [x, y] = point(event); context.lineTo(x, y); context.stroke(); });
     canvas.addEventListener('pointerup', () => { drawing = false; });
+    canvas.addEventListener('pointercancel', () => { drawing = false; });
     const actions = document.createElement('div');
-    const clear = document.createElement('button'); clear.type = 'button'; clear.textContent = '清空';
+    const clear = document.createElement('button'); clear.type = 'button'; clear.className = 'secondary'; clear.textContent = '清空';
     clear.addEventListener('click', () => { context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); });
-    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = '取消'; cancel.addEventListener('click', () => dialog.close());
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'secondary'; cancel.textContent = '取消'; cancel.addEventListener('click', () => dialog.close());
     const attach = document.createElement('button'); attach.type = 'button'; attach.textContent = '加入对话';
     attach.addEventListener('click', () => { if (agentImages.length >= 4) { $('agent-state').textContent = '最多添加 4 张图片'; return; } agentImages.push(canvas.toDataURL('image/jpeg', .85)); renderAgentImages(); dialog.close(); });
     actions.append(clear, cancel, attach); dialog.append(title, canvas, actions); document.body.append(dialog);
@@ -828,7 +854,7 @@
     pendingAgentStream = null;
     if (detail === null) return;
     const timeline = $('agent-timeline');
-    const follow = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    const follow = currentView === 'ai' && timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
     let draft = timeline.querySelector('.agent-stream');
     if (!detail) { draft?.remove(); return; }
     timeline.querySelector('.agent-empty')?.remove();
@@ -839,14 +865,23 @@
       const body = document.createElement('p'); draft.append(label, body); timeline.append(draft);
     }
     const body = draft.querySelector('p');
-    if (body.textContent !== detail) body.textContent = detail;
+    const previous = draft._streamText || '';
+    if (previous !== detail) {
+      // Most provider updates extend the same text. Keep its text node instead
+      // of replacing a growing reply and notifying every DOM observer per paint.
+      if (body.firstChild?.nodeType === Node.TEXT_NODE && detail.startsWith(previous))
+        body.firstChild.appendData(detail.slice(previous.length));
+      else body.textContent = detail;
+      draft._streamText = detail;
+    }
     if (follow) timeline.scrollTop = timeline.scrollHeight;
   }
   function addAgentEvent(type, detail) {
     const timeline = $('agent-timeline');
     // New tools/status messages must not pull someone away from earlier text.
     // Snapshot replay scrolls once, after all entries have been restored.
-    const follow = type === 'user' || timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80;
+    const follow = !restoringAgentSnapshot && currentView === 'ai' &&
+      (type === 'user' || timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 80);
     const followLatest = () => { if (!restoringAgentSnapshot && follow) timeline.scrollTop = timeline.scrollHeight; };
     if (type === 'assistant' || type === 'error' || type === 'step') {
       clearPendingAgentStream();
@@ -998,6 +1033,11 @@
       agentBusy = !!message.extra?.busy; $('agent-state').textContent = agentBusy ? (message.detail || '正在处理') : '';
       $('ai-agent-state').textContent = agentBusy ? '正在处理' : '等待任务';
       $('agent-send').disabled = agentBusy; $('agent-cancel').hidden = !agentBusy;
+      $('agent-form').setAttribute('aria-busy',String(agentBusy));
+      $('agent-run-toggle').disabled = agentBusy;
+      $('agent-effort').disabled = agentBusy;
+      for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.disabled = agentBusy;
+      if (agentBusy) agentRunPopover?.close();
       $('agent-continue').disabled = agentBusy;
       if (!agentBusy) $('agent-token-rate').hidden = true;
       $('agent-folder').disabled = agentBusy; $('agent-clear').disabled = agentBusy;
@@ -1084,6 +1124,8 @@
       const input = contextPasteTarget; contextPasteTarget = null; input.focus();
       document.execCommand('insertText', false, message.text || '');
     }
+    if (message.kind === 'skins.state') window.dispatchEvent(new CustomEvent('fax:skin-state', {detail: message.state}));
+    if (message.kind === 'skins.error') window.dispatchEvent(new CustomEvent('fax:skin-error', {detail: message.detail}));
     if (message.kind === 'status') {
       $('state').textContent = message.state || '';
       $('home-backend').textContent = stateName(message.state);
@@ -1112,8 +1154,10 @@
     if (message.kind === 'ai.balance') renderAiBalance(message);
     if (message.kind === 'ai.test.status') renderAiTest(message);
     if (message.kind.startsWith('agent.')) renderAgentMessage(message);
+    window.dispatchEvent(new Event('fax:ui-state-changed'));
   });
-  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', () => {
+  for (const item of document.querySelectorAll('[data-view]')) item.addEventListener('click', event => {
+    event.preventDefault();
     if (item.dataset.view === 'workspace') showWorkspace();
     else if (item.dataset.view === 'course') openCourse();
     else if (item.dataset.view === 'homework') openHomework();
@@ -1121,23 +1165,47 @@
     else if (item.dataset.view === 'proxy') openProxy();
     else show(item.dataset.view);
   });
-  $('open-tools-card').addEventListener('click', () => show('modules'));
-  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : item.dataset.open === 'proxy' ? openProxy() : openDemo());
+  $('open-tools-card').addEventListener('click', event => { event.preventDefault(); show('modules'); });
+  for (const link of document.querySelectorAll('a[href^="#"]:not(.skip-link)')) link.addEventListener('click', event => event.preventDefault());
+  for (const item of document.querySelectorAll('[data-open]')) item.addEventListener('click', () => item.dataset.open === 'android' ? send('android.open') : item.dataset.open === 'course' ? openCourse() : item.dataset.open === 'homework' ? openHomework() : item.dataset.open === 'ai' ? openAi() : item.dataset.open === 'proxy' ? openProxy() : openDemo());
+  $('module-android').addEventListener('click', () => send('android.open'));
   $('module-course').addEventListener('click', openCourse);
   $('module-homework').addEventListener('click', openHomework);
   $('module-ai').addEventListener('click', openAi);
   $('module-demo').addEventListener('click', openDemo);
   $('module-proxy').addEventListener('click', openProxy);
   window.FaxToolboxUi = Object.freeze({openCourse, openHomework, openDemo, openAi, openProxy, showHome: () => show('home'),
-    goBack, applyThemeFromHost: theme => setTheme(theme, false),
+    goBack, showActivity: () => show('activity'),
+    confirm: options => new Promise(resolve => {
+      confirmAction(options.title, options.message, () => resolve(true), {confirmLabel: options.confirmLabel || '确认', destructive: !!options.destructive});
+      confirmation.addEventListener('close', () => resolve(false), {once:true});
+    }),
+    confirmSkinReplace: (name, action) => confirmAction('更新皮肤', '替换已导入的“' + name + '”皮肤文件？', action, {confirmLabel: '更新', destructive:false}),
+    skinSnapshot: scope => ({title: viewNames[currentView] || '工具箱', backend: $('state').textContent,
+      courseState, courseReady, fields: scope === 'ai' ? {prompt: $('agent-prompt').value} : {},
+      conversation: scope === 'ai' ? $('agent-timeline').innerText.slice(-12000) : ''}),
+    skinActions: Object.freeze({
+      ...Object.fromEntries(['home', 'modules', 'activity', 'settings'].map(view => ['navigation.' + view, {scopes: ['*'], run: () => show(view)}])),
+      ...Object.fromEntries(Object.entries({ai: openAi, course: openCourse, homework: openHomework, proxy: openProxy, demo: openDemo,
+        android: () => send('android.open')}).map(([id, run]) => ['module.' + id + '.open', {scopes: ['*'], run}])),
+      'agent.focus': {scopes: ['ai'], run: () => $('agent-prompt').focus()},
+      'agent.new-chat': {scopes: ['ai'], run: () => $('agent-clear').click()},
+      'agent.input': {scopes: ['ai'], validate: args => typeof args.text === 'string' && args.text.length <= 4000,
+        run: args => { $('agent-prompt').value = args.text; $('agent-prompt').dispatchEvent(new Event('input', {bubbles: true})); }},
+      'agent.send': {scopes: ['ai'], run: () => $('agent-form').requestSubmit()},
+      'course.pause': {scopes: ['course'], run: () => { if (!$('course-pause').disabled) $('course-pause').click(); }},
+      'course.stop': {scopes: ['course'], run: () => { if (!$('course-stop').disabled) $('course-stop').click(); }}
+    }),
+    applyThemeFromHost: theme => window.FaxToolboxSkins ? window.FaxToolboxSkins.applyThemeFromHost(theme) : setTheme(theme, false),
     applyDeveloperModeFromHost: enabled => setDeveloperMode(enabled, false, false),
-    refresh: () => { show(currentView || 'home', false); send('ai.get-config'); }});
+    refresh: () => { show(currentView || 'home', false, true); send('ai.get-config'); }});
   const contextMenu = $('toolbox-context-menu');
   const contextSubmenu = $('toolbox-context-submenu');
   let contextTarget = null;
   let contextPasteTarget = null;
-  function hideContextSubmenu() { contextSubmenu.hidden = true; contextSubmenu.replaceChildren(); }
-  function closeContextMenu() { contextMenu.hidden = true; contextMenu.replaceChildren(); hideContextSubmenu(); contextTarget = null; }
+  let contextFocus, submenuTrigger, contextAnchor;
+  function hideContextSubmenu() { submenuTrigger?.setAttribute('aria-expanded','false');contextSubmenu.hidden = true; contextSubmenu.replaceChildren(); }
+  function closeContextMenu(restore=false) { contextMenu.hidden = true; contextMenu.replaceChildren(); hideContextSubmenu(); contextTarget = null; if(restore&&contextFocus?.isConnected)contextFocus.focus({preventScroll:true}); }
   function contextAction(label, run, enabled = true) { return {label, run, enabled}; }
   function buildSessionContextActions(row) {
     const session = agentSessionMeta.get(row.dataset.sessionId);
@@ -1197,7 +1265,7 @@
       add('粘贴', () => { contextPasteTarget = input; send('ui.clipboard.paste'); });
       add('全选', () => { input.focus(); if (input.select) input.select(); else document.execCommand('selectAll'); });
     } else if (selected) add('复制所选内容', () => { send('ui.clipboard.copy', {text: selected.slice(0, 65536)}); });
-    const moduleCard = target.closest('[data-open],#module-ai,#module-course,#module-homework,#module-demo');
+    const moduleCard = target.closest('[data-open],#module-ai,#module-course,#module-homework,#module-demo,#module-proxy,#module-android');
     if (moduleCard && !moduleCard.hidden) add('打开' + (moduleCard.querySelector('strong')?.textContent || '工具'), () => moduleCard.click());
     const vaultRow = target.closest('.vault-row');
     if (currentView === 'vault' && vaultRow) add('删除此项', () => vaultRow.querySelector('button')?.click());
@@ -1223,12 +1291,15 @@
     if (event.target.closest('.toolbox-context-menu')) { event.preventDefault(); return; }
     event.preventDefault();
     closeContextMenu();
-    contextTarget = event.target;
+    contextTarget = event.target; contextFocus=document.activeElement; window.FaxUi?.closeOverlays();
+    (event.target.closest('dialog[open]') || document.body).append(contextMenu, contextSubmenu);
+    window.FaxUi?.inherit(event.target,contextMenu);window.FaxUi?.inherit(event.target,contextSubmenu);
     renderContextItems(contextMenu, buildContextActions(contextTarget));
     contextMenu.hidden = false;
     const width = contextMenu.offsetWidth, height = contextMenu.offsetHeight;
     contextMenu.style.left = Math.max(8, Math.min(event.clientX, innerWidth - width - 8)) + 'px';
     contextMenu.style.top = Math.max(8, Math.min(event.clientY, innerHeight - height - 8)) + 'px';
+    contextAnchor=contextTarget.getBoundingClientRect();
   }
   function contextIcon(name) {
     const paths = {
@@ -1258,19 +1329,21 @@
       if (action.separator) { const line = document.createElement('div'); line.className = 'toolbox-context-separator'; host.append(line); continue; }
       const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem';
       button.disabled = action.enabled === false;
+      if(/删除|移除/.test(action.label))button.classList.add('destructive');
       const icon = contextIcon(action.icon); if (icon) button.append(icon);
       const label = document.createElement('span'); label.className = 'toolbox-context-label'; label.textContent = action.label; button.append(label);
       if (action.shortcut) { const hint = document.createElement('kbd'); hint.textContent = action.shortcut; button.append(hint); }
-      if (action.items) { const arrow = document.createElement('span'); arrow.className = 'toolbox-context-arrow'; arrow.textContent = '›'; button.append(arrow); button.setAttribute('aria-haspopup', 'menu'); }
+      if (action.items) { const arrow = document.createElement('span'); arrow.className = 'toolbox-context-arrow'; arrow.textContent = '›'; button.append(arrow); button.setAttribute('aria-haspopup', 'menu');button.setAttribute('aria-expanded','false');button._menuItems=action.items; }
       if (host === contextMenu) button.addEventListener('pointerenter', () => action.items ? showContextSubmenu(action.items, button) : hideContextSubmenu());
       button.addEventListener('click', () => {
         if (action.items) { showContextSubmenu(action.items, button); contextSubmenu.querySelector('button:not(:disabled)')?.focus(); return; }
-        closeContextMenu(); action.run?.();
+        closeContextMenu(true); action.run?.();
       });
       host.append(button);
     }
   }
   function showContextSubmenu(items, trigger) {
+    hideContextSubmenu();submenuTrigger=trigger;trigger.setAttribute('aria-expanded','true');
     renderContextItems(contextSubmenu, items); contextSubmenu.hidden = false;
     const rect = trigger.getBoundingClientRect();
     const width = contextSubmenu.offsetWidth, height = contextSubmenu.offsetHeight;
@@ -1278,12 +1351,21 @@
     contextSubmenu.style.left = Math.max(8, Math.min(right ? rect.right + 4 : rect.left - width - 4, innerWidth - width - 8)) + 'px';
     contextSubmenu.style.top = Math.max(8, Math.min(rect.top - 5, innerHeight - height - 8)) + 'px';
   }
+  for(const menu of [contextMenu,contextSubmenu])menu.addEventListener('keydown',event=>{
+    const items=[...menu.querySelectorAll('button:not(:disabled)')],index=items.indexOf(document.activeElement);
+    if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)) {
+      event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length;items[next]?.focus();
+    } else if(event.key==='ArrowRight'&&document.activeElement?._menuItems) {
+      event.preventDefault();showContextSubmenu(document.activeElement._menuItems,document.activeElement);contextSubmenu.querySelector('button:not(:disabled)')?.focus();
+    } else if(event.key==='ArrowLeft'&&menu===contextSubmenu) {event.preventDefault();hideContextSubmenu();submenuTrigger?.focus();}
+    else if(event.key==='Tab')closeContextMenu(true);
+  });
   document.addEventListener('contextmenu', showContextMenu);
   document.addEventListener('pointerdown', event => { if (!event.target.closest('.toolbox-context-menu')) closeContextMenu(); }, true);
-  document.addEventListener('scroll', event => { if (!event.target.closest?.('.toolbox-context-menu')) closeContextMenu(); }, true);
+  document.addEventListener('scroll', event => { if (contextTarget&&!event.target.closest?.('.toolbox-context-menu')) { const rect=contextTarget.getBoundingClientRect();if(Math.abs(rect.top-contextAnchor.top)>.5||Math.abs(rect.left-contextAnchor.left)>.5)closeContextMenu(); } }, true);
   document.addEventListener('keydown', event => {
-    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); if (!contextSubmenu.hidden) hideContextSubmenu(); else closeContextMenu(); }
-    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus(); }
+    if (event.key === 'Escape' && !contextMenu.hidden) { event.preventDefault(); event.stopImmediatePropagation(); if (!contextSubmenu.hidden) { const trigger=submenuTrigger; hideContextSubmenu();trigger?.focus(); } else closeContextMenu(true); }
+    if (event.key === 'F10' && event.shiftKey) { event.preventDefault(); const rect = (document.activeElement || document.body).getBoundingClientRect(); showContextMenu({target: document.activeElement || document.body, clientX: rect.left + 10, clientY: rect.bottom, preventDefault() {}}); contextMenu.querySelector('button:not(:disabled)')?.focus({preventScroll:true}); }
     if (currentView !== 'ai' || agentBusy || confirmation.open || !$('command-palette').hidden || /^(INPUT|TEXTAREA)$/.test(document.activeElement?.tagName || '')) return;
     const row = document.activeElement?.closest('.agent-session-row') || [...document.querySelectorAll('.agent-session-row')].find(item => item.dataset.sessionId === activeAgentSessionId);
     if (!row) return;
@@ -1294,21 +1376,46 @@
     else if (event.ctrlKey && event.shiftKey && key === 'a') { event.preventDefault(); closeContextMenu(); send('agent.session.archive', {sessionId: row.dataset.sessionId}); }
   });
   window.FaxToolboxContextMenu = Object.freeze({openFor: (selector) => { const element = document.querySelector(selector); if (!element) return false; const rect = element.getBoundingClientRect(); showContextMenu({target: element, clientX: rect.left + 8, clientY: rect.bottom - 8, preventDefault() {}}); return !contextMenu.hidden; }});
+  addEventListener('fax:view-changed', () => closeContextMenu());
+  document.addEventListener('beforetoggle', event => {
+    if (event.target.tagName === 'DIALOG' && event.newState === 'open') closeContextMenu();
+  }, true);
+  addEventListener('resize', () => closeContextMenu());
   const palette = $('command-palette');
-  function togglePalette(open) { palette.hidden = !open; if (open) palette.querySelector('button')?.focus(); }
-  palette.addEventListener('click', event => { if (event.target === palette) togglePalette(false); });
-  for (const item of palette.querySelectorAll('[data-action]')) item.addEventListener('click', () => {
-    togglePalette(false);
-    const action = item.dataset.action;
-    if (action === 'course') openCourse();
-    else if (action === 'homework') openHomework();
-    else if (action === 'demo') openDemo();
-    else if (action === 'ai') openAi();
-    else show(action);
+  let paletteTrigger;
+  function filterPalette() {
+    const query=$('command-search').value.trim().toLocaleLowerCase();let count=0;
+    for(const item of palette.querySelectorAll('[data-action]')) {
+      const shown=(item.dataset.action!=='demo'||developerMode)&&(!query||item.textContent.toLocaleLowerCase().includes(query));
+      item.hidden=!shown;if(shown)count++;
+    }
+    $('command-empty').hidden=count>0;
+  }
+  function togglePalette(open) {
+    if(open) {
+      if(palette.open)return;
+      paletteTrigger=contextMenu.hidden?document.activeElement:contextFocus;closeContextMenu();window.FaxUi?.closeOverlays();
+      $('command-search').value='';filterPalette();palette.hidden=false;palette.showModal();$('command-search').focus();
+    } else if(palette.open) palette.close();
+  }
+  palette.addEventListener('close',()=>{palette.hidden=true;paletteTrigger?.isConnected&&paletteTrigger.focus();});
+  palette.addEventListener('click',event=>{if(event.target===palette)togglePalette(false);});
+  $('command-open').addEventListener('click',()=>togglePalette(true));
+  $('command-search').addEventListener('input',filterPalette);
+  for(const item of palette.querySelectorAll('[data-action]')) item.addEventListener('click',event=>{
+    event.preventDefault();togglePalette(false);const action=item.dataset.action;
+    if(action==='course')openCourse();else if(action==='homework')openHomework();else if(action==='demo')openDemo();
+    else if(action==='ai')openAi();else if(action==='proxy')openProxy();else if(action==='android')send('android.open');
+    else if(action==='skins')window.FaxWorkspace.openSkins();else show(action);
   });
-  document.addEventListener('keydown', event => {
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); togglePalette(palette.hidden); }
-    if (event.key === 'Escape' && !palette.hidden) togglePalette(false);
+  palette.addEventListener('keydown',event=>{
+    if(event.isComposing || event.keyCode===229)return;
+    const items=[...palette.querySelectorAll('[data-action]:not([hidden])')],index=items.indexOf(document.activeElement);
+    if(event.key==='ArrowDown'||event.key==='ArrowUp') {event.preventDefault();items[(index+(event.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
+    else if(event.key==='Enter'&&document.activeElement===$('command-search')) {event.preventDefault();items[0]?.click();}
+  });
+  document.addEventListener('keydown',event=>{
+    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k'&&!confirmation.open&&!document.querySelector('dialog[open]:not(#command-palette)')) {event.preventDefault();togglePalette(!palette.open);}
   });
   $('workspace-modules').addEventListener('click', () => show('modules'));
   $('start').addEventListener('click', () => { openDemo(); send('session.start'); });
@@ -1334,23 +1441,16 @@
     item.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); select(); } });
   }
   $('agent-folder').addEventListener('click', () => send('agent.folder'));
-  $('agent-run-toggle').addEventListener('click', () => {
-    const panel = $('agent-run-panel'); panel.hidden = !panel.hidden;
-    $('agent-run-toggle').setAttribute('aria-expanded', String(!panel.hidden));
-    if (!panel.hidden && agentProvider === 'ollama') send('agent.models');
-    else if (!panel.hidden) renderAgentMessage({kind: 'agent.models', extra: {models: []}});
-  });
-  document.addEventListener('click', event => {
-    if (!event.target.closest('.agent-run-settings')) {
-      $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
-    }
-  });
+  agentRunPopover = window.FaxUi.createPopover({trigger: $('agent-run-toggle'), panel: $('agent-run-panel'), onOpen: () => {
+    if (agentProvider === 'ollama') send('agent.models');
+    else renderAgentMessage({kind: 'agent.models', extra: {models: []}});
+  }});
   for (const radio of document.querySelectorAll('input[name="agent-mode"]')) radio.addEventListener('change', () => {
     if (!radio.checked || agentBusy) return;
-    agentMode = radio.value; updateAgentRunOptions(); send('agent.options', {mode: agentMode, effort: agentEffort});
+    agentMode = radio.value; updateAgentRunOptions(false); send('agent.options', {mode: agentMode, effort: agentEffort});
   });
   $('agent-effort').addEventListener('input', event => {
-    agentEffort = ['quick', 'normal', 'deep'][Number(event.target.value)] || 'normal'; updateAgentRunOptions();
+    agentEffort = ['quick', 'normal', 'deep'][Number(event.target.value)] || 'normal'; updateAgentRunOptions(false);
   });
   $('agent-effort').addEventListener('change', () => {
     if (!agentBusy) send('agent.options', {mode: agentMode, effort: agentEffort});
@@ -1363,12 +1463,11 @@
     else if (button.classList.contains('agent-model-configure')) send('agent.configure');
     else if (button.dataset.agentModel && button.dataset.agentModel !== agentModel)
       send('agent.model', {model: button.dataset.agentModel});
-    $('agent-run-panel').hidden = true; $('agent-run-toggle').setAttribute('aria-expanded', 'false');
+    agentRunPopover.close(true);
   });
   $('agent-background').addEventListener('change', event => send('agent.background', {text: event.target.value}));
   $('agent-memory-pool').addEventListener('change', event => send('agent.memory', {text: event.target.value}));
   $('agent-system-prompt').addEventListener('change', event => send('agent.system', {text: event.target.value}));
-  $('agent-sidebar-toggle').addEventListener('click', () => { const sidebar = document.querySelector('.agent-side'); sidebar.classList.toggle('mobile-open'); $('agent-sidebar-toggle').setAttribute('aria-expanded', String(sidebar.classList.contains('mobile-open'))); });
   $('agent-search-toggle').addEventListener('click', () => { const input = $('agent-session-search'); input.hidden = !input.hidden; if (!input.hidden) input.focus(); else { input.value = ''; agentSessionSearch = ''; filterAgentSessions(); } });
   $('agent-session-search').addEventListener('input', event => { agentSessionSearch = event.target.value.trim().toLocaleLowerCase(); filterAgentSessions(); });
   setupAgentAddMenu();
@@ -1395,7 +1494,7 @@
   $('agent-approve').addEventListener('click', () => { if (agentApprovalId) send('agent.approve', {approvalId: agentApprovalId}); });
   $('agent-reject').addEventListener('click', () => { if (agentApprovalId) send('agent.reject', {approvalId: agentApprovalId}); });
   $('agent-form').addEventListener('submit', event => { event.preventDefault(); const prompt = $('agent-prompt').value.trim(); if ((!prompt && !agentImages.length && !agentFiles.length) || agentBusy || agentPreparingImages) return; const images = agentImages, files = agentFiles.map(({name, data}) => ({name, data})); const planOnly = agentPlanOnly; agentImages = []; agentFiles = []; agentPlanOnly = false; document.querySelector('.agent-plus').classList.remove('plan-active'); renderAgentImages(); $('agent-prompt').value = ''; agentDrafts.delete(activeAgentSessionId); send('agent.send', {prompt, images, files, planOnly}); });
-  $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); $('agent-form').requestSubmit(); } });
+  $('agent-prompt').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); $('agent-form').requestSubmit(); } });
   document.addEventListener('keydown', event => { if (currentView === 'ai' && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'n') { event.preventDefault(); $('agent-clear').click(); $('agent-prompt').focus(); } });
   $('ai-test').addEventListener('click', () => send('ai.test'));
   $('ai-balance-refresh').addEventListener('click', () => send('ai.balance.refresh'));
@@ -1446,25 +1545,9 @@
   let savedDeveloperMode = false;
   try { savedDeveloperMode = localStorage.getItem('fax-toolbox-developer-mode') === 'on'; } catch (_) {}
   setDeveloperMode(savedDeveloperMode);
-  const toolGroup = document.querySelector('.nav-group');
-  let flyoutOpenTimer, flyoutCloseTimer;
-  let suppressFlyoutUntilLeave = false;
-  const hideFlyoutNow = () => { clearTimeout(flyoutOpenTimer); clearTimeout(flyoutCloseTimer); toolGroup.classList.remove('flyout-open'); };
-  const openFlyout = () => { clearTimeout(flyoutCloseTimer); clearTimeout(flyoutOpenTimer);
-    if (!suppressFlyoutUntilLeave) flyoutOpenTimer = setTimeout(() => toolGroup.classList.add('flyout-open'), 380); };
-  const closeFlyout = () => { clearTimeout(flyoutOpenTimer); clearTimeout(flyoutCloseTimer);
-    flyoutCloseTimer = setTimeout(hideFlyoutNow, 180); };
-  toolGroup.addEventListener('pointerenter', openFlyout);
-  toolGroup.addEventListener('pointerleave', () => { suppressFlyoutUntilLeave = false; closeFlyout(); });
-  toolGroup.querySelector('.nav-item').addEventListener('pointerdown', () => { suppressFlyoutUntilLeave = true; hideFlyoutNow(); });
-  toolGroup.addEventListener('focusin', event => { if (!suppressFlyoutUntilLeave && event.target.matches(':focus-visible')) { clearTimeout(flyoutCloseTimer); toolGroup.classList.add('flyout-open'); } });
-  toolGroup.addEventListener('focusout', () => setTimeout(() => {
-    if (!toolGroup.contains(document.activeElement)) toolGroup.classList.remove('flyout-open');
-  }, 0));
-  toolGroup.querySelectorAll('.nav-flyout button').forEach(button => button.addEventListener('click', () => { suppressFlyoutUntilLeave = true; hideFlyoutNow(); }));
-  for (const item of document.querySelectorAll('[data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
+  for (const item of document.querySelectorAll('.theme-switch [data-theme]')) item.addEventListener('click', () => setTheme(item.dataset.theme));
   let savedTheme = 'light'; try { savedTheme = localStorage.getItem('fax-toolbox-theme') || 'light'; } catch (_) { /* Use light default. */ }
-  setTheme(savedTheme);
+  setTheme(savedTheme, false);
   const initialModule = new URLSearchParams(location.search).get('module');
   if (initialModule === 'course') openCourse();
   else if (initialModule === 'homework') openHomework();

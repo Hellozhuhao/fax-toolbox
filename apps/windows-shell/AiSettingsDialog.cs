@@ -38,11 +38,12 @@ internal sealed class AiSettingsDialog : Window
     private readonly TextBlock summary = new();
     private readonly TextBlock keyHint = new();
     private readonly TextBlock privacyHint = new();
+    private readonly TextBlock validation = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 10, 0, 0) };
     private readonly Dictionary<string, Button> providerButtons = [];
     private readonly Dictionary<string, Button> categoryButtons = [];
     private readonly UniformGrid providers = new() { Columns = 2, Margin = new Thickness(0, 8, 0, 10) };
     private Border summaryCard = null!;
-    private readonly SolidColorBrush background, surface, text, subtle, border, accent;
+    private readonly SolidColorBrush background, surface, selection, text, subtle, border, accent, onAccent;
     private AiProviderPreset selected;
     private string currentCategoryId = "";
     private Border modelInputFrame = null!;
@@ -64,12 +65,12 @@ internal sealed class AiSettingsDialog : Window
         if (initialModelId is not null && AiProviderPresets.ModelsFor(selected.Id)
             .Any(option => option.Id == initialModelId)) selectedPresetModels[selected.Id] = initialModelId;
         var dark = owner.Background is SolidColorBrush ownerBrush && ownerBrush.Color.R < 80;
-        background = Brush(dark ? "#202126" : "#F7F7FC");
-        surface = Brush(dark ? "#17181C" : "#FFFFFF");
-        text = Brush(dark ? "#F5F5F8" : "#171716");
-        subtle = Brush(dark ? "#A3A3AD" : "#74716E");
-        border = Brush(dark ? "#35363E" : "#E7EBF4");
-        accent = Brush(dark ? "#4F8CF5" : "#387DF3");
+        NativeUi.Inherit(this, owner);
+        validation.SetResourceReference(TextBlock.ForegroundProperty,"Ui.Error");
+        background = NativeUi.Brush(owner, "Background"); surface = NativeUi.Brush(owner, "Panel");
+        selection = NativeUi.Brush(owner, "Surface"); onAccent = NativeUi.Brush(owner, "OnAccent");
+        text = NativeUi.Brush(owner, "Text"); subtle = NativeUi.Brush(owner, "Muted");
+        border = NativeUi.Brush(owner, "Border"); accent = NativeUi.Brush(owner, "Accent");
         Owner = owner; FontFamily = owner.FontFamily; Title = "配置 " + consumer.Name;
         Width = 620; Height = 625; MinWidth = 540; MinHeight = 550;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -166,7 +167,7 @@ internal sealed class AiSettingsDialog : Window
         modelFields.Children.Add(presetModelChoices);
         body.Children.Add(modelFields);
         keyFields.Children.Add(Label("API Key"));
-        key.Background = surface; key.Foreground = text; key.BorderThickness = new Thickness(0);
+        key.Background = surface; key.Foreground = text; key.BorderThickness = new Thickness(1);
         key.Padding = new Thickness(10, 7, 10, 7); key.FontSize = 13; key.Height = 36;
         keyFields.Children.Add(InputFrame(key, new Thickness(0, 9, 0, 6)));
         keyHint.Foreground = subtle; keyHint.FontSize = 11; keyHint.TextWrapping = TextWrapping.Wrap;
@@ -213,56 +214,44 @@ internal sealed class AiSettingsDialog : Window
             endpoint.LostFocus += (_, _) => RefreshPromptFields();
         }
         privacyHint.Text = "密钥由 Windows 当前用户加密保存在本机。输入内容会发送给所选服务商。";
-        privacyHint.Foreground = subtle; privacyHint.FontSize = 11; privacyHint.TextWrapping = TextWrapping.Wrap;
+        privacyHint.Foreground = subtle; privacyHint.FontSize = 12; privacyHint.TextWrapping = TextWrapping.Wrap;
         privacyHint.Margin = new Thickness(0, 17, 0, 4); body.Children.Add(privacyHint);
 
         var actions = new Grid { Margin = new Thickness(28, 16, 28, 22) };
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        actions.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         actions.ColumnDefinitions.Add(new ColumnDefinition());
         actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         actions.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var cancel = PlainButton("取消"); cancel.Width = 92; cancel.Click += (_, _) => Close();
-        Grid.SetColumn(cancel, 1); actions.Children.Add(cancel);
+        validation.Margin = new Thickness(0, 0, 0, 12); Grid.SetColumnSpan(validation, 3); actions.Children.Add(validation);
+        Grid.SetRow(cancel, 1); Grid.SetColumn(cancel, 1); actions.Children.Add(cancel);
         var save = PlainButton("保存设置"); save.Width = 116; save.Margin = new Thickness(10, 0, 0, 0);
-        save.Background = accent; save.Foreground = Brushes.White; save.BorderBrush = accent; save.IsDefault = true;
-        save.Click += Save; Grid.SetColumn(save, 2); actions.Children.Add(save);
+        save.Background = accent; save.Foreground = onAccent; save.BorderBrush = accent; save.IsDefault = true;
+        save.Click += Save; Grid.SetRow(save, 1); Grid.SetColumn(save, 2); actions.Children.Add(save);
         Grid.SetRow(actions, 2); layout.Children.Add(actions);
         SelectCategory(CategoryFor(selected.Id), false);
         SelectProvider(selected);
     }
 
     private TextBlock Label(string value) => new() { Text = value, Foreground = text, FontSize = 12, FontWeight = FontWeights.SemiBold };
-    private Button PlainButton(string value)
-    {
-        var frame = new FrameworkElementFactory(typeof(Border));
-        frame.SetValue(Border.CornerRadiusProperty, new CornerRadius(12));
-        frame.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Button.BackgroundProperty));
-        frame.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Button.BorderBrushProperty));
-        frame.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Button.BorderThicknessProperty));
-        var content = new FrameworkElementFactory(typeof(ContentPresenter));
-        content.SetValue(ContentPresenter.ContentProperty, new TemplateBindingExtension(Button.ContentProperty));
-        content.SetValue(ContentPresenter.HorizontalAlignmentProperty, new TemplateBindingExtension(Button.HorizontalContentAlignmentProperty));
-        content.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
-        content.SetValue(ContentPresenter.MarginProperty, new TemplateBindingExtension(Button.PaddingProperty));
-        frame.AppendChild(content);
-        return new Button { Content = value, Background = surface, Foreground = text,
-            BorderBrush = border, BorderThickness = new Thickness(1), Padding = new Thickness(12, 7, 12, 7),
-            MinHeight = 36, Cursor = Cursors.Hand, FontSize = 12,
-            Template = new ControlTemplate(typeof(Button)) { VisualTree = frame } };
-    }
+    private Button PlainButton(string value) => new() { Content = value, Background = surface, Foreground = text,
+        BorderBrush = border, BorderThickness = new Thickness(1), Padding = new Thickness(12, 7, 12, 7),
+        MinHeight = 36, Cursor = Cursors.Hand, FontSize = 13, HorizontalContentAlignment = HorizontalAlignment.Center };
     private Border InputFrame(Control field, Thickness margin) => new()
     {
         Child = field, Background = surface, BorderBrush = border,
-        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(14), Margin = margin
+        BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(8), Margin = margin
     };
     private void StyleInput(TextBox field)
     {
-        field.Background = surface; field.Foreground = text; field.BorderThickness = new Thickness(0);
+        field.Background = surface; field.Foreground = text; field.BorderThickness = new Thickness(1);
         field.Padding = new Thickness(10, 7, 10, 7);
         field.FontSize = 12; field.Height = 36;
     }
     private void StyleInput(ComboBox field)
     {
-        field.Background = surface; field.Foreground = text; field.BorderThickness = new Thickness(0);
+        field.Background = surface; field.Foreground = text; field.BorderThickness = new Thickness(1);
         field.Padding = new Thickness(10, 7, 10, 7); field.FontSize = 12; field.Height = 36;
     }
 
@@ -300,7 +289,7 @@ internal sealed class AiSettingsDialog : Window
             var active = id == preset.Id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
+            button.Background = active ? selection : surface;
         }
         customFields.Visibility = preset.Id == "custom" ? Visibility.Visible : Visibility.Collapsed;
         modelFields.Visibility = preset.Id is "custom" or "ollama" or "qwen" ? Visibility.Visible : Visibility.Collapsed;
@@ -351,7 +340,7 @@ internal sealed class AiSettingsDialog : Window
         foreach (var (id, button) in categoryButtons)
         {
             var active = id == categoryId;
-            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
+            button.Background = active ? selection : surface;
             button.BorderBrush = active ? accent : border;
             button.Foreground = active ? accent : text;
         }
@@ -367,7 +356,7 @@ internal sealed class AiSettingsDialog : Window
             var active = optionId == id;
             button.BorderBrush = active ? accent : border;
             button.BorderThickness = new Thickness(active ? 2 : 1);
-            button.Background = active ? Brush(background.Color.R < 80 ? "#263E64" : "#E8EFFF") : surface;
+            button.Background = active ? selection : surface;
         }
         RefreshPromptFields();
     }
@@ -416,6 +405,6 @@ internal sealed class AiSettingsDialog : Window
             AiSettings.Save(consumer.Id, settings); Settings = settings; key.Clear(); DialogResult = true;
         }
         catch (Exception error) when (error is InvalidDataException or UriFormatException)
-        { MessageBox.Show(this, error.Message, "AI 答题设置", MessageBoxButton.OK, MessageBoxImage.Information); }
+        { validation.Text = error.Message; validation.Visibility = Visibility.Visible; validation.BringIntoView(); if (selected.RequiresKey && key.Password.Length == 0) key.Focus(); else endpoint.Focus(); }
     }
 }

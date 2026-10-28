@@ -4,19 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Toolbox smoke module</title>
+  <link rel="stylesheet" href="https://ui.toolbox.invalid/design-system.css">
   <style>
-    body { font: 16px system-ui,sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; }
-    video { display: block; width: 100%; height: 9rem; background: #18212f; border-radius: .8rem; }
-    button { margin-top: 1rem; padding: .7rem 1rem; font: inherit; }
-    p { line-height: 1.6; }
+    body { max-width: 44rem; margin: 0 auto; padding: 32px 24px; }
+    main { background: var(--panel); border: 1px solid var(--border); border-radius: var(--skin-radius); padding: 24px; }
+    video { display: block; width: 100%; height: 9rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+    button { margin: 20px 0 12px; }
+    h1 { font-size: 26px; } code { color: var(--accent); }
   </style>
 </head>
 <body>
-  <h1>Toolbox 本地模块</h1>
+  <main><h1>页面事件演示</h1>
   <p>宿主在文档创建时注入共享代理。代理发现下面的视频节点后，向宿主报告 <code>HELLO</code> 和 <code>VIDEO_FOUND</code>。</p>
   <video id="sample-video" muted playsinline></video>
   <button id="finish" type="button">模拟视频结束</button>
-  <p>点击后，宿主应收到 <code>VIDEO_ENDED</code>，C++ 状态核心进入 <code>COMPLETE</code>。</p>
+  <p>点击后，宿主应收到 <code>VIDEO_ENDED</code>，Rust 状态核心进入 <code>COMPLETE</code>。</p>
+  </main>
   <script>
     document.getElementById('finish').addEventListener('click', function () {
       document.getElementById('sample-video').dispatchEvent(new Event('ended'));

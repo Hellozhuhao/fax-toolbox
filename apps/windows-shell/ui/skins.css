@@ -1,0 +1,80 @@
+/* Skins supply tokens; components own behavior and visual hierarchy. */
+:root[data-skin-id] {
+  color-scheme: var(--skin-color-scheme, light);
+}
+.app[data-skin-navigation="right"] {
+  grid-template-columns: minmax(0, 1fr) 184px;
+}
+.app[data-skin-navigation="right"] > .sidebar {
+  grid-column: 2;
+  grid-row: 1;
+  border-inline-start: 1px solid var(--border);
+  border-inline-end: 0;
+}
+.app[data-skin-navigation="right"] > main.content {
+  grid-column: 1;
+  grid-row: 1;
+}
+.app[data-skin-navigation="top"] {
+  grid-template-columns: minmax(0, 1fr);
+}
+.app[data-skin-navigation="top"] > .sidebar {
+  position: relative;
+  height: auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 22px;
+  border-inline-end: 0;
+  border-bottom: 1px solid var(--border);
+}
+.app[data-skin-navigation="top"] .brand {
+  margin: 0 16px 0 0;
+}
+.app[data-skin-navigation="top"] .sidebar nav {
+  display: flex;
+  gap: 5px;
+}
+.app[data-skin-navigation="top"] .sidebar .nav-item {
+  width: auto;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 10px;
+}
+.app[data-skin-navigation="top"] .sidebar-bottom {
+  display: flex;
+  margin: 0 0 0 auto;
+  padding: 0;
+}
+.app[data-skin-navigation="top"] .connection,
+.app[data-skin-navigation="top"] .nav-label {
+  display: none;
+}
+.app[data-skin-density="compact"] > .content > .view {
+  padding-block: 22px;
+}
+[data-skin-density="compact"] .card {
+  padding: 16px;
+}
+[data-skin-density="compact"] .module-card {
+  min-height: 78px;
+}
+.app [data-skin-scope][data-skin-motion="reduced"] *,
+.app[data-skin-motion="reduced"] :not([data-skin-scope], [data-skin-scope] *) {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+@media (max-width: 850px) {
+  .app[data-skin-navigation="right"] {
+    grid-template-columns: minmax(0, 1fr) 64px;
+  }
+  .app[data-skin-navigation="top"] .sidebar .nav-item > span:last-child {
+    display: inline;
+  }
+  .app[data-skin-navigation="top"] .sidebar .brand > div:last-child {
+    display: block;
+  }
+}

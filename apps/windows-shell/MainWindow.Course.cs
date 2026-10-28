@@ -523,16 +523,21 @@ public partial class MainWindow
             if (await ShellView.CoreWebView2.ExecuteScriptAsync(
                 "!document.getElementById('course-analyze').hidden && !document.getElementById('module-demo').closest('[data-developer-tool]').hidden") != "true")
             { FailSmoke("developer features were not revealed"); return; }
-            await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "document.querySelector('.nav-group').dispatchEvent(new PointerEvent('pointerenter'))");
-            await Task.Delay(150);
-            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "document.querySelector('.nav-group').classList.contains('flyout-open')") != "false")
-            { FailSmoke("tool submenu appeared before hover delay"); return; }
-            await Task.Delay(320);
-            if (await ShellView.CoreWebView2.ExecuteScriptAsync(
-                "document.querySelector('.nav-group').classList.contains('flyout-open')") != "true")
-            { FailSmoke("tool submenu did not appear after hover delay"); return; }
+            var directToolsNavigation = await ShellView.CoreWebView2.ExecuteScriptAsync("""
+                (() => {
+                  const tools = document.querySelector('.sidebar [data-view="modules"]');
+                  const flyout = document.querySelector('.nav-flyout');
+                  tools.click();
+                  if (document.getElementById('view-modules').hidden || !flyout.hidden) return false;
+                  const course = document.getElementById('module-course');
+                  const demo = document.getElementById('module-demo');
+                  if (course.getBoundingClientRect().height === 0 || demo.closest('[data-developer-tool]').hidden) return false;
+                  course.click();
+                  return !document.getElementById('view-course').hidden && flyout.hidden;
+                })()
+                """);
+            if (directToolsNavigation != "true")
+            { FailSmoke("Tools did not open the visible catalog and return to the course"); return; }
             var page = await BuildPageAnalysisAsync();
             using var analysis = JsonDocument.Parse(page);
             var pageData = analysis.RootElement.GetProperty("pages")[0];
@@ -584,7 +589,7 @@ public partial class MainWindow
         var first = TaskWindows[1];
         if (!await WaitForTabUiAsync(first)) { FailSmoke("first home tab did not load"); return; }
         await first.ShellView.CoreWebView2.ExecuteScriptAsync(
-            "document.querySelector('.nav-flyout [data-view=course]').click()");
+            "document.querySelector('.sidebar [data-view=modules]').click(); document.getElementById('module-course').click()");
         if (!await WaitForTabCourseAsync(first)) { FailSmoke("first course tab did not load"); return; }
         first.NewTaskTab_Click(first, new RoutedEventArgs());
         if (TaskWindows.Count != 3 || TaskWindows[2].assignedModule is not null)
@@ -599,10 +604,19 @@ public partial class MainWindow
             ReferenceEquals(first.CourseView.CoreWebView2, second.CourseView.CoreWebView2) ||
             !ReferenceEquals(first.backend, second.backend))
         { FailSmoke("course tabs do not own separate browsers"); return; }
+        var browserHadHistory = second.CourseView.CoreWebView2?.CanGoBack == true;
         second.NavigateBack(false);
-        await Task.Delay(100);
-        if (second.currentShellView != "course")
-        { FailSmoke("ordinary back left the current module"); return; }
+        var expectedBackView = browserHadHistory ? "course" : "home";
+        for (var attempt = 0; attempt < 30 && second.currentShellView != expectedBackView; attempt++) await Task.Delay(50);
+        if (second.currentShellView != expectedBackView || second.assignedModule != "course")
+        { FailSmoke("Back did not prefer browser history then fall back to toolbox history"); return; }
+        if (!browserHadHistory)
+        {
+            second.taskTabVisuals[second].Open.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            for (var attempt = 0; attempt < 30 && second.currentShellView != "course"; attempt++) await Task.Delay(50);
+            if (second.currentShellView != "course")
+            { FailSmoke("restoring the task after Back lost the course module"); return; }
+        }
         second.NavigateBack(true);
         for (var attempt = 0; attempt < 30 && second.currentShellView != "home"; attempt++) await Task.Delay(50);
         if (second.currentShellView != "home" || second.assignedModule != "course")

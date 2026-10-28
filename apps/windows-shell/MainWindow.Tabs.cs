@@ -5,6 +5,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Windows.Automation;
 
 namespace FaxToolbox.Windows;
 
@@ -138,7 +139,6 @@ public partial class MainWindow
 
     private void UpdateTaskTabs()
     {
-        static Brush Color(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
         MainWindow[] windows = smokeMode && !tabSmokeMode ? [this] : TaskWindows.ToArray();
         foreach (var stale in taskTabVisuals.Keys.Where(window => !windows.Contains(window)).ToArray())
         {
@@ -196,25 +196,27 @@ public partial class MainWindow
                 "proxy" => "网络管家",
                 _ => "首页"
             };
-            if (view.Label == label && view.Selected == selected && view.Dark == darkTaskTabs) continue;
+            var changedSelection = selected && !view.Selected;
+            if (view.Label != label)
+            {
+                view.Open.Content = label;
+                AutomationProperties.SetName(view.Open, "切换到" + label + "标签");
+                AutomationProperties.SetName(view.Close, "关闭" + label + "标签");
+                view.Close.ToolTip = "关闭“" + label + "”标签并结束此任务";
+            }
             view.Label = label;
             view.Selected = selected;
             view.Dark = darkTaskTabs;
-            view.Open.Content = label;
-            view.Shell.Background = Color(selected ? darkTaskTabs ? "#4F8CF5" : "#E8EFFF" :
-                darkTaskTabs ? "#24252C" : "#FFFFFF");
-            view.Shell.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
-            view.Open.Foreground = Color(selected ? darkTaskTabs ? "#FFFFFF" : "#2A67D2" :
-                darkTaskTabs ? "#F5F5F8" : "#171716");
-            view.Close.Foreground = Color(selected && darkTaskTabs ? "#FFFFFF" :
-                darkTaskTabs ? "#A3A3AD" : "#74716E");
+            view.Shell.Background = NativeUi.Brush(this, selected ? "Surface" : "Panel");
+            view.Shell.BorderBrush = NativeUi.Brush(this, selected ? "Accent" : "Border");
+            view.Open.Foreground = NativeUi.Brush(this, selected ? "Accent" : "Text");
+            view.Close.Foreground = NativeUi.Brush(this, "Muted");
+            if (changedSelection)
+                _ = Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() => view.Shell.BringIntoView()));
         }
-        NewTaskTabButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
-        NewTaskTabButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        NewTaskTabButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
-        BrowserBackButton.Background = Color(darkTaskTabs ? "#24252C" : "#FFFFFF");
-        BrowserBackButton.Foreground = Color(darkTaskTabs ? "#F5F5F8" : "#74716E");
-        BrowserBackButton.BorderBrush = Color(darkTaskTabs ? "#454650" : "#E7EBF4");
+        NewTaskTabButton.Background = BrowserBackButton.Background = NativeUi.Brush(this, "Panel");
+        NewTaskTabButton.Foreground = BrowserBackButton.Foreground = NativeUi.Brush(this, "Muted");
+        NewTaskTabButton.BorderBrush = BrowserBackButton.BorderBrush = NativeUi.Brush(this, "Border");
         BrowserReloadButton.Background = BrowserBackButton.Background;
         BrowserReloadButton.Foreground = BrowserBackButton.Foreground;
         BrowserReloadButton.BorderBrush = BrowserBackButton.BorderBrush;
@@ -225,14 +227,14 @@ public partial class MainWindow
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(30) });
-        var open = new Button { Height = 35, Style = (Style)FindResource("TaskTabInnerStyle") };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(34) });
+        var open = new Button { Height = 38, Style = (Style)FindResource("TaskTabInnerStyle") };
         open.Click += (_, _) => _ = ReferenceEquals(window, this) ? RestoreCurrentTabAsync() : ActivateTaskWindowAsync(window);
         Grid.SetColumn(open, 0);
         grid.Children.Add(open);
         var close = new Button
         {
-            Content = "×", Height = 27, Width = 27, FontSize = 18,
+            Content = "×", Height = 32, Width = 32, FontSize = 18,
             ToolTip = "关闭标签并结束此任务", Style = (Style)FindResource("TaskTabCloseStyle")
         };
         close.Click += (_, _) => CloseTaskWindow(window);
@@ -240,13 +242,20 @@ public partial class MainWindow
         grid.Children.Add(close);
         var shell = new Border
         {
-            Child = grid, Width = 164, Height = 37, Opacity = 1,
+            Child = grid, Width = 164, Height = 40, Opacity = 1,
             RenderTransformOrigin = new Point(.5, .5), RenderTransform = new ScaleTransform(1, 1),
             CornerRadius = new CornerRadius(8),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 5, 0), ClipToBounds = true
         };
         return new TaskTabVisual(shell, open, close);
+    }
+
+    private void TaskTabs_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (TaskTabsScroller.ScrollableWidth <= 0) return;
+        TaskTabsScroller.ScrollToHorizontalOffset(TaskTabsScroller.HorizontalOffset - e.Delta);
+        e.Handled = true;
     }
 
     private void UpdateBrowserBackButton()
@@ -275,7 +284,7 @@ public partial class MainWindow
         }
         else if (WorkspaceColumn.Width.Value > 0 && ModuleView.CoreWebView2?.CanGoBack == true)
         { ModuleView.CoreWebView2.GoBack(); return; }
-        if (WorkspaceColumn.Width.Value == 0 && shellCanGoBack && ShellView.CoreWebView2 is not null)
+        if (shellCanGoBack && ShellView.CoreWebView2 is not null)
             _ = ShellView.CoreWebView2.ExecuteScriptAsync("window.FaxToolboxUi?.goBack()");
     }
 

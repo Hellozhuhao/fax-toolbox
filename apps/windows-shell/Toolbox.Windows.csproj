@@ -15,5 +15,6 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
     <PackageReference Include="PdfPig" Version="0.1.8" />
     <Resource Include="assets\fax-toolbox.png" />
+    <Resource Include="assets\fonts\*.ttf" />
   </ItemGroup>
 </Project>

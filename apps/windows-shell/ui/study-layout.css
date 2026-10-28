@@ -1,0 +1,255 @@
+/* Module structure only. Presentation is defined by design-system.css. */
+#course-chapter {
+  overflow-wrap: anywhere;
+}
+#course-chapter-id {
+  margin: 3px 0 0;
+}
+#course-catalog-note {
+  margin: 10px 0 0;
+}
+.course-actions {
+  display: flex;
+  gap: 8px;
+  margin: 15px 0 14px;
+}
+.course-actions button {
+  flex: 1;
+  min-width: 0;
+  padding: 5px;
+}
+.course-current,
+.course-catalog,
+.course-control {
+  padding: 14px;
+  margin: 0 0 10px;
+}
+.course-current #course-chapter {
+  margin: 8px 0 4px;
+}
+.course-current #course-url {
+  margin: 9px 0 0;
+  overflow-wrap: anywhere;
+}
+.course-catalog select {
+  margin-top: 10px;
+}
+.course-catalog button {
+  margin-top: 8px;
+}
+.course-run {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-top: 10px;
+}
+.course-run button {
+  width: 100%;
+  margin: 0;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.course-run #course-start {
+  grid-column: 1/-1;
+  min-height: 42px;
+}
+.course-control .status {
+  padding-top: 10px;
+  margin-top: 12px;
+}
+.course-control .status strong {
+  margin: 0;
+}
+.course-control .status p {
+  margin: 4px 0 0;
+}
+.focus-menu {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+}
+.focus-menu-item {
+  width: 100%;
+  min-height: 35px;
+  margin: 0;
+  padding: 7px 11px;
+}
+.focus-menu[hidden] {
+  display: none !important;
+}
+.focus-panels {
+  min-height: 0;
+  overflow: auto;
+}
+.focus-panel[hidden] {
+  display: none !important;
+}
+.focus-panel > details {
+  margin: 0;
+  padding: 0;
+}
+.focus-panel > details > summary {
+  display: none;
+}
+#view-ai .agent-side-content > .focus-panels {
+  flex: 1;
+}
+#view-ai .agent-side-content > .focus-panels[hidden] {
+  display: none;
+}
+#view-ai .focus-panel[data-focus-panel="sessions"] {
+  height: 100%;
+}
+#view-ai .focus-panel .agent-sessions {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+#view-ai .focus-panel .agent-config-panel,
+#view-ai .focus-panel .agent-configuration,
+#view-ai .focus-panel .ai-service-log {
+  padding: 8px 1px;
+}
+#view-ai .focus-panel .ai-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+#view-ai .focus-panel .ai-actions button {
+  min-height: 33px;
+  padding: 4px 5px;
+}
+#view-ai .focus-panel .ai-consumers {
+  gap: 7px;
+}
+#view-ai .focus-panel .ai-consumer {
+  min-height: 0;
+  padding: 10px;
+}
+#view-ai .focus-panel .ai-consumer h3 {
+  margin: 0;
+}
+#view-ai .focus-panel .ai-consumer small {
+  display: block;
+  margin-top: 4px;
+}
+#view-ai .focus-panel .agent-detail {
+  padding: 5px 2px;
+}
+#view-ai .focus-panel .agent-detail #agent-meter[hidden] {
+  display: none;
+}
+#view-ai .focus-panel .agent-detail #agent-cost[hidden] {
+  display: none;
+}
+#view-course .study-layout,
+#view-homework .study-layout {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(150px, 190px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 16px;
+}
+.study-toggle {
+  display: none;
+}
+.study-side {
+  min-width: 0;
+  padding: 12px;
+}
+.study-side .focus-menu {
+  margin-bottom: 10px;
+}
+.study-side .focus-panels {
+  padding-top: 9px;
+}
+.study-side .focus-panel .card {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+.study-side .focus-panel .card > summary {
+  display: none;
+}
+.study-side .focus-panel p {
+  overflow-wrap: anywhere;
+}
+.study-side .focus-panel button {
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+}
+.study-side .focus-panel select,
+.study-side .focus-panel input,
+.study-side .focus-panel textarea {
+  width: 100%;
+  min-width: 0;
+}
+.study-session {
+  display: grid;
+  gap: 10px;
+}
+.study-main {
+  min-width: 0;
+}
+.study-main > .card {
+  margin-top: 0;
+}
+.study-main .course-actions {
+  margin: 0 0 15px;
+}
+.study-main .course-actions button {
+  min-width: 0;
+}
+#view-homework .study-main .homework-results {
+  margin-top: 0;
+}
+@media (max-width: 1050px) {
+  #view-course .study-layout,
+  #view-homework .study-layout {
+    grid-template-columns: minmax(120px, 160px) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .study-side {
+    padding: 9px;
+  }
+}
+@media (max-width: 680px) {
+  #view-course .study-layout,
+  #view-homework .study-layout {
+    display: block;
+  }
+  .study-toggle {
+    display: inline-flex;
+    align-items: center;
+    width: auto;
+    min-height: 34px;
+    margin: 0 0 11px;
+    padding: 5px 11px;
+  }
+  .study-side {
+    position: absolute;
+    z-index: 8;
+    top: 0;
+    left: 0;
+    width: min(250px, calc(100% - 12px));
+    max-height: min(74dvh, 640px);
+    padding: 12px;
+    overflow: auto;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-10px);
+  }
+  .study-layout.side-open .study-side {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+  .study-main .course-actions {
+    flex-wrap: wrap;
+  }
+}

@@ -47,13 +47,10 @@ public partial class MainWindow
     private void UpdateDeveloperChrome()
     {
         if (DeveloperBadge is null) return;
-        static Brush Brush(string hex) => (Brush)new BrushConverter().ConvertFromString(hex)!;
         DeveloperBadge.Visibility = developerMode ? Visibility.Visible : Visibility.Collapsed;
-        DeveloperBadge.Background = Brush(darkTaskTabs ? "#34294E" : "#ECE3FF");
-        DeveloperBadge.BorderBrush = Brush(darkTaskTabs ? "#7159A8" : "#C7B4F3");
-        DeveloperBadgeText.Foreground = Brush(darkTaskTabs ? "#DACBFF" : "#6844B3");
-        TitleBar.Background = Brush(developerMode ? darkTaskTabs ? "#231D30" : "#F4EFFD" :
-            darkTaskTabs ? "#17181C" : "#F7F7FC");
+        DeveloperBadge.Background = NativeUi.Brush(this, "Surface");
+        DeveloperBadge.BorderBrush = NativeUi.Brush(this, "Border");
+        DeveloperBadgeText.Foreground = NativeUi.Brush(this, "Accent");
         Title = developerMode ? "Fax Toolbox · 开发者模式" : "Fax Toolbox";
     }
 

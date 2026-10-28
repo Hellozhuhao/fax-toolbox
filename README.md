@@ -22,6 +22,12 @@
 
 ## Windows 主线：C# + Rust
 
+新增“安卓投屏”内置工作台，支持 USB 设备选择、Android 无线配对与连接、
+键鼠控制、声音及应用虚拟显示。首次开发运行前执行
+`powershell -ExecutionPolicy Bypass -File scripts/setup-scrcpy.ps1`；
+发布脚本自动携带投屏组件。使用步骤和验证边界见
+[安卓投屏](modules/android-mirror/README.md)。
+
 在 PowerShell 中进入项目根目录，运行：
 
 ```powershell
@@ -95,3 +101,25 @@ node --test tests\starter.test.cjs
 - [PRODUCT_DESIGN.md](PRODUCT_DESIGN.md)：产品目标、界面流程、MVP 和阶段验收。
 - [TOOLCHAIN.md](TOOLCHAIN.md)：已安装的 Windows 工具链、验证结果和开发环境入口。
 
+
+## 工具箱皮肤
+
+在 **状态 → 皮肤** 选择内置皮肤、导入或导出 `.faxskin` 文件；支持全局统一及模块独立覆盖。皮肤属于工具箱核心功能。开发者可调整设计变量、布局、局部 CSS、快捷键和操作绑定，也可用隔离的 HTML/JavaScript 界面重写工作流。
+
+开发文档：[皮肤规范 v1](docs/SKINS.md)；[JSON Schema](schemas/fax-toolbox-skin.schema.json)；[可导入示例](examples/skins)。恢复默认快捷键：`Ctrl+Shift+F12`。
+
+
+## 界面系统与回归
+
+所有模块共用 `apps/windows-shell/ui/design-system.css` 的文字、设计变量、表单、浮层和状态样式；`module-layout.css` 仅装载模块结构。原生宿主、模型配置、密码箱、安卓窗口和安装器共用 `UiResources.xaml`。不要在模块中叠加另一套全局控件主题。产品约束见 [PRODUCT.md](PRODUCT.md)，设计与覆盖范围见 [DESIGN.md](DESIGN.md)。
+
+```sh
+npm ci --ignore-scripts
+npm test
+npm run validate:skins
+npx playwright install chromium
+npm run test:skins:ui
+npm run test:ui
+```
+
+`test:ui` 使用模拟宿主消息检查真实页面的导航、任务操作协议、中文输入法、审批保留、下拉键盘、右键和窄面板。设置 `FAX_UI_SCREENSHOTS=1` 可生成评审截图。Windows 上另运行 `dotnet run --project tests/ui-native/UiSystem.Tests.csproj` 检查可编辑模型下拉框、弹出层继承和表单校验；GitHub Actions 会保存原生窗口及安装器状态截图。界面测试不替代真实服务、学习通账号或手机连接验收。

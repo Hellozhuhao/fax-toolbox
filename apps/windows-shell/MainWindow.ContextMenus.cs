@@ -20,22 +20,22 @@ public partial class MainWindow
         var deferral = args.GetDeferral();
         try
         {
-            var dark = darkTaskTabs;
-            static Brush Color(string value) => (Brush)new BrushConverter().ConvertFromString(value)!;
             var menu = new ContextMenu
             {
                 PlacementTarget = view,
                 Placement = PlacementMode.RelativePoint,
                 HorizontalOffset = args.Location.X / VisualTreeHelper.GetDpi(view).DpiScaleX,
                 VerticalOffset = args.Location.Y / VisualTreeHelper.GetDpi(view).DpiScaleY,
-                Background = Color(dark ? "#24252C" : "#FFFFFF"),
-                Foreground = Color(dark ? "#F5F5F8" : "#171716"),
-                BorderBrush = Color(dark ? "#454650" : "#E7EBF4"),
+                Background = NativeUi.Brush(this, "Panel"),
+                Foreground = NativeUi.Brush(this, "Text"),
+                BorderBrush = NativeUi.Brush(this, "Border"),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(4),
                 MinWidth = 180,
                 StaysOpen = false
             };
+            foreach (var role in NativeUi.Roles) menu.Resources["Ui." + role] = NativeUi.Brush(this, role);
+            menu.Resources["Ui.Font"] = FontFamily;
             var itemStyle = (Style)FindResource("EmbeddedContextItemStyle");
             void Add(string label, Action action, bool enabled = true)
             {

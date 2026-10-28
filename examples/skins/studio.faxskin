@@ -1,0 +1,38 @@
+{
+  "format": "fax-toolbox.skin",
+  "version": 1,
+  "id": "example.studio",
+  "name": "开发者工作室",
+  "author": "Fax Toolbox",
+  "description": "示范顶部导航、独立模块和自定义交互",
+  "appearance": "light",
+  "targets": [
+    "*"
+  ],
+  "tokens": {
+    "background": "#f2f5fc",
+    "panel": "#ffffff",
+    "surface": "#e8eefb",
+    "text": "#172b4d",
+    "muted": "#526683",
+    "accent": "#365bd6",
+    "border": "#c9d5eb",
+    "navigation": "#e4ebfa",
+    "radius": 18,
+    "fontFamily": "\"Microsoft YaHei UI\", \"Segoe UI\", sans-serif"
+  },
+  "layout": {
+    "navigation": "top",
+    "density": "compact",
+    "motion": "system"
+  },
+  "css": ".card { border-style: dashed; } .hero { min-height: 220px; }",
+  "bindings": [
+    {
+      "event": "keydown",
+      "selector": ":scope",
+      "key": "Alt+1",
+      "action": "navigation.home"
+    }
+  ]
+}
