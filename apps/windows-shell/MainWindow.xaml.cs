@@ -582,7 +582,9 @@ public partial class MainWindow : Window
                         .find(button => button.querySelector('.toolbox-context-label')?.textContent === '分区')?.click();
                       [...document.querySelectorAll('#toolbox-context-submenu button')]
                         .find(button => button.textContent.includes('新建分区'))?.click();
-                      document.getElementById('toolbox-confirm-input').value = '工作';
+                      const sectionInput = document.getElementById('toolbox-confirm-input');
+                      sectionInput.value = '工作';
+                      sectionInput.dispatchEvent(new Event('input', {bubbles: true}));
                       document.getElementById('toolbox-confirm-accept').click();
                     })()
                     """);
