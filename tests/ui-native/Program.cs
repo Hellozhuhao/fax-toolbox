@@ -37,6 +37,22 @@ internal static class Program
         var directory=Environment.GetEnvironmentVariable("FAX_NATIVE_SCREENSHOTS");
         if(string.IsNullOrEmpty(directory))return;
         element.BeginAnimation(UIElement.OpacityProperty,null);element.Opacity=1;Paint();element.UpdateLayout();
+        // A palette update can be visible to managed properties before its
+        // brushes reach the compositor. Capture after an actual render frame.
+        var frame=new DispatcherFrame();
+        var presented=false;
+        EventHandler? rendering=null;
+        rendering=(_,_)=>
+        {
+            presented=true;CompositionTarget.Rendering-=rendering;
+            Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.ContextIdle,new Action(()=>frame.Continue=false));
+        };
+        var timeout=new DispatcherTimer(DispatcherPriority.Background) { Interval=TimeSpan.FromSeconds(2) };
+        timeout.Tick+=(_,_)=>frame.Continue=false;
+        CompositionTarget.Rendering+=rendering;timeout.Start();
+        try { Dispatcher.PushFrame(frame); }
+        finally { timeout.Stop();CompositionTarget.Rendering-=rendering; }
+        Check(presented,"Screenshot surface did not present a frame: "+name);
         Check(element.IsVisible && element.ActualWidth > 0 && element.ActualHeight > 0, "Screenshot surface is not visible: " + name);
         Directory.CreateDirectory(directory);
         var image=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);

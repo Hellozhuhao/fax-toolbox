@@ -91,7 +91,8 @@ jobs:
           # Wait for the actual validation process and preserve its exit status.
           $stdout = Join-Path $PWD '.cache/windows-validation-stdout.log'
           $stderr = Join-Path $PWD '.cache/windows-validation-stderr.log'
-          $process = Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/build-windows.ps1', '-Test' -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $process = Start-Process -FilePath (Join-Path $PSHOME 'pwsh.exe') -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', 'scripts/build-windows.ps1', '-Test' -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $null = $process.Handle
           $deadline = [DateTime]::UtcNow.AddMinutes(15)
           $lastProgress = ''
           while (-not $process.WaitForExit(30000)) {
@@ -108,6 +109,7 @@ jobs:
           }
           $process.Refresh()
           $result = $process.ExitCode
+          if ($null -eq $result) { throw 'Validation process did not return an exit status' }
           @('--- stdout ---', (Get-Content $stdout -Raw), '--- stderr ---', (Get-Content $stderr -Raw)) | Set-Content '.cache/windows-validation.log'
           Get-Content '.cache/windows-validation.log'
           $log = (Get-Content '.cache/windows-validation.log' -Tail 100) -join "`n"
